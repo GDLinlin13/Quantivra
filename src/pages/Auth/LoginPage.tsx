@@ -19,22 +19,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#f0f2f5', padding: 24 }}>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#f0ecec', padding: 24 }}>
       <Card style={{ width: 420 }}>
-        <style>{`
-          @keyframes rainbow-glow {
-            0% { text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000; }
-            16% { text-shadow: 0 0 10px #ff8800, 0 0 20px #ff8800; }
-            33% { text-shadow: 0 0 10px #ffff00, 0 0 20px #ffff00; }
-            50% { text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00; }
-            66% { text-shadow: 0 0 10px #0088ff, 0 0 20px #0088ff; }
-            83% { text-shadow: 0 0 10px #8800ff, 0 0 20px #8800ff; }
-            100% { text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000; }
-          }
-          .rainbow-title { animation: rainbow-glow 3s linear infinite; letter-spacing: 4px; }
-        `}</style>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <Typography.Title level={2} className="rainbow-title" style={{ margin: 0 }}>QUANTIVRA</Typography.Title>
+          <Typography.Title level={2} style={{ margin: 0, color: '#b8c9e8', letterSpacing: 4 }}>QUANTIVRA</Typography.Title>
         </div>
 
         <Form layout="vertical" onFinish={handleLogin} size="large">

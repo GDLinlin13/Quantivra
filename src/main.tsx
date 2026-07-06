@@ -12,8 +12,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         theme={{
           algorithm: theme.defaultAlgorithm,
           token: {
-            colorPrimary: '#1677ff',
-            borderRadius: 6,
+            colorPrimary: '#b8c9e8',
+            colorBgLayout: '#f0ecec',
+            colorBgContainer: '#ffffff',
+            borderRadius: 8,
           },
         }}
       >
