@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Select, DatePicker, InputNumber, Input, message, Space, Tag, Typography, Row, Col, Card, Statistic } from 'antd';
-import { PlusOutlined, DownloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { supabase } from '../../utils/supabase';
 import { useCompanyId } from '../../utils/useCompany';
@@ -40,22 +40,35 @@ export default function PayrollPage() {
       const periodStart = start.format('YYYY-MM-DD');
       const periodEnd = end.format('YYYY-MM-DD');
 
-      const { data: activeEmps } = await supabase.from('employees').select('id, salary').eq('company_id', companyId).eq('status', 'active');
+      const [empRes, dedRes] = await Promise.all([
+        supabase.from('employees').select('id, salary').eq('company_id', companyId).eq('status', 'active'),
+        supabase.from('company_statutory_deductions').select('*').eq('company_id', companyId),
+      ]);
+      const activeEmps = empRes.data || [];
+      const deductions = dedRes.data || [];
 
-      const records = (activeEmps || []).map((emp: any) => ({
-        company_id: companyId,
-        employee_id: emp.id,
-        pay_period_start: periodStart,
-        pay_period_end: periodEnd,
-        pay_date: payDate,
-        basic_pay: emp.salary / 26,
-        allowances: 0,
-        deductions: 0,
-        tax_deduction: emp.salary / 26 * 0.1,
-        other_deductions: 0,
-        net_pay: emp.salary / 26 * 0.9,
-        status: 'calculated',
-      }));
+      const records = activeEmps.map((emp: any) => {
+        const basicPay = emp.salary;
+        let totalStatutory = 0;
+        for (const d of deductions) {
+          const empAmt = basicPay * d.employee_rate;
+          totalStatutory += d.cap_amount ? Math.min(empAmt, d.cap_amount * d.employee_rate) : empAmt;
+        }
+        return {
+          company_id: companyId,
+          employee_id: emp.id,
+          pay_period_start: periodStart,
+          pay_period_end: periodEnd,
+          pay_date: payDate,
+          basic_pay: basicPay,
+          allowances: 0,
+          deductions: 0,
+          tax_deduction: totalStatutory,
+          other_deductions: 0,
+          net_pay: basicPay - totalStatutory,
+          status: 'calculated',
+        };
+      });
 
       const { error } = await supabase.from('payroll_records').insert(records);
       if (error) throw error;
@@ -72,10 +85,31 @@ export default function PayrollPage() {
     { title: 'Basic', dataIndex: 'basic_pay', key: 'basic', render: (v: number) => `$${v?.toFixed(2)}` },
     { title: 'Allowances', dataIndex: 'allowances', key: 'allow', render: (v: number) => `$${v?.toFixed(2)}` },
     { title: 'Deductions', dataIndex: 'deductions', key: 'ded', render: (v: number) => `$${v?.toFixed(2)}` },
-    { title: 'Tax', dataIndex: 'tax_deduction', key: 'tax', render: (v: number) => `$${v?.toFixed(2)}` },
+    { title: 'Statutory', key: 'statutory', render: (_: any, r: any) => {
+      const total = (r.tax_deduction || 0) + (r.other_deductions || 0);
+      return total > 0 ? `$${total.toFixed(2)}` : '—';
+    }},
     { title: 'Net Pay', dataIndex: 'net_pay', key: 'net', render: (v: number) => <strong>${v?.toFixed(2)}</strong> },
     { title: 'Status', dataIndex: 'status', key: 'status', render: (s: string) => <Tag color={s === 'paid' ? 'green' : 'blue'}>{s}</Tag> },
     { title: 'Pay Date', dataIndex: 'pay_date', key: 'date' },
+    {
+      title: '', key: 'actions', width: 60,
+      render: (_: any, row: any) => (
+        <Button type="text" size="small" danger icon={<DeleteOutlined />}
+          onClick={() => {
+            Modal.confirm({
+              title: 'Delete payroll record?',
+              content: `Remove ${row.employees?.full_name}'s payroll entry?`,
+              onOk: async () => {
+                await supabase.from('payroll_records').delete().eq('id', row.id);
+                message.success('Deleted');
+                loadData();
+              },
+            });
+          }}
+        />
+      ),
+    },
   ];
 
   return (

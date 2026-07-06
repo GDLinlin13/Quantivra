@@ -1,14 +1,5 @@
 import { UserRole } from '../types';
 
-const ROLE_HIERARCHY: Record<UserRole, number> = {
-  superadmin: 100,
-  admin: 80,
-  manager: 60,
-  hr: 50,
-  accountant: 50,
-  employee: 20,
-};
-
 export function hasRole(userRoles: UserRole[] | undefined, role: UserRole): boolean {
   if (!userRoles) return false;
   return userRoles.includes(role);
@@ -19,39 +10,64 @@ export function hasAnyRole(userRoles: UserRole[] | undefined, roles: UserRole[])
   return roles.some(r => userRoles.includes(r));
 }
 
-export function isSuperAdmin(userRoles: UserRole[] | undefined): boolean {
-  return hasRole(userRoles, 'superadmin');
-}
-
 export function can(permission: string, userRoles: UserRole[] | undefined): boolean {
   if (!userRoles) return false;
-  if (userRoles.includes('superadmin')) return true;
+  if (userRoles.includes('master')) return true;
 
   const permissions: Record<string, UserRole[]> = {
-    'leave.apply': ['employee', 'manager', 'hr', 'admin'],
-    'leave.approve': ['hr', 'admin', 'manager'],
-    'leave.view_all': ['hr', 'admin', 'manager'],
-    'employee.create': ['hr', 'admin'],
-    'employee.edit': ['hr', 'admin'],
-    'employee.view_all': ['hr', 'admin', 'manager'],
-    'employee.documents': ['hr', 'admin', 'employee'],
-    'payroll.run': ['admin', 'accountant'],
-    'payroll.view': ['admin', 'accountant', 'hr'],
-    'accounting.manage': ['accountant', 'admin'],
-    'accounting.view': ['accountant', 'admin', 'hr'],
-    'invoice.create': ['accountant', 'admin'],
-    'invoice.manage': ['accountant', 'admin'],
-    'invoice.view': ['accountant', 'admin', 'hr', 'manager'],
-    'supplier_invoice.manage': ['accountant', 'admin'],
-    'supplier_invoice.view': ['accountant', 'admin', 'hr'],
-    'claim.apply': ['employee', 'manager'],
-    'claim.approve': ['admin', 'manager', 'hr'],
-    'claim.view_all': ['admin', 'hr', 'accountant'],
-    'company.settings': ['admin'],
-    'reports.view': ['admin', 'accountant', 'hr', 'manager'],
+    // HR modules
+    'employee.create': ['hr'],
+    'employee.edit': ['hr'],
+    'employee.view_all': ['hr'],
+    'employee.documents': ['hr', 'employee'],
+    'leave.approve': ['hr'],
+    'leave.view_all': ['hr'],
+    'claim.approve': ['hr'],
+    'claim.view_all': ['hr'],
+    'attendance.manage': ['hr'],
+    'performance.manage': ['hr'],
+    'training.manage': ['hr'],
+    'recruitment.manage': ['hr'],
+    'recruitment.view': ['hr'],
+    'documents.manage': ['hr'],
+    'user.manage': ['hr'],
+
+    // Employee self-service
+    'leave.apply': ['employee'],
+    'claim.apply': ['employee'],
+    'attendance.view': ['employee'],
+    'performance.view': ['employee', 'hr'],
+    'training.view': ['employee', 'hr'],
+    'documents.view': ['employee'],
+
+    // Accounting/Finance modules
+    'payroll.run': ['accountant'],
+    'payroll.view': ['accountant'],
+    'accounting.manage': ['accountant'],
+    'accounting.view': ['accountant'],
+    'invoice.create': ['accountant'],
+    'invoice.manage': ['accountant'],
+    'invoice.view': ['accountant'],
+    'supplier_invoice.manage': ['accountant'],
+    'supplier_invoice.view': ['accountant'],
+    'banking.view': ['accountant'],
+    'banking.manage': ['accountant'],
+    'tax.view': ['accountant'],
+    'tax.manage': ['accountant'],
+    'reports.view': ['accountant'],
+
+    // Master only
+    'company.settings': ['master'],
   };
 
   const allowedRoles = permissions[permission];
   if (!allowedRoles) return false;
   return allowedRoles.some(r => userRoles.includes(r));
+}
+
+export function canApproveLeave(userRoles: UserRole[] | undefined, isManager: boolean): boolean {
+  if (!userRoles) return false;
+  if (userRoles.includes('master')) return true;
+  if (isManager) return true;
+  return can('leave.approve', userRoles);
 }

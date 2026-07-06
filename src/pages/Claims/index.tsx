@@ -17,7 +17,7 @@ export default function ClaimsPage() {
   const [form] = Form.useForm();
   const [stats, setStats] = useState({ pending: 0, approved: 0, paid: 0 });
 
-  const isEmployee = hasRole('employee') && !hasRole('admin', 'hr', 'accountant', 'manager');
+  const isEmployee = hasRole('employee') && !hasRole('hr', 'accountant', 'master');
   const canApprove = can('claim.approve', user?.roles);
   const canViewAll = can('claim.view_all', user?.roles);
   const canApply = can('claim.apply', user?.roles);

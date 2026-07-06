@@ -13,11 +13,15 @@ export interface Company {
   registration_number?: string;
   tax_id?: string;
   logo_url?: string;
+  company_code?: string;
+  incorporation_date?: string;
+  business_certificate_url?: string;
+  business_certificate_name?: string;
   is_active?: number;
   created_at?: string;
 }
 
-export type UserRole = 'superadmin' | 'admin' | 'hr' | 'accountant' | 'manager' | 'employee';
+export type UserRole = 'master' | 'hr' | 'accountant' | 'employee';
 
 export interface User {
   id: number;
@@ -31,6 +35,14 @@ export interface User {
   companies?: Company;
 }
 
+export interface Department {
+  id: number;
+  company_id: number;
+  name: string;
+  manager_id?: number;
+  created_at?: string;
+}
+
 export interface Employee {
   id: number;
   company_id: number;
@@ -40,6 +52,7 @@ export interface Employee {
   email?: string;
   phone?: string;
   department?: string;
+  department_id?: number;
   position?: string;
   join_date?: string;
   salary?: number;
@@ -48,6 +61,7 @@ export interface Employee {
   tax_id?: string;
   address?: string;
   emergency_contact?: string;
+  employment_type?: 'full_time' | 'part_time';
   status: 'active' | 'inactive' | 'terminated';
 }
 
@@ -58,6 +72,9 @@ export interface LeaveType {
   days_per_year: number;
   is_paid?: number;
   carry_forward?: number;
+  carry_forward_max_days?: number;
+  carry_forward_expiry_months?: number;
+  include_weekends?: number;
 }
 
 export interface LeaveRequest {
@@ -83,6 +100,8 @@ export interface LeaveBalance {
   total_days: number;
   used_days: number;
   year: number;
+  is_carry_forward?: number;
+  expiry_date?: string;
 }
 
 export interface Claim {
@@ -177,6 +196,32 @@ export interface SupplierInvoice {
   status: 'pending' | 'approved' | 'paid' | 'cancelled';
   due_date?: string;
   category?: string;
+}
+
+export interface PublicHoliday {
+  id: number;
+  country: string;
+  date: string;
+  name: string;
+}
+
+export interface StatutoryDeduction {
+  id: number;
+  country: string;
+  name: string;
+  description?: string;
+  employee_rate: number;
+  employer_rate: number;
+  cap_amount?: number;
+}
+
+export interface CompanyStatutoryDeduction {
+  id: number;
+  company_id: number;
+  deduction_name: string;
+  employee_rate: number;
+  employer_rate: number;
+  cap_amount?: number;
 }
 
 export interface PayrollRecord {
