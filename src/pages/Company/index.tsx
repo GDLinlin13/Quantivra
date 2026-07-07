@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Form, Input, Button, Select, Typography, Spin, Alert, message, Row, Col, Divider, Upload, Table } from 'antd';
+import { Card, Form, Input, Button, Select, Typography, Spin, Alert, message, Row, Col, Divider, Upload, Table, DatePicker } from 'antd';
+import dayjs from 'dayjs';
 import { UploadOutlined, EyeOutlined } from '@ant-design/icons';
 import { supabase } from '../../utils/supabase';
 import { useCompanyId } from '../../utils/useCompany';
@@ -15,10 +16,8 @@ export default function CompanyPage() {
   const [logoUrl, setLogoUrl] = useState('');
   const [countryDeductions, setCountryDeductions] = useState<StatutoryDeduction[]>([]);
   const [savedDeductions, setSavedDeductions] = useState<any[]>([]);
-  const [certUrl, setCertUrl] = useState('');
-  const [certFileName, setCertFileName] = useState('');
-  const [renaming, setRenaming] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState('');
+  const [companyDocs, setCompanyDocs] = useState<{ id: string; name: string; url: string }[]>([]);
 
   useEffect(() => {
     loadCompany();
@@ -35,11 +34,15 @@ export default function CompanyPage() {
     try {
       const { data } = await supabase.from('companies').select('*').eq('id', companyId).single();
       if (data) {
-        form.setFieldsValue(data);
+        form.setFieldsValue({
+          ...data,
+          incorporation_date: data.incorporation_date ? dayjs(data.incorporation_date) : null,
+          fiscal_year_start: data.fiscal_year_start ? dayjs(`2000-${data.fiscal_year_start}`) : null,
+          fiscal_year_end: data.fiscal_year_end ? dayjs(`2000-${data.fiscal_year_end}`) : null,
+        });
         setLogoUrl(data.logo_url || '');
-        setCertUrl(data.business_certificate_url || '');
-        setCertFileName(data.business_certificate_name || '');
         setSelectedCountry(data.country || '');
+        loadCompanyDocs();
       }
     } catch (err: any) {
       setError(err.message);
@@ -51,6 +54,11 @@ export default function CompanyPage() {
   async function loadCountryDeductions(country: string) {
     const { data } = await supabase.from('statutory_deductions').select('*').eq('country', country);
     setCountryDeductions(data || []);
+  }
+
+  async function loadCompanyDocs() {
+    const { data } = await supabase.from('company_documents').select('*').eq('company_id', companyId).order('created_at');
+    setCompanyDocs(data?.map((d: any) => ({ id: String(d.id), name: d.document_name, url: d.file_url })) || []);
   }
 
   async function loadSavedDeductions() {
@@ -66,9 +74,12 @@ export default function CompanyPage() {
       const payload: any = {};
       const safeFields = ['name','address','country','currency','tax_system','fiscal_year_start','fiscal_year_end',
         'phone','email','website','registration_number','tax_id','logo_url','incorporation_date',
-        'business_certificate_url','business_certificate_name','is_active'];
+        'is_active'];
       for (const key of safeFields) {
-        if (values[key] !== undefined) payload[key] = values[key];
+        let val = values[key];
+        if (key === 'incorporation_date' && val) val = val.format('YYYY-MM-DD');
+        if ((key === 'fiscal_year_start' || key === 'fiscal_year_end') && val) val = val.format('MM-DD');
+        if (val !== undefined) payload[key] = val;
       }
       const existing = await supabase.from('companies').select('id').eq('id', companyId).single();
       if (!existing.data) throw new Error('Company not found');
@@ -169,55 +180,60 @@ export default function CompanyPage() {
             <Col span={6}><Form.Item name="registration_number" label="Registration Number"><Input /></Form.Item></Col>
             <Col span={6}><Form.Item name="tax_id" label="Tax ID / VAT Number"><Input /></Form.Item></Col>
             <Col span={4}><Form.Item name="incorporation_date" label="Incorporation Date">
-              <Input placeholder="YYYY-MM-DD" />
+              <DatePicker style={{ width: '100%' }} />
             </Form.Item></Col>
-            <Col span={4}><Form.Item name="fiscal_year_start" label="FY Start"><Input placeholder="MM-DD" /></Form.Item></Col>
-            <Col span={4}><Form.Item name="fiscal_year_end" label="FY End"><Input placeholder="MM-DD" /></Form.Item></Col>
+            <Col span={4}><Form.Item name="fiscal_year_start" label="FY Start">
+              <DatePicker format="MM-DD" style={{ width: '100%' }} />
+            </Form.Item></Col>
+            <Col span={4}><Form.Item name="fiscal_year_end" label="FY End">
+              <DatePicker format="MM-DD" style={{ width: '100%' }} />
+            </Form.Item></Col>
           </Row>
 
           <Divider>Company Documents</Divider>
-          <Form.Item name="business_certificate_url" hidden><Input /></Form.Item>
-          <Form.Item name="business_certificate_name" hidden><Input /></Form.Item>
-          {certUrl ? (
-            <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              {renaming ? (
-                <Input style={{ width: 280 }} value={certFileName} onChange={e => { setCertFileName(e.target.value); form.setFieldValue('business_certificate_name', e.target.value); }} placeholder="File name" />
-              ) : (
-                <span style={{ color: 'rgba(255,255,255,0.8)' }}>{certFileName}</span>
-              )}
-              <a href={certUrl} target="_blank" rel="noopener noreferrer">
-                <Button type="link" icon={<EyeOutlined />}>View</Button>
-              </a>
-              <a href={certUrl} download={certFileName}>
-                <Button type="link">Download</Button>
-              </a>
-              {renaming ? (
-                <Button size="small" onClick={() => setRenaming(false)}>Done</Button>
-              ) : (
-                <Button size="small" onClick={() => setRenaming(true)}>Rename</Button>
-              )}
-              <Button size="small" onClick={() => { form.setFieldValue('business_certificate_url', ''); form.setFieldValue('business_certificate_name', ''); setCertUrl(''); setCertFileName(''); setRenaming(false); }}>Remove</Button>
-            </div>
-          ) : (
+          <div style={{ marginBottom: 12 }}>
             <Upload beforeUpload={async (file) => {
               try {
                 const ext = file.name.split('.').pop();
-                const filePath = `company-cert/${companyId}/cert-${Date.now()}.${ext}`;
+                const filePath = `company-docs/${companyId}/${Date.now()}.${ext}`;
                 const { error: uploadErr } = await supabase.storage.from('company-files').upload(filePath, file);
                 if (uploadErr) throw uploadErr;
                 const { data: { publicUrl } } = supabase.storage.from('company-files').getPublicUrl(filePath);
-                form.setFieldValue('business_certificate_url', publicUrl);
-                form.setFieldValue('business_certificate_name', file.name);
-                setCertUrl(publicUrl);
-                setCertFileName(file.name);
+                const { error: insertErr } = await supabase.from('company_documents').insert({
+                  company_id: companyId, document_name: file.name, file_url: publicUrl,
+                });
+                if (insertErr) throw insertErr;
+                await loadCompanyDocs();
                 message.success('Document uploaded');
               } catch (err: any) {
                 message.error('Upload failed: ' + err.message);
               }
               return false;
-            }} showUploadList={false} accept=".pdf,.jpg,.png">
+            }} showUploadList={false} accept=".pdf,.jpg,.png,.doc,.docx">
               <Button icon={<UploadOutlined />}>Upload Document</Button>
             </Upload>
+          </div>
+          {companyDocs.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {companyDocs.map((doc) => (
+                <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 4 }}>
+                  <span style={{ flex: 1, color: 'rgba(255,255,255,0.8)', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</span>
+                  <a href={doc.url} target="_blank" rel="noopener noreferrer"><Button type="link" size="small" icon={<EyeOutlined />}>View</Button></a>
+                  <a href={doc.url} download={doc.name}><Button type="link" size="small">Download</Button></a>
+                  <Button size="small" onClick={async () => {
+                    const newName = prompt('Rename document:', doc.name);
+                    if (newName && newName.trim()) {
+                      await supabase.from('company_documents').update({ document_name: newName.trim() }).eq('id', doc.id);
+                      setCompanyDocs(prev => prev.map(d => d.id === doc.id ? { ...d, name: newName.trim() } : d));
+                    }
+                  }}>Rename</Button>
+                  <Button size="small" danger onClick={async () => {
+                    await supabase.from('company_documents').delete().eq('id', doc.id);
+                    setCompanyDocs(prev => prev.filter(d => d.id !== doc.id));
+                  }}>Remove</Button>
+                </div>
+              ))}
+            </div>
           )}
 
           {countryDeductions.length > 0 && (

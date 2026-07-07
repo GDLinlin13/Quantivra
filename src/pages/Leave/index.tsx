@@ -75,8 +75,8 @@ export default function LeavePage() {
       if (user) {
         const { data: emp } = await supabase.from('employees').select('id').eq('user_id', user.id).eq('company_id', companyId).maybeSingle();
         if (emp) {
-          const { data: depts } = await supabase.from('departments').select('id').eq('manager_id', emp.id);
-          setManagedDeptIds((depts || []).map(d => d.id));
+          const { data: depts } = await supabase.from('company_departments').select('department_id').eq('manager_id', emp.id);
+          setManagedDeptIds((depts || []).map(d => d.department_id));
         }
       }
 

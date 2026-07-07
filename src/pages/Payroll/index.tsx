@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Select, DatePicker, InputNumber, Input, message, Space, Tag, Typography, Row, Col, Card, Statistic } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { supabase } from '../../utils/supabase';
 import { useCompanyId } from '../../utils/useCompany';
+import PayslipModal from '../../components/PayslipModal';
 
 const { RangePicker } = DatePicker;
 
@@ -13,6 +14,7 @@ export default function PayrollPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [payslipRecordId, setPayslipRecordId] = useState<number | null>(null);
   const [form] = Form.useForm();
   const [totalPay, setTotalPay] = useState(0);
 
@@ -40,19 +42,74 @@ export default function PayrollPage() {
       const periodStart = start.format('YYYY-MM-DD');
       const periodEnd = end.format('YYYY-MM-DD');
 
-      const [empRes, dedRes] = await Promise.all([
+      const [empRes, dedRes, bracketRes] = await Promise.all([
         supabase.from('employees').select('id, salary').eq('company_id', companyId).eq('status', 'active'),
         supabase.from('company_statutory_deductions').select('*').eq('company_id', companyId),
+        supabase.from('company_deduction_brackets').select('*').eq('company_id', companyId),
       ]);
       const activeEmps = empRes.data || [];
-      const deductions = dedRes.data || [];
+      let deductions = dedRes.data || [];
+      const brackets = bracketRes.data || [];
+      if (deductions.length === 0) {
+        const { data: company } = await supabase.from('companies').select('country').eq('id', companyId).single();
+        if (company?.country) {
+          const { data: defaults } = await supabase.from('statutory_deductions').select('*').eq('country', company.country);
+          deductions = (defaults || []).map((d: any) => ({
+            deduction_name: d.name,
+            deduction_type: 'percentage',
+            employee_rate: d.employee_rate,
+            employer_rate: d.employer_rate,
+            min_amount: null,
+            max_amount: null,
+            fixed_amount: null,
+          }));
+        }
+      }
+
+      const bracketMap: Record<string, { min_salary: number; max_salary: number | null; amount: number }[]> = {};
+      for (const b of brackets) {
+        if (!bracketMap[b.deduction_name]) bracketMap[b.deduction_name] = [];
+        bracketMap[b.deduction_name].push(b);
+      }
 
       const records = activeEmps.map((emp: any) => {
         const basicPay = emp.salary;
         let totalStatutory = 0;
+        let totalCompanyPaid = 0;
         for (const d of deductions) {
-          const empAmt = basicPay * d.employee_rate;
-          totalStatutory += d.cap_amount ? Math.min(empAmt, d.cap_amount * d.employee_rate) : empAmt;
+          const isCompanyPaid = d.paid_by_company === 1 || d.paid_by_company === true;
+          const dtype = d.deduction_type || 'percentage';
+          let amt = 0;
+          if (dtype === 'fixed') {
+            amt = d.fixed_amount ?? 0;
+          } else if (dtype === 'bracket') {
+            const ddBrackets = bracketMap[d.deduction_name] || [];
+            for (const b of ddBrackets) {
+              if (basicPay >= b.min_salary && (b.max_salary === null || basicPay <= b.max_salary)) {
+                amt = b.amount;
+                break;
+              }
+            }
+          } else if (dtype === 'percentage_minmax') {
+            const empAmt = basicPay * d.employee_rate;
+            const minAmt = d.min_amount ?? 0;
+            const maxAmt = d.max_amount;
+            amt = maxAmt != null ? Math.min(Math.max(empAmt, minAmt), maxAmt) : Math.max(empAmt, minAmt);
+          } else {
+            const empAmt = basicPay * d.employee_rate;
+            if (d.cap_amount != null) {
+              amt = Math.min(empAmt, d.cap_amount * d.employee_rate);
+            } else if (d.max_amount != null) {
+              amt = Math.min(empAmt, d.max_amount);
+            } else {
+              amt = empAmt;
+            }
+          }
+          if (isCompanyPaid) {
+            totalCompanyPaid += amt;
+          } else {
+            totalStatutory += amt;
+          }
         }
         return {
           company_id: companyId,
@@ -65,6 +122,7 @@ export default function PayrollPage() {
           deductions: 0,
           tax_deduction: totalStatutory,
           other_deductions: 0,
+          company_paid_benefits: totalCompanyPaid,
           net_pay: basicPay - totalStatutory,
           status: 'calculated',
         };
@@ -93,21 +151,26 @@ export default function PayrollPage() {
     { title: 'Status', dataIndex: 'status', key: 'status', render: (s: string) => <Tag color={s === 'paid' ? 'green' : 'blue'}>{s}</Tag> },
     { title: 'Pay Date', dataIndex: 'pay_date', key: 'date' },
     {
-      title: '', key: 'actions', width: 60,
+      title: '', key: 'actions', width: 90,
       render: (_: any, row: any) => (
-        <Button type="text" size="small" danger icon={<DeleteOutlined />}
-          onClick={() => {
-            Modal.confirm({
-              title: 'Delete payroll record?',
-              content: `Remove ${row.employees?.full_name}'s payroll entry?`,
-              onOk: async () => {
-                await supabase.from('payroll_records').delete().eq('id', row.id);
-                message.success('Deleted');
-                loadData();
-              },
-            });
-          }}
-        />
+        <Space>
+          <Button type="text" size="small" icon={<EyeOutlined />}
+            onClick={() => setPayslipRecordId(row.id)}
+          />
+          <Button type="text" size="small" danger icon={<DeleteOutlined />}
+            onClick={() => {
+              Modal.confirm({
+                title: 'Delete payroll record?',
+                content: `Remove ${row.employees?.full_name}'s payroll entry?`,
+                onOk: async () => {
+                  await supabase.from('payroll_records').delete().eq('id', row.id);
+                  message.success('Deleted');
+                  loadData();
+                },
+              });
+            }}
+          />
+        </Space>
       ),
     },
   ];
@@ -138,6 +201,7 @@ export default function PayrollPage() {
           <Button type="primary" htmlType="submit" loading={saving} block>Calculate & Run Payroll</Button>
         </Form>
       </Modal>
+      <PayslipModal open={payslipRecordId !== null} onClose={() => setPayslipRecordId(null)} recordId={payslipRecordId!} />
     </div>
   );
 }

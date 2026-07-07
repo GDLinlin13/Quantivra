@@ -10,7 +10,8 @@ export function hasAnyRole(userRoles: UserRole[] | undefined, roles: UserRole[])
   return roles.some(r => userRoles.includes(r));
 }
 
-export function can(permission: string, userRoles: UserRole[] | undefined): boolean {
+export function can(permission: string, userRoles: UserRole[] | undefined, isSuperAdmin?: boolean): boolean {
+  if (isSuperAdmin) return true;
   if (!userRoles) return false;
   if (userRoles.includes('master')) return true;
 
@@ -32,6 +33,10 @@ export function can(permission: string, userRoles: UserRole[] | undefined): bool
     'documents.manage': ['hr'],
     'user.manage': ['hr'],
 
+    // Payroll (HR function)
+    'payroll.run': ['hr'],
+    'payroll.view': ['hr'],
+
     // Employee self-service
     'leave.apply': ['employee'],
     'claim.apply': ['employee'],
@@ -41,8 +46,6 @@ export function can(permission: string, userRoles: UserRole[] | undefined): bool
     'documents.view': ['employee'],
 
     // Accounting/Finance modules
-    'payroll.run': ['accountant'],
-    'payroll.view': ['accountant'],
     'accounting.manage': ['accountant'],
     'accounting.view': ['accountant'],
     'invoice.create': ['accountant'],
@@ -62,10 +65,44 @@ export function can(permission: string, userRoles: UserRole[] | undefined): bool
 
   const allowedRoles = permissions[permission];
   if (!allowedRoles) return false;
-  return allowedRoles.some(r => userRoles.includes(r));
+
+  // Primary role check
+  if (!allowedRoles.some(r => userRoles.includes(r))) return false;
+
+  // Approval actions also require the 'employee' role (prevents outsourced-only users from approving)
+  const approvalPermissions = ['leave.approve', 'claim.approve'];
+  if (approvalPermissions.includes(permission) && !userRoles.includes('employee')) return false;
+
+  // Granular sub-role checks
+  // account:view_only → can view but not manage/create/edit/delete
+  // hr:leave_approve → required for leave approval
+  // hr:payroll → required for payroll access
+  const viewOnlyExclude = ['accountant:view_only'] as UserRole[];
+  const requireSubRole: Record<string, UserRole[]> = {
+    'leave.approve': ['hr:leave_approve'],
+    'payroll.run': ['hr:payroll'],
+    'payroll.view': ['hr:payroll'],
+  };
+  const excludeSubRole: Record<string, UserRole[]> = {
+    'accounting.manage': viewOnlyExclude,
+    'invoice.create': viewOnlyExclude,
+    'invoice.manage': viewOnlyExclude,
+    'supplier_invoice.manage': viewOnlyExclude,
+    'banking.manage': viewOnlyExclude,
+    'tax.manage': viewOnlyExclude,
+  };
+
+  const required = requireSubRole[permission];
+  if (required && !required.some(r => userRoles.includes(r))) return false;
+
+  const excluded = excludeSubRole[permission];
+  if (excluded && excluded.some(r => userRoles.includes(r))) return false;
+
+  return true;
 }
 
-export function canApproveLeave(userRoles: UserRole[] | undefined, isManager: boolean): boolean {
+export function canApproveLeave(userRoles: UserRole[] | undefined, isManager: boolean, isSuperAdmin?: boolean): boolean {
+  if (isSuperAdmin) return true;
   if (!userRoles) return false;
   if (userRoles.includes('master')) return true;
   if (isManager) return true;

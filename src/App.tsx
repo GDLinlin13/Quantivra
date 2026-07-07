@@ -7,6 +7,7 @@ import LoginPage from './pages/Auth/LoginPage';
 import MasterAdminPage from './pages/MasterAdmin';
 import DashboardPage from './pages/Dashboard';
 import CompanyPage from './pages/Company';
+import HRSettingsPage from './pages/HRSettings';
 import EmployeesPage from './pages/Employees';
 import LeavePage from './pages/Leave';
 import ClaimsPage from './pages/Claims';
@@ -15,6 +16,8 @@ import PayrollPage from './pages/Payroll';
 import ChartOfAccountsPage from './pages/Accounting/ChartOfAccounts';
 import JournalEntriesPage from './pages/Accounting/JournalEntries';
 import ReportsPage from './pages/Accounting/Reports';
+import StandingInstructionsPage from './pages/Accounting/StandingInstructions';
+import LoansPage from './pages/Accounting/Loans';
 import InvoicesPage from './pages/Invoicing/Invoices';
 import InvoiceFormPage from './pages/Invoicing/InvoiceForm';
 import SupplierInvoicesPage from './pages/Invoicing/SupplierInvoices';
@@ -55,6 +58,7 @@ export default function App() {
         <Route path="/" element={isSuperAdmin ? <Navigate to="/master" replace /> : <Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/company" element={<CompanyPage />} />
+        <Route path="/hr-settings" element={<HRSettingsPage />} />
         <Route path="/employees" element={<EmployeesPage />} />
         <Route path="/users" element={<UserManagementPage />} />
         <Route path="/leave" element={<LeavePage />} />
@@ -70,6 +74,8 @@ export default function App() {
         <Route path="/accounting/chart-of-accounts" element={<ChartOfAccountsPage />} />
         <Route path="/accounting/journal-entries" element={<JournalEntriesPage />} />
         <Route path="/accounting/reports" element={<ReportsPage />} />
+        <Route path="/accounting/standing-instructions" element={<StandingInstructionsPage />} />
+        <Route path="/accounting/loans" element={<LoansPage />} />
         <Route path="/invoicing" element={<InvoicesPage />} />
         <Route path="/invoicing/new" element={<InvoiceFormPage />} />
         <Route path="/invoicing/edit/:id" element={<InvoiceFormPage />} />

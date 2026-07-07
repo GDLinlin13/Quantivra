@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { message } from 'antd';
 import { supabase } from '../../utils/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -56,6 +57,8 @@ export default function MasterAdminPage() {
   const [projectCode, setProjectCode] = useState('');
   const [masterUsername, setMasterUsername] = useState('');
   const [masterPassword, setMasterPassword] = useState('');
+  const [accessHR, setAccessHR] = useState(true);
+  const [accessAcct, setAccessAcct] = useState(true);
 
   const [showCreateUser, setShowCreateUser] = useState<number | null>(null);
   const [cuRole, setCuRole] = useState('employee');
@@ -72,6 +75,8 @@ export default function MasterAdminPage() {
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renameCode, setRenameCode] = useState('');
+  const [renameAccessHR, setRenameAccessHR] = useState(true);
+  const [renameAccessAcct, setRenameAccessAcct] = useState(true);
 
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -99,14 +104,64 @@ export default function MasterAdminPage() {
     if (!projectName || !masterUsername || !masterPassword) return;
     const internalEmail = `${masterUsername.toLowerCase().replace(/[^a-z0-9]/g, '_')}@acchr.internal`;
     const code = projectCode || projectName.replace(/[^A-Z0-9]/gi, '').substring(0, 6).toUpperCase();
-    const { data: newCompany } = await supabase.from('companies').insert({ name: projectName, company_code: code, country: 'US', currency: 'USD' }).select().single();
-    if (!newCompany) return;
-    await supabase.from('users').insert({
+    const { data: newCompany, error: compErr } = await supabase.from('companies').insert({ name: projectName, company_code: code, country: 'US', currency: 'USD', access_hr: accessHR, access_accounting: accessAcct }).select().single();
+    if (compErr || !newCompany) { message.error('Company creation failed: ' + (compErr?.message || 'unknown')); return; }
+    const { data: newUser, error: userErr } = await supabase.from('users').insert({
       company_id: newCompany.id, username: masterUsername, email: internalEmail,
       full_name: masterUsername, password_hash: masterPassword,
       roles: ['master'], is_active: 1,
-    });
-    setProjectName(''); setProjectCode(''); setMasterUsername(''); setMasterPassword('');
+    }).select().single();
+    if (userErr || !newUser) { message.error('User creation failed: ' + (userErr?.message || 'unknown')); return; }
+    const { data: newEmp, error: empErr } = await supabase.from('employees').insert({
+      company_id: newCompany.id, user_id: newUser.id,
+      full_name: masterUsername, employee_code: '001',
+      position: 'Director', status: 'active',
+    }).select().single();
+    if (empErr || !newEmp) { message.error('Employee creation failed: ' + (empErr?.message || 'no data returned')); loadData(); return; }
+    // Seed standard chart of accounts
+    if (newCompany.access_accounting) {
+      const stdAccounts = [
+        { code: '1000', name: 'Cash', type: 'asset', subtype: 'Current Asset' },
+        { code: '1100', name: 'Bank Account', type: 'asset', subtype: 'Current Asset' },
+        { code: '1200', name: 'Accounts Receivable', type: 'asset', subtype: 'Current Asset' },
+        { code: '1300', name: 'Inventory', type: 'asset', subtype: 'Current Asset' },
+        { code: '1400', name: 'Prepaid Expenses', type: 'asset', subtype: 'Current Asset' },
+        { code: '1500', name: 'Equipment', type: 'asset', subtype: 'Fixed Asset' },
+        { code: '1510', name: 'Accum. Depreciation - Equipment', type: 'asset', subtype: 'Fixed Asset' },
+        { code: '1600', name: 'Vehicles', type: 'asset', subtype: 'Fixed Asset' },
+        { code: '1610', name: 'Accum. Depreciation - Vehicles', type: 'asset', subtype: 'Fixed Asset' },
+        { code: '1700', name: 'Land & Buildings', type: 'asset', subtype: 'Fixed Asset' },
+        { code: '2000', name: 'Accounts Payable', type: 'liability', subtype: 'Current Liability' },
+        { code: '2100', name: 'Accrued Liabilities', type: 'liability', subtype: 'Current Liability' },
+        { code: '2200', name: 'Short-term Loans', type: 'liability', subtype: 'Current Liability' },
+        { code: '2300', name: 'Long-term Loans', type: 'liability', subtype: 'Long-term Liability' },
+        { code: '2400', name: 'Vehicle Loans Payable', type: 'liability', subtype: 'Long-term Liability' },
+        { code: '2500', name: 'Statutory Payables', type: 'liability', subtype: 'Current Liability' },
+        { code: '3000', name: "Owner's Equity", type: 'equity', subtype: 'Equity' },
+        { code: '3100', name: 'Retained Earnings', type: 'equity', subtype: 'Equity' },
+        { code: '4000', name: 'Sales Revenue', type: 'income', subtype: 'Revenue' },
+        { code: '4100', name: 'Service Revenue', type: 'income', subtype: 'Revenue' },
+        { code: '5000', name: 'Cost of Goods Sold', type: 'expense', subtype: 'COGS' },
+        { code: '5100', name: 'Salaries & Wages', type: 'expense', subtype: 'Operating' },
+        { code: '5200', name: 'Rent', type: 'expense', subtype: 'Operating' },
+        { code: '5300', name: 'Utilities', type: 'expense', subtype: 'Operating' },
+        { code: '5400', name: 'Office Supplies', type: 'expense', subtype: 'Operating' },
+        { code: '5500', name: 'Depreciation', type: 'expense', subtype: 'Operating' },
+        { code: '5600', name: 'Vehicle Expenses', type: 'expense', subtype: 'Operating' },
+        { code: '5700', name: 'Loan Interest', type: 'expense', subtype: 'Financing' },
+        { code: '5800', name: 'Bank Charges', type: 'expense', subtype: 'Operating' },
+        { code: '5900', name: 'Statutory Contributions', type: 'expense', subtype: 'Operating' },
+        { code: '6000', name: 'Insurance', type: 'expense', subtype: 'Operating' },
+        { code: '6100', name: 'Professional Fees', type: 'expense', subtype: 'Operating' },
+        { code: '6200', name: 'Repairs & Maintenance', type: 'expense', subtype: 'Operating' },
+        { code: '6300', name: 'Travel', type: 'expense', subtype: 'Operating' },
+        { code: '6400', name: 'Advertising', type: 'expense', subtype: 'Operating' },
+        { code: '6500', name: 'Other Expenses', type: 'expense', subtype: 'Operating' },
+      ].map(a => ({ ...a, company_id: newCompany.id }));
+      await supabase.from('chart_of_accounts').insert(stdAccounts);
+    }
+    message.success('Company, user, employee, and accounts created');
+    setProjectName(''); setProjectCode(''); setMasterUsername(''); setMasterPassword(''); setAccessHR(true); setAccessAcct(true);
     loadData();
   }
 
@@ -142,7 +197,25 @@ export default function MasterAdminPage() {
     if (!renameTarget) return;
     const [type, id] = renameTarget.split('-');
     if (type === 'company') {
-      await supabase.from('companies').update({ name: renameValue, company_code: renameCode || null }).eq('id', parseInt(id));
+      const cid = parseInt(id);
+      // Check if HR access was just enabled
+      const oldCompany = companies.find(c => c.id === cid);
+      await supabase.from('companies').update({ name: renameValue, company_code: renameCode || null, access_hr: renameAccessHR, access_accounting: renameAccessAcct }).eq('id', cid);
+      if (!oldCompany?.access_hr && renameAccessHR) {
+        // HR was just enabled — create employee record for master user if missing
+        const { data: masterUsers } = await supabase.from('users').select('id, full_name').eq('company_id', cid).contains('roles', ['master']).limit(1);
+        if (masterUsers && masterUsers.length > 0) {
+          const mu = masterUsers[0];
+          const { data: existingEmp } = await supabase.from('employees').select('id').eq('company_id', cid).eq('user_id', mu.id).maybeSingle();
+          if (!existingEmp) {
+            await supabase.from('employees').insert({
+              company_id: cid, user_id: mu.id,
+              full_name: mu.full_name, employee_code: '001',
+              position: 'Director', status: 'active',
+            });
+          }
+        }
+      }
     } else {
       await supabase.from('users').update({ username: renameValue, full_name: renameValue }).eq('id', parseInt(id));
     }
@@ -151,6 +224,7 @@ export default function MasterAdminPage() {
 
   async function handleDeleteCompany(cid: number) {
     if (!confirm('Delete this company and all its data?')) return;
+    await supabase.from('employees').delete().eq('company_id', cid);
     await supabase.from('users').delete().eq('company_id', cid);
     await supabase.from('companies').delete().eq('id', cid);
     loadData();
@@ -249,14 +323,14 @@ export default function MasterAdminPage() {
         {tab === 'NEXUS' && (
           <div style={{ display: 'grid', gap: 20 }}>
             <section style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 8, overflow: 'hidden' }}>
-              <button onClick={() => setInitOpen(!initOpen)} style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: initOpen ? '16px 16px 0' : '16px', display: 'grid', gap: 14 }}>
+              <button onClick={() => { setInitOpen(!initOpen); if (!initOpen) { setProjectName(''); setProjectCode(''); setMasterUsername(''); setMasterPassword(''); } }} style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: initOpen ? '16px 16px 0' : '16px', display: 'grid', gap: 14 }}>
                 <h2 style={{ fontSize: 24, fontWeight: 900, textAlign: 'center', letterSpacing: 3, margin: 0, background: 'linear-gradient(135deg,#7dd3fc,#a78bfa,#f9a8d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                   {initOpen ? '▼' : '▶'} INITIALIZE
                 </h2>
               </button>
               {initOpen && (
                 <form onSubmit={handleCreateProject} style={{ display: 'grid', gap: 14, padding: '8px 16px 16px' }}>
-                  <label style={{ display: 'grid', gap: 6 }}><span style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>Project Name</span>
+                  <label style={{ display: 'grid', gap: 6 }}><span style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>Company Name</span>
                     <AegisInput value={projectName} onChange={(e: any) => setProjectName(e.target.value.toUpperCase())} /></label>
                   <label style={{ display: 'grid', gap: 6 }}><span style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>Company Code</span>
                     <AegisInput value={projectCode} onChange={(e: any) => setProjectCode(e.target.value.toUpperCase())} placeholder="Auto-generated if blank" /></label>
@@ -264,7 +338,17 @@ export default function MasterAdminPage() {
                     <AegisInput value={masterUsername} onChange={(e: any) => setMasterUsername(e.target.value.toUpperCase())} /></label>
                   <label style={{ display: 'grid', gap: 6 }}><span style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>Master Password</span>
                     <AegisInput type="password" value={masterPassword} onChange={(e: any) => setMasterPassword(e.target.value)} /></label>
-                  <AegisBtn variant="primary" style={{ padding: 12 }}>Create Project</AegisBtn>
+                  <div style={{ display: 'flex', gap: 20 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={accessHR} onChange={e => setAccessHR(e.target.checked)} style={{ accentColor: '#7dd3fc' }} />
+                      <span style={{ color: COLORS.text, fontSize: 13, fontWeight: 600 }}>HR Access</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={accessAcct} onChange={e => setAccessAcct(e.target.checked)} style={{ accentColor: '#34d399' }} />
+                      <span style={{ color: COLORS.text, fontSize: 13, fontWeight: 600 }}>Accounting Access</span>
+                    </label>
+                  </div>
+                  <AegisBtn variant="primary" style={{ padding: 12 }}>Create Company</AegisBtn>
                 </form>
               )}
             </section>
@@ -276,6 +360,7 @@ export default function MasterAdminPage() {
                     <tr style={{ background: '#202427' }}>
                       <th style={{ color: COLORS.muted, fontSize: 12, textTransform: 'uppercase', padding: '11px 18px', textAlign: 'left', borderBottom: `1px solid ${COLORS.border}` }}>MATRIX</th>
                       <th style={{ color: COLORS.muted, fontSize: 12, textTransform: 'uppercase', padding: '11px 18px', textAlign: 'left', borderBottom: `1px solid ${COLORS.border}` }}>CLEARANCE</th>
+                      <th style={{ color: COLORS.muted, fontSize: 12, textTransform: 'uppercase', padding: '11px 18px', textAlign: 'left', borderBottom: `1px solid ${COLORS.border}` }}>ACCESS</th>
                       <th style={{ color: COLORS.muted, fontSize: 12, textTransform: 'uppercase', padding: '11px 18px', textAlign: 'left', borderBottom: `1px solid ${COLORS.border}` }}>Status</th>
                       <th style={{ color: COLORS.muted, fontSize: 12, textTransform: 'uppercase', padding: '11px 18px', textAlign: 'left', borderBottom: `1px solid ${COLORS.border}` }}>Actions</th>
                     </tr>
@@ -290,12 +375,17 @@ export default function MasterAdminPage() {
                             </button>
                           </td>
                           <td style={{ padding: '11px 18px', borderBottom: `1px solid ${COLORS.border}`, color: '#7dd3fc', fontSize: 13, letterSpacing: 1 }}>{c.company_code || '—'}</td>
+                          <td style={{ padding: '11px 18px', borderBottom: `1px solid ${COLORS.border}`, fontSize: 12 }}>
+                            {c.access_hr ? <span style={{ color: '#7dd3fc', marginRight: 8 }}>HR</span> : null}
+                            {c.access_accounting ? <span style={{ color: '#34d399' }}>ACCTG</span> : null}
+                            {!c.access_hr && !c.access_accounting ? <span style={{ color: '#9ca3af' }}>—</span> : null}
+                          </td>
                           <td style={{ padding: '11px 18px', borderBottom: `1px solid ${COLORS.border}` }}>{c.is_active ? 'Active' : 'Suspended'}</td>
                           <td style={{ padding: '11px 18px', borderBottom: `1px solid ${COLORS.border}` }}>
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                               <button onClick={() => handleSuspendCompany(c.id)} style={gradBtn('#fde68a','#fcd34d')}>{c.is_active ? 'Suspend' : 'Unsuspend'}</button>
                               <button onClick={() => { setShowCreateUser(c.id); setCuUsername(''); setCuPassword(''); }} style={gradBtn('#a5f3fc','#67e8f9')}>Add User</button>
-                              <button onClick={() => { setRenameTarget(`company-${c.id}`); setRenameValue(c.name); setRenameCode(c.company_code || ''); }} style={gradBtn('#c7d2fe','#a5b4fc')}>Rename</button>
+                              <button onClick={() => { setRenameTarget(`company-${c.id}`); setRenameValue(c.name); setRenameCode(c.company_code || ''); setRenameAccessHR(c.access_hr ?? true); setRenameAccessAcct(c.access_accounting ?? true); }} style={gradBtn('#c7d2fe','#a5b4fc')}>Amend</button>
                               <button onClick={() => handleDeleteCompany(c.id)} style={gradBtn('#fecaca','#fca5a5')}>Delete</button>
                             </div>
                           </td>
@@ -310,6 +400,7 @@ export default function MasterAdminPage() {
                                 {roles.filter((r: string) => r !== 'master' || roles.length === 1).join(', ') || 'employee'}
                               </span>
                             </td>
+                            <td style={{ padding: '11px 18px', borderBottom: `1px solid ${COLORS.border}` }} />
                             <td style={{ padding: '11px 18px', borderBottom: `1px solid ${COLORS.border}` }}>{u.is_active ? 'Active' : 'Suspended'}</td>
                             <td style={{ padding: '11px 18px', borderBottom: `1px solid ${COLORS.border}` }}>
                               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -378,12 +469,24 @@ export default function MasterAdminPage() {
         </div>
       </Popup>
 
-      <Popup open={!!renameTarget} title={renameTarget?.startsWith('company') ? 'Rename Company' : 'Rename User'} onClose={() => setRenameTarget(null)}>
+      <Popup open={!!renameTarget} title={renameTarget?.startsWith('company') ? 'Amend Company' : 'Rename User'} onClose={() => setRenameTarget(null)}>
         <label style={{ display: 'grid', gap: 6 }}><span style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>{renameTarget?.startsWith('company') ? 'Company Name' : 'Username'}</span>
           <AegisInput value={renameValue} onChange={(e: any) => setRenameValue(e.target.value.toUpperCase())} autoFocus /></label>
         {renameTarget?.startsWith('company') && (
-          <label style={{ display: 'grid', gap: 6 }}><span style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>Company Code</span>
-            <AegisInput value={renameCode} onChange={(e: any) => setRenameCode(e.target.value.toUpperCase())} /></label>
+          <>
+            <label style={{ display: 'grid', gap: 6 }}><span style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>Company Code</span>
+              <AegisInput value={renameCode} onChange={(e: any) => setRenameCode(e.target.value.toUpperCase())} /></label>
+            <div style={{ display: 'flex', gap: 20 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input type="checkbox" checked={renameAccessHR} onChange={e => setRenameAccessHR(e.target.checked)} style={{ accentColor: '#7dd3fc' }} />
+                <span style={{ color: COLORS.text, fontSize: 13, fontWeight: 600 }}>HR Access</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input type="checkbox" checked={renameAccessAcct} onChange={e => setRenameAccessAcct(e.target.checked)} style={{ accentColor: '#34d399' }} />
+                <span style={{ color: COLORS.text, fontSize: 13, fontWeight: 600 }}>Accounting Access</span>
+              </label>
+            </div>
+          </>
         )}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
           <AegisBtn variant="ghost" onClick={() => setRenameTarget(null)}>Cancel</AegisBtn>

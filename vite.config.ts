@@ -9,6 +9,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico'],
+      workbox: {
+        maximumFileSizeToCacheInBytes: 4194304,
+      },
       manifest: {
         name: 'Quantivra',
         short_name: 'Quantivra',

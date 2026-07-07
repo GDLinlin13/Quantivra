@@ -218,6 +218,18 @@ CREATE TABLE IF NOT EXISTS employee_documents (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Company documents
+CREATE TABLE IF NOT EXISTS company_documents (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  company_id BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  document_name TEXT NOT NULL,
+  file_url TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE company_documents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access for all" ON company_documents FOR ALL USING (true) WITH CHECK (true);
+
 -- Invoice attachments
 CREATE TABLE IF NOT EXISTS invoice_attachments (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -266,7 +278,21 @@ CREATE TABLE IF NOT EXISTS company_statutory_deductions (
   deduction_name TEXT NOT NULL,
   employee_rate REAL NOT NULL DEFAULT 0,
   employer_rate REAL NOT NULL DEFAULT 0,
-  cap_amount REAL
+  cap_amount REAL,
+  deduction_type TEXT DEFAULT 'percentage' CHECK(deduction_type IN ('percentage','percentage_minmax','fixed','bracket')),
+  min_amount REAL,
+  max_amount REAL,
+  fixed_amount REAL
+);
+
+-- Deduction brackets (for bracket-type deductions like CDAC)
+CREATE TABLE IF NOT EXISTS company_deduction_brackets (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  company_id BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  deduction_name TEXT NOT NULL,
+  min_salary REAL NOT NULL DEFAULT 0,
+  max_salary REAL,
+  amount REAL NOT NULL DEFAULT 0
 );
 
 -- Seed statutory deduction defaults by country
@@ -350,12 +376,14 @@ CREATE POLICY "Full access for all" ON employee_documents FOR ALL USING (true) W
 CREATE POLICY "Full access for all" ON invoice_attachments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Full access for all" ON statutory_deductions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Full access for all" ON company_statutory_deductions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Full access for all" ON company_deduction_brackets FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Full access for all" ON payroll_records FOR ALL USING (true) WITH CHECK (true);
 
 -- ALTER existing tables for new columns (run once on existing DBs)
 ALTER TABLE leave_balances ADD COLUMN IF NOT EXISTS is_carry_forward INTEGER DEFAULT 0;
 ALTER TABLE leave_balances ADD COLUMN IF NOT EXISTS expiry_date DATE;
 ALTER TABLE leave_types ADD COLUMN IF NOT EXISTS include_weekends INTEGER DEFAULT 0;
+ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS company_paid_benefits REAL DEFAULT 0;
 
 -- Seed default leave types for a company (call via SQL or API)
 CREATE OR REPLACE FUNCTION seed_default_leave_types(p_company_id BIGINT)
@@ -846,21 +874,45 @@ INSERT INTO public_holidays (country, date, name) VALUES
   ('Dubai', '2026-12-03', 'National Day')
 ON CONFLICT DO NOTHING;
 
--- Departments
-CREATE TABLE IF NOT EXISTS departments (
+-- Departments (global catalog, seeded)
+ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_department_id_fkey;
+ALTER TABLE employees DROP COLUMN IF EXISTS department_id;
+DROP TABLE IF EXISTS departments CASCADE;
+CREATE TABLE departments (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  company_id BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  manager_id BIGINT REFERENCES employees(id) ON DELETE SET NULL,
+  name TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+INSERT INTO departments (name) VALUES
+  ('General'), ('HR'), ('Finance'), ('Engineering'),
+  ('Marketing'), ('Sales'), ('Operations'), ('Legal'),
+  ('Customer Support'), ('R&D'), ('Design'), ('Product'),
+  ('Security'), ('Administration')
+ON CONFLICT DO NOTHING;
 
 ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Full access for all" ON departments FOR ALL USING (true) WITH CHECK (true);
 GRANT ALL ON departments TO anon, authenticated;
 GRANT USAGE ON SEQUENCE departments_id_seq TO anon, authenticated;
 
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS department_id BIGINT REFERENCES departments(id) ON DELETE SET NULL;
+-- Company-departments junction (which departments a company uses + manager)
+CREATE TABLE company_departments (
+  company_id BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  department_id BIGINT NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+  manager_id BIGINT REFERENCES employees(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (company_id, department_id)
+);
+
+ALTER TABLE company_departments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access for all" ON company_departments FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON company_departments TO anon, authenticated;
+
+GRANT ALL ON company_documents TO anon, authenticated;
+GRANT USAGE ON SEQUENCE company_documents_id_seq TO anon, authenticated;
+
+ALTER TABLE employees ADD COLUMN department_id BIGINT REFERENCES departments(id) ON DELETE SET NULL;
 
 -- Seed default departments for existing companies (run manually if needed)
 -- INSERT INTO departments (company_id, name) SELECT id, 'General' FROM companies;
@@ -868,6 +920,36 @@ ALTER TABLE employees ADD COLUMN IF NOT EXISTS department_id BIGINT REFERENCES d
 -- Company code for login
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS company_code TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_companies_company_code ON companies(company_code);
+
+-- Company access flags
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS access_hr BOOLEAN DEFAULT true;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS access_accounting BOOLEAN DEFAULT true;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS enable_attendance BOOLEAN DEFAULT true;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS enable_training BOOLEAN DEFAULT true;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS enable_recruitment BOOLEAN DEFAULT true;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS enable_performance BOOLEAN DEFAULT true;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS enable_documents BOOLEAN DEFAULT true;
+
+-- Additional columns for company_statutory_deductions
+ALTER TABLE company_statutory_deductions ADD COLUMN IF NOT EXISTS deduction_type TEXT DEFAULT 'percentage';
+ALTER TABLE company_statutory_deductions ADD COLUMN IF NOT EXISTS min_amount REAL;
+ALTER TABLE company_statutory_deductions ADD COLUMN IF NOT EXISTS max_amount REAL;
+ALTER TABLE company_statutory_deductions ADD COLUMN IF NOT EXISTS fixed_amount REAL;
+ALTER TABLE company_statutory_deductions ADD COLUMN IF NOT EXISTS paid_by_company INTEGER DEFAULT 0;
+
+-- Deduction brackets table for bracket-based deductions
+CREATE TABLE IF NOT EXISTS company_deduction_brackets (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  company_id BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  deduction_name TEXT NOT NULL,
+  min_salary REAL NOT NULL DEFAULT 0,
+  max_salary REAL,
+  amount REAL NOT NULL DEFAULT 0
+);
+ALTER TABLE company_deduction_brackets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access for all" ON company_deduction_brackets FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON company_deduction_brackets TO anon, authenticated;
+GRANT USAGE ON SEQUENCE company_deduction_brackets_id_seq TO anon, authenticated;
 
 -- Username unique per company
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_username_company_unique;
@@ -878,3 +960,104 @@ ALTER TABLE users ADD CONSTRAINT users_username_company_unique UNIQUE (username,
 -- INSERT INTO storage.buckets (id, name, public) VALUES ('company-files', 'company-files', true) ON CONFLICT DO NOTHING;
 -- Then run these policies:
 CREATE POLICY "Allow all on company-files" ON storage.objects FOR ALL TO public USING (bucket_id = 'company-files') WITH CHECK (bucket_id = 'company-files');
+
+-- Standing Instructions (monthly recurring payments)
+CREATE TABLE IF NOT EXISTS standing_instructions (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  company_id BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  account_id BIGINT NOT NULL REFERENCES chart_of_accounts(id),
+  amount REAL NOT NULL DEFAULT 0,
+  frequency TEXT DEFAULT 'monthly' CHECK(frequency IN ('monthly','quarterly','yearly')),
+  next_date DATE,
+  last_processed DATE,
+  is_active INTEGER DEFAULT 1,
+  adjustable INTEGER DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE standing_instructions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access for all" ON standing_instructions FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON standing_instructions TO anon, authenticated;
+GRANT USAGE ON SEQUENCE standing_instructions_id_seq TO anon, authenticated;
+
+-- Standing instruction logs (history of generated entries)
+CREATE TABLE IF NOT EXISTS standing_instruction_logs (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  instruction_id BIGINT NOT NULL REFERENCES standing_instructions(id) ON DELETE CASCADE,
+  period TEXT NOT NULL,
+  original_amount REAL NOT NULL DEFAULT 0,
+  adjusted_amount REAL,
+  status TEXT DEFAULT 'pending' CHECK(status IN ('pending','posted','skipped')),
+  journal_entry_id BIGINT REFERENCES journal_entries(id),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE standing_instruction_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access for all" ON standing_instruction_logs FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON standing_instruction_logs TO anon, authenticated;
+GRANT USAGE ON SEQUENCE standing_instruction_logs_id_seq TO anon, authenticated;
+
+-- Loans (vehicle loans, equipment financing, etc.)
+CREATE TABLE IF NOT EXISTS loans (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  company_id BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  loan_type TEXT DEFAULT 'vehicle' CHECK(loan_type IN ('vehicle','equipment','other')),
+  asset_account_id BIGINT REFERENCES chart_of_accounts(id),
+  liability_account_id BIGINT REFERENCES chart_of_accounts(id),
+  interest_expense_account_id BIGINT REFERENCES chart_of_accounts(id),
+  principal_amount REAL NOT NULL DEFAULT 0,
+  interest_rate REAL NOT NULL DEFAULT 0,
+  term_months INTEGER NOT NULL DEFAULT 12,
+  start_date DATE NOT NULL,
+  payment_amount REAL NOT NULL DEFAULT 0,
+  remaining_balance REAL NOT NULL DEFAULT 0,
+  status TEXT DEFAULT 'active' CHECK(status IN ('active','settled')),
+  settlement_date DATE,
+  settlement_price REAL,
+  gain_loss_account_id BIGINT REFERENCES chart_of_accounts(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE loans ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access for all" ON loans FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON loans TO anon, authenticated;
+GRANT USAGE ON SEQUENCE loans_id_seq TO anon, authenticated;
+
+-- Loan amortization schedules
+CREATE TABLE IF NOT EXISTS loan_schedules (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  loan_id BIGINT NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+  installment_no INTEGER NOT NULL,
+  due_date DATE NOT NULL,
+  principal REAL NOT NULL DEFAULT 0,
+  interest REAL NOT NULL DEFAULT 0,
+  total REAL NOT NULL DEFAULT 0,
+  balance_after REAL NOT NULL DEFAULT 0,
+  status TEXT DEFAULT 'pending' CHECK(status IN ('pending','paid','settled')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE loan_schedules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access for all" ON loan_schedules FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON loan_schedules TO anon, authenticated;
+GRANT USAGE ON SEQUENCE loan_schedules_id_seq TO anon, authenticated;
+
+-- Bank transactions (imported from CSV)
+CREATE TABLE IF NOT EXISTS bank_transactions (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  company_id BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  transaction_date DATE NOT NULL,
+  description TEXT NOT NULL,
+  amount REAL NOT NULL DEFAULT 0,
+  reference TEXT,
+  bank_reference TEXT,
+  status TEXT DEFAULT 'unmatched' CHECK(status IN ('unmatched','matched','ignored')),
+  matched_to_type TEXT,
+  matched_to_id BIGINT,
+  import_batch TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE bank_transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access for all" ON bank_transactions FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON bank_transactions TO anon, authenticated;
+GRANT USAGE ON SEQUENCE bank_transactions_id_seq TO anon, authenticated;

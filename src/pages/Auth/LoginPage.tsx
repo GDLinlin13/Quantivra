@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Card, Form, Input, Button, Typography, Alert } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Card, Form, Input, Button, Typography, Alert, Checkbox } from 'antd';
 import { UserOutlined, LockOutlined, BuildOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -23,14 +23,35 @@ function RainbowTitle({ level = 2 }: { level?: 1 | 2 | 3 | 4 | 5 }) {
 export default function LoginPage() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [remember, setRemember] = useState(() => localStorage.getItem('acchr_remember') === 'true');
+
+  useEffect(() => {
+    if (remember) {
+      const savedCode = localStorage.getItem('acchr_company_code') || '';
+      const savedUser = localStorage.getItem('acchr_username') || '';
+      form.setFieldsValue({ company_code: savedCode, username: savedUser });
+    }
+  }, [remember, form]);
 
   async function handleLogin(values: { company_code: string; username: string; password: string }) {
     setLoading(true); setError('');
     const err = await signIn(values.company_code, values.username, values.password);
     if (err) setError(err);
-    else navigate('/');
+    else {
+      if (remember) {
+        localStorage.setItem('acchr_company_code', values.company_code || '');
+        localStorage.setItem('acchr_username', values.username);
+        localStorage.setItem('acchr_remember', 'true');
+      } else {
+        localStorage.removeItem('acchr_company_code');
+        localStorage.removeItem('acchr_username');
+        localStorage.removeItem('acchr_remember');
+      }
+      navigate('/');
+    }
     setLoading(false);
   }
 
@@ -56,15 +77,21 @@ export default function LoginPage() {
           <RainbowTitle />
         </div>
 
-        <Form layout="vertical" onFinish={handleLogin} size="large">
+        <Form form={form} layout="vertical" onFinish={handleLogin} size="large" autoComplete="off">
+          {/* Hidden dummy inputs to prevent browser autofill from other sites */}
+          <input type="text" style={{ display: 'none' }} />
+          <input type="password" style={{ display: 'none' }} />
           <Form.Item name="company_code" getValueFromEvent={(e) => e.target.value.toUpperCase()}>
-            <Input prefix={<BuildOutlined />} placeholder="Company Code" style={{ height: 48, fontSize: 16, textTransform: 'uppercase' }} />
+            <Input prefix={<BuildOutlined />} placeholder="Company Code" autoComplete="off" style={{ height: 48, fontSize: 16, textTransform: 'uppercase' }} />
           </Form.Item>
           <Form.Item name="username" rules={[{ required: true }]} getValueFromEvent={(e) => e.target.value.toUpperCase()}>
-            <Input prefix={<UserOutlined />} placeholder="Username" style={{ height: 48, fontSize: 16, textTransform: 'uppercase' }} />
+            <Input prefix={<UserOutlined />} placeholder="Username" autoComplete="off" style={{ height: 48, fontSize: 16, textTransform: 'uppercase' }} />
           </Form.Item>
           <Form.Item name="password" rules={[{ required: true }]}>
-            <Input.Password prefix={<LockOutlined />} placeholder="Password" style={{ height: 48, fontSize: 16 }} />
+            <Input.Password prefix={<LockOutlined />} placeholder="Password" autoComplete="new-password" style={{ height: 48, fontSize: 16 }} />
+          </Form.Item>
+          <Form.Item style={{ marginBottom: 16 }}>
+            <Checkbox checked={remember} onChange={e => setRemember(e.target.checked)} style={{ color: 'rgba(255,255,255,0.6)' }}>Remember Me</Checkbox>
           </Form.Item>
           {error && <Alert message={error} type="error" showIcon style={{ marginBottom: 16 }} />}
           <Button type="primary" htmlType="submit" loading={loading} block>Sign In</Button>

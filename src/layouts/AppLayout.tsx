@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Layout, Menu, Button, Drawer } from 'antd';
 import { LogoutOutlined, MenuOutlined, ControlOutlined } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
@@ -15,18 +15,34 @@ export default function AppLayout() {
 
   const selectedKey = location.pathname;
 
-  const items = useMemo(() => {
-    const showLeave = can('leave.apply', user?.roles) || can('leave.view_all', user?.roles);
-    const showClaims = can('claim.apply', user?.roles) || can('claim.view_all', user?.roles);
-    const showAttendance = can('attendance.view', user?.roles) || can('attendance.manage', user?.roles);
-    const showPerformance = can('performance.view', user?.roles) || can('performance.manage', user?.roles);
-    const showTraining = can('training.view', user?.roles) || can('training.manage', user?.roles);
-    const showRecruitment = can('recruitment.view', user?.roles);
-    const showDocuments = can('documents.view', user?.roles) || can('documents.manage', user?.roles);
+  // Redirect if company doesn't have access to current section
+  useEffect(() => {
+    if (isSuperAdmin || !company) return;
+    const financePaths = ['/payroll', '/accounting', '/invoicing', '/banking', '/tax'];
+    const hrPaths = ['/employees', '/payroll', '/leave', '/claims', '/attendance', '/performance', '/training', '/recruitment', '/documents'];
+    const path = location.pathname;
+    if (!company.access_hr && hrPaths.some(p => path.startsWith(p))) {
+      navigate('/dashboard', { replace: true });
+    } else if (!company.access_accounting && financePaths.some(p => path.startsWith(p))) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [company, isSuperAdmin, location.pathname, navigate]);
 
-    const people = [
-      { key: '/dashboard', label: 'Dashboard' },
-      ...(can('employee.view_all', user?.roles) ? [{ key: '/employees', label: 'Employees' }] : []),
+  const items = useMemo(() => {
+    const hasHRAccess = isSuperAdmin || company?.access_hr;
+    const hasFinanceAccess = isSuperAdmin || company?.access_accounting;
+    const enabled = (key: string) => isSuperAdmin || (company as any)?.[key] !== false;
+
+    const showLeave = isSuperAdmin || can('leave.apply', user?.roles) || can('leave.view_all', user?.roles);
+    const showClaims = isSuperAdmin || can('claim.apply', user?.roles) || can('claim.view_all', user?.roles);
+    const showAttendance = (isSuperAdmin || can('attendance.view', user?.roles) || can('attendance.manage', user?.roles)) && enabled('enable_attendance');
+    const showPerformance = (isSuperAdmin || can('performance.view', user?.roles) || can('performance.manage', user?.roles)) && enabled('enable_performance');
+    const showTraining = (isSuperAdmin || can('training.view', user?.roles) || can('training.manage', user?.roles)) && enabled('enable_training');
+    const showRecruitment = (isSuperAdmin || can('recruitment.view', user?.roles)) && enabled('enable_recruitment');
+    const showDocuments = (isSuperAdmin || can('documents.view', user?.roles) || can('documents.manage', user?.roles)) && enabled('enable_documents');
+
+    const people = hasHRAccess ? [
+      ...(isSuperAdmin || can('employee.view_all', user?.roles) ? [{ key: '/employees', label: 'Employees' }] : []),
       ...(showLeave ? [{ key: '/leave', label: 'Leave' }] : []),
       ...(showClaims ? [{ key: '/claims', label: 'Claims' }] : []),
       ...(showAttendance ? [{ key: '/attendance', label: 'Attendance' }] : []),
@@ -34,45 +50,50 @@ export default function AppLayout() {
       ...(showTraining ? [{ key: '/training', label: 'Training' }] : []),
       ...(showRecruitment ? [{ key: '/recruitment', label: 'Recruitment' }] : []),
       ...(showDocuments ? [{ key: '/documents', label: 'Documents' }] : []),
-    ];
+      ...(isSuperAdmin || can('payroll.view', user?.roles) ? [{ key: '/payroll', label: 'Payroll' }] : []),
+    ] : [];
 
-    const showFinance = can('payroll.view', user?.roles) || can('accounting.view', user?.roles) ||
+    const showFinance = hasFinanceAccess && (isSuperAdmin || can('accounting.view', user?.roles) ||
       can('invoice.view', user?.roles) || can('banking.view', user?.roles) ||
-      can('tax.view', user?.roles) || can('reports.view', user?.roles);
+      can('tax.view', user?.roles) || can('reports.view', user?.roles));
 
     const finance = showFinance ? [
-      ...(can('payroll.view', user?.roles) ? [{ key: '/payroll', label: 'Payroll' }] : []),
-      ...(can('accounting.view', user?.roles) ? [{
+      ...(isSuperAdmin || can('accounting.view', user?.roles) ? [{
         key: '/accounting', label: 'Chart of Accounts',
         children: [
           { key: '/accounting/chart-of-accounts', label: 'Chart of Accounts' },
           { key: '/accounting/journal-entries', label: 'Journal Entries' },
+          { key: '/accounting/standing-instructions', label: 'Standing Instructions' },
+          { key: '/accounting/loans', label: 'Loans' },
         ],
       }] : []),
-      ...(can('invoice.view', user?.roles) ? [{
+      ...(isSuperAdmin || can('invoice.view', user?.roles) ? [{
         key: '/invoicing', label: 'Invoicing',
         children: [
           { key: '/invoicing', label: 'Sales Invoices' },
           { key: '/invoicing/supplier', label: 'Supplier Invoices' },
         ],
       }] : []),
-      ...(can('banking.view', user?.roles) ? [{ key: '/banking', label: 'Banking' }] : []),
-      ...(can('tax.view', user?.roles) ? [{ key: '/tax', label: 'Tax' }] : []),
-      ...(can('reports.view', user?.roles) ? [{ key: '/accounting/reports', label: 'Reports' }] : []),
+      ...(isSuperAdmin || can('banking.view', user?.roles) ? [{ key: '/banking', label: 'Banking' }] : []),
+      ...(isSuperAdmin || can('tax.view', user?.roles) ? [{ key: '/tax', label: 'Tax' }] : []),
+      ...(isSuperAdmin || can('reports.view', user?.roles) ? [{ key: '/accounting/reports', label: 'Reports' }] : []),
     ] : [];
 
     const settings = [
-      ...(can('company.settings', user?.roles) ? [{ key: '/company', label: 'Company' }] : []),
-      ...(can('user.manage', user?.roles) || user?.roles?.includes('master')
+      ...(isSuperAdmin || can('company.settings', user?.roles) ? [{ key: '/company', label: 'Company' }] : []),
+      ...(hasHRAccess ? [{ key: '/hr-settings', label: 'HR Settings' }] : []),
+      ...(isSuperAdmin || can('user.manage', user?.roles) || user?.roles?.includes('master')
         ? [{ key: '/users', label: 'User Management' }] : []),
     ];
 
-    const result: any[] = [];
-    if (people.length > 1) result.push({ key: 'people', label: 'PEOPLE', children: people });
+    const result: any[] = [
+      { key: '/dashboard', label: 'Dashboard' },
+    ];
+    if (people.length > 0) result.push({ key: 'people', label: 'PEOPLE', children: people });
     if (finance.length > 0) result.push({ key: 'finance', label: 'FINANCE', children: finance });
     if (settings.length > 0) result.push({ key: 'settings', label: 'SETTINGS', children: settings });
     return result;
-  }, [user?.roles]);
+  }, [user?.roles, company?.access_hr, company?.access_accounting, company?.enable_attendance, company?.enable_training, company?.enable_recruitment, company?.enable_performance, company?.enable_documents, isSuperAdmin]);
 
   const defaultOpenKeys = useMemo(() => {
     const keys: string[] = ['people', 'finance', 'settings'];
@@ -134,6 +155,7 @@ export default function AppLayout() {
           line-height: 36px !important;
           border-radius: 0 !important;
         }
+        .ant-menu-item:not(.ant-menu-submenu):hover .ant-menu-title-content { color: #7dd3fc !important; }
         .ant-menu-submenu .ant-menu-item:nth-child(1):hover .ant-menu-title-content { color: #7dd3fc !important; }
         .ant-menu-submenu .ant-menu-item:nth-child(2):hover .ant-menu-title-content { color: #a78bfa !important; }
         .ant-menu-submenu .ant-menu-item:nth-child(3):hover .ant-menu-title-content { color: #f9a8d4 !important; }
@@ -164,7 +186,7 @@ export default function AppLayout() {
             <span key={i} className="rainbow-letter" style={{ animationDelay: `${i * 0.3}s` }}>{ch}</span>
           ))}
         </div>
-        <div style={{ fontSize: 15, fontWeight: 600, color: '#f0abfc', marginBottom: 6, letterSpacing: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>{company?.name || '—'}</div>
+        <div style={{ fontSize: company?.name ? (company.name.length > 20 ? 13 : company.name.length > 14 ? 14 : 15) : 15, fontWeight: 600, color: '#f0abfc', marginBottom: 6, letterSpacing: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 250 }}>{company?.name || '—'}</div>
         <div style={{ fontSize: 13, color: '#7dd3fc', fontWeight: 500 }}>
           {user?.full_name || user?.email}
         </div>
@@ -206,7 +228,7 @@ export default function AppLayout() {
     <Layout style={{ height: '100vh', overflow: 'hidden' }}>
       <Sider theme="dark"
         trigger={null} breakpoint="lg"
-        width={250}
+        width={280}
         style={{ height: '100vh', position: 'sticky', top: 0, overflow: 'hidden', background: '#0b0f12' }}
         className="desktop-sider"
       >

@@ -17,11 +17,18 @@ export interface Company {
   incorporation_date?: string;
   business_certificate_url?: string;
   business_certificate_name?: string;
+  access_hr?: boolean;
+  access_accounting?: boolean;
+  enable_attendance?: boolean;
+  enable_training?: boolean;
+  enable_recruitment?: boolean;
+  enable_performance?: boolean;
+  enable_documents?: boolean;
   is_active?: number;
   created_at?: string;
 }
 
-export type UserRole = 'master' | 'hr' | 'accountant' | 'employee';
+export type UserRole = 'master' | 'hr' | 'accountant' | 'employee' | 'hr:leave_approve' | 'hr:payroll' | 'accountant:view_only';
 
 export interface User {
   id: number;
@@ -37,8 +44,13 @@ export interface User {
 
 export interface Department {
   id: number;
-  company_id: number;
   name: string;
+  created_at?: string;
+}
+
+export interface CompanyDepartment {
+  company_id: number;
+  department_id: number;
   manager_id?: number;
   created_at?: string;
 }
