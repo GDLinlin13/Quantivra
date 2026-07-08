@@ -25,6 +25,7 @@ interface DeductionItem {
   paid_by_company: boolean;
   enabled: boolean;
   brackets: BracketRow[];
+  bothRates: boolean; // true when both employee and employer rates > 0 → hide paid_by_company toggle
 }
 
 const typeLabels: Record<string, string> = {
@@ -97,27 +98,9 @@ export default function HRSettingsPage() {
           paid_by_company: existing?.paid_by_company === 1 || existing?.paid_by_company === true,
           enabled: !!existing,
           brackets,
+          bothRates: (d.employee_rate || 0) > 0 && (d.employer_rate || 0) > 0,
         };
       });
-
-      // Also add any custom deductions (ones in overrides but not in defaults)
-      for (const o of (overridesRes.data || [])) {
-        if (!merged.find(m => m.deduction_name === o.deduction_name)) {
-          merged.push({
-            sourceId: o.id,
-            deduction_name: o.deduction_name,
-            deduction_type: o.deduction_type || 'percentage',
-            employee_rate: o.employee_rate ?? 0,
-            employer_rate: o.employer_rate ?? 0,
-            min_amount: o.min_amount ?? null,
-            max_amount: o.max_amount ?? null,
-            fixed_amount: o.fixed_amount ?? null,
-            paid_by_company: o.paid_by_company === 1 || o.paid_by_company === true,
-            enabled: true,
-            brackets: bracketMap[o.deduction_name] || [],
-          });
-        }
-      }
 
       setDeductions(merged);
     } catch (err: any) {
@@ -171,6 +154,7 @@ export default function HRSettingsPage() {
       paid_by_company: false,
       enabled: true,
       brackets: [],
+      bothRates: false,
     }]);
   }
 
@@ -234,6 +218,18 @@ export default function HRSettingsPage() {
         }
       }
 
+      // Clean up orphaned overrides not matching current country defaults
+      const { data: currentDefaults } = await supabase.from('statutory_deductions').select('name').eq('country', companyCountry);
+      const defaultNames = new Set((currentDefaults || []).map(d => d.name));
+      const enabledNames = new Set(enabled.map(d => d.deduction_name));
+      const { data: allOverrides } = await supabase.from('company_statutory_deductions').select('deduction_name').eq('company_id', companyId);
+      for (const o of (allOverrides || [])) {
+        if (!defaultNames.has(o.deduction_name) && !enabledNames.has(o.deduction_name)) {
+          await supabase.from('company_statutory_deductions').delete().eq('company_id', companyId).eq('deduction_name', o.deduction_name);
+          await supabase.from('company_deduction_brackets').delete().eq('company_id', companyId).eq('deduction_name', o.deduction_name);
+        }
+      }
+
       message.success(`${enabled.length} deduction(s) saved`);
     } catch (err: any) {
       message.error(err.message);
@@ -258,6 +254,33 @@ export default function HRSettingsPage() {
             <Col span={8}><Form.Item name="enable_recruitment" label="Recruitment" valuePropName="checked"><Switch /></Form.Item></Col>
             <Col span={8}><Form.Item name="enable_performance" label="Performance" valuePropName="checked"><Switch /></Form.Item></Col>
             <Col span={8}><Form.Item name="enable_documents" label="Documents" valuePropName="checked"><Switch /></Form.Item></Col>
+            <Col span={8}>
+              <Form.Item label="Country">
+                <Select value={companyCountry} onChange={async v => {
+                  setCompanyCountry(v);
+                  await supabase.from('companies').update({ country: v }).eq('id', companyId);
+                  loadSettings();
+                }}>
+                  <Select.Option value="Australia">Australia</Select.Option>
+                  <Select.Option value="Canada">Canada</Select.Option>
+                  <Select.Option value="China">China</Select.Option>
+                  <Select.Option value="Dubai">Dubai</Select.Option>
+                  <Select.Option value="Hong Kong">Hong Kong</Select.Option>
+                  <Select.Option value="India">India</Select.Option>
+                  <Select.Option value="Indonesia">Indonesia</Select.Option>
+                  <Select.Option value="Japan">Japan</Select.Option>
+                  <Select.Option value="Malaysia">Malaysia</Select.Option>
+                  <Select.Option value="New Zealand">New Zealand</Select.Option>
+                  <Select.Option value="Philippines">Philippines</Select.Option>
+                  <Select.Option value="Singapore">Singapore</Select.Option>
+                  <Select.Option value="South Korea">South Korea</Select.Option>
+                  <Select.Option value="Thailand">Thailand</Select.Option>
+                  <Select.Option value="United Kingdom">United Kingdom</Select.Option>
+                  <Select.Option value="United States">United States</Select.Option>
+                  <Select.Option value="Vietnam">Vietnam</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
           </Row>
         </Form>
       </Card>
@@ -327,8 +350,10 @@ export default function HRSettingsPage() {
                       </>
                     )}
                     <Col span={3} style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
-                      <Switch checked={d.paid_by_company} onChange={v => updateDeduction(d.deduction_name, 'paid_by_company', v)}
-                        size="small" checkedChildren="Company" unCheckedChildren="Employee" />
+                      {!d.bothRates && (
+                        <Switch checked={d.paid_by_company} onChange={v => updateDeduction(d.deduction_name, 'paid_by_company', v)}
+                          size="small" checkedChildren="Company" unCheckedChildren="Employee" />
+                      )}
                     </Col>
                   </Row>
                 )}
@@ -341,8 +366,10 @@ export default function HRSettingsPage() {
                         value={d.fixed_amount} onChange={v => updateDeduction(d.deduction_name, 'fixed_amount', v ?? 0)} />
                     </Col>
                     <Col span={3} style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
-                      <Switch checked={d.paid_by_company} onChange={v => updateDeduction(d.deduction_name, 'paid_by_company', v)}
-                        size="small" checkedChildren="Company" unCheckedChildren="Employee" />
+                      {!d.bothRates && (
+                        <Switch checked={d.paid_by_company} onChange={v => updateDeduction(d.deduction_name, 'paid_by_company', v)}
+                          size="small" checkedChildren="Company" unCheckedChildren="Employee" />
+                      )}
                     </Col>
                   </Row>
                 )}
@@ -351,8 +378,10 @@ export default function HRSettingsPage() {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                       <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>Brackets</Text>
-                      <Switch checked={d.paid_by_company} onChange={v => updateDeduction(d.deduction_name, 'paid_by_company', v)}
-                        size="small" checkedChildren="Company" unCheckedChildren="Employee" />
+                      {!d.bothRates && (
+                        <Switch checked={d.paid_by_company} onChange={v => updateDeduction(d.deduction_name, 'paid_by_company', v)}
+                          size="small" checkedChildren="Company" unCheckedChildren="Employee" />
+                      )}
                     </div>
                     {d.brackets.map(b => (
                       <div key={b.key} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
