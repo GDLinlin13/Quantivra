@@ -26,6 +26,7 @@ interface DeductionItem {
   enabled: boolean;
   brackets: BracketRow[];
   bothRates: boolean; // true when both employee and employer rates > 0 → hide paid_by_company toggle
+  employerOnly: boolean; // true when only employer rate > 0 → hide toggle, auto company-paid
 }
 
 const typeLabels: Record<string, string> = {
@@ -86,19 +87,23 @@ export default function HRSettingsPage() {
       const merged: DeductionItem[] = (defaultsRes.data || []).map((d: any) => {
         const existing = overrideMap[d.name];
         const brackets = bracketMap[d.name] || [];
+        const emplRate = d.employee_rate ?? 0;
+        const emprRate = d.employer_rate ?? 0;
+        const isEmployerOnly = emplRate === 0 && emprRate > 0;
         return {
           sourceId: existing?.id,
           deduction_name: d.name,
           deduction_type: existing?.deduction_type || 'percentage',
-          employee_rate: existing?.employee_rate ?? d.employee_rate ?? 0,
-          employer_rate: existing?.employer_rate ?? d.employer_rate ?? 0,
+          employee_rate: existing?.employee_rate ?? emplRate,
+          employer_rate: existing?.employer_rate ?? emprRate,
           min_amount: existing?.min_amount ?? null,
           max_amount: existing?.max_amount ?? null,
           fixed_amount: existing?.fixed_amount ?? null,
-          paid_by_company: existing?.paid_by_company === 1 || existing?.paid_by_company === true,
-          enabled: !!existing,
+          paid_by_company: isEmployerOnly ? true : (existing?.paid_by_company === 1 || existing?.paid_by_company === true),
+          enabled: !!(existing || isEmployerOnly),
           brackets,
-          bothRates: (d.employee_rate || 0) > 0 && (d.employer_rate || 0) > 0,
+          bothRates: emplRate > 0 && emprRate > 0,
+          employerOnly: isEmployerOnly,
         };
       });
 
@@ -155,6 +160,7 @@ export default function HRSettingsPage() {
       enabled: true,
       brackets: [],
       bothRates: false,
+      employerOnly: false,
     }]);
   }
 
@@ -350,7 +356,7 @@ export default function HRSettingsPage() {
                       </>
                     )}
                     <Col span={3} style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
-                      {!d.bothRates && (
+                      {!d.bothRates && !d.employerOnly && (
                         <Switch checked={d.paid_by_company} onChange={v => updateDeduction(d.deduction_name, 'paid_by_company', v)}
                           size="small" checkedChildren="Company" unCheckedChildren="Employee" />
                       )}
@@ -366,7 +372,7 @@ export default function HRSettingsPage() {
                         value={d.fixed_amount} onChange={v => updateDeduction(d.deduction_name, 'fixed_amount', v ?? 0)} />
                     </Col>
                     <Col span={3} style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
-                      {!d.bothRates && (
+                      {!d.bothRates && !d.employerOnly && (
                         <Switch checked={d.paid_by_company} onChange={v => updateDeduction(d.deduction_name, 'paid_by_company', v)}
                           size="small" checkedChildren="Company" unCheckedChildren="Employee" />
                       )}
@@ -378,7 +384,7 @@ export default function HRSettingsPage() {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                       <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>Brackets</Text>
-                      {!d.bothRates && (
+                      {!d.bothRates && !d.employerOnly && (
                         <Switch checked={d.paid_by_company} onChange={v => updateDeduction(d.deduction_name, 'paid_by_company', v)}
                           size="small" checkedChildren="Company" unCheckedChildren="Employee" />
                       )}

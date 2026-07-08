@@ -297,9 +297,9 @@ CREATE TABLE IF NOT EXISTS company_deduction_brackets (
 
 -- Seed statutory deduction defaults by country
 INSERT INTO statutory_deductions (country, name, description, employee_rate, employer_rate, cap_amount) VALUES
-  ('Singapore', 'CPF', 'Central Provident Fund', 0.20, 0.17, NULL),
-  ('Singapore', 'SD', 'Skills Development Levy', 0.0025, 0.0025, NULL),
-  ('Singapore', 'SHG', 'Self-Help Group', 0.005, 0.005, NULL),
+  ('Singapore', 'CPF', 'Central Provident Fund – Ordinary Wage ceiling $8,000', 0.20, 0.17, 8000),
+  ('Singapore', 'SDL', 'Skills Development Levy – employer pays 0.25% on first $4,500 (max $11.25)', 0, 0.0025, 4500),
+  ('Singapore', 'SHG', 'Self-Help Group – choose CDAC / SINDA / MENDAKI / Eurasian (0.5% each)', 0.005, 0.005, NULL),
   ('Malaysia', 'EPF', 'Employees Provident Fund', 0.11, 0.13, NULL),
   ('Malaysia', 'SOCSO', 'Social Security Organization', 0.005, 0.0195, 4000),
   ('Malaysia', 'EIS', 'Employment Insurance System', 0.002, 0.004, 4000),
