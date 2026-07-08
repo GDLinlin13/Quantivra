@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Form, Switch, Button, Typography, Spin, Alert, message, Row, Col, Divider, InputNumber, Input, Select, Space } from 'antd';
+import { Card, Form, Switch, Button, Typography, Spin, Alert, message, Row, Col, Divider, InputNumber, Input, Select, Space, Table, Tag } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { supabase } from '../../utils/supabase';
 import { useCompanyId } from '../../utils/useCompany';
@@ -13,18 +13,26 @@ interface BracketRow {
   amount: number;
 }
 
-interface DeductionRow {
-  key: string;
+interface DeductionItem {
+  sourceId?: number;
   deduction_name: string;
-  deduction_type: 'percentage' | 'percentage_minmax' | 'fixed' | 'bracket';
+  deduction_type: string;
   employee_rate: number;
   employer_rate: number;
   min_amount: number | null;
   max_amount: number | null;
   fixed_amount: number | null;
   paid_by_company: boolean;
+  enabled: boolean;
   brackets: BracketRow[];
 }
+
+const typeLabels: Record<string, string> = {
+  percentage: 'Percentage',
+  percentage_minmax: 'Percentage w/ Min/Max',
+  fixed: 'Fixed Amount',
+  bracket: 'Salary Bracket',
+};
 
 export default function HRSettingsPage() {
   const companyId = useCompanyId();
@@ -32,7 +40,8 @@ export default function HRSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [deductions, setDeductions] = useState<DeductionRow[]>([]);
+  const [deductions, setDeductions] = useState<DeductionItem[]>([]);
+  const [companyCountry, setCompanyCountry] = useState('Singapore');
 
   useEffect(() => {
     if (!companyId) return;
@@ -42,42 +51,75 @@ export default function HRSettingsPage() {
   async function loadSettings() {
     setLoading(true);
     try {
-      const { data: company } = await supabase.from('companies').select('*').eq('id', companyId).single();
-      if (company) {
-        form.setFieldsValue({
-          enable_attendance: company.enable_attendance ?? true,
-          enable_training: company.enable_training ?? true,
-          enable_recruitment: company.enable_recruitment ?? true,
-          enable_performance: company.enable_performance ?? true,
-          enable_documents: company.enable_documents ?? true,
-        });
-      }
-      const [dedRes, bracketRes] = await Promise.all([
+      const { data: co } = await supabase.from('companies').select('*').eq('id', companyId).single();
+      if (!co) { setLoading(false); return; }
+      const country = co.country || 'Singapore';
+      setCompanyCountry(country);
+      form.setFieldsValue({
+        enable_attendance: co.enable_attendance ?? true,
+        enable_training: co.enable_training ?? true,
+        enable_recruitment: co.enable_recruitment ?? true,
+        enable_performance: co.enable_performance ?? true,
+        enable_documents: co.enable_documents ?? true,
+      });
+
+      const [defaultsRes, overridesRes, bracketRes] = await Promise.all([
+        supabase.from('statutory_deductions').select('*').eq('country', country).order('name'),
         supabase.from('company_statutory_deductions').select('*').eq('company_id', companyId),
         supabase.from('company_deduction_brackets').select('*').eq('company_id', companyId).order('min_salary'),
       ]);
+
       const bracketMap: Record<string, BracketRow[]> = {};
       for (const b of (bracketRes.data || [])) {
         if (!bracketMap[b.deduction_name]) bracketMap[b.deduction_name] = [];
         bracketMap[b.deduction_name].push({
-          key: String(b.id),
-          min_salary: b.min_salary,
-          max_salary: b.max_salary,
-          amount: b.amount,
+          key: String(b.id), min_salary: b.min_salary, max_salary: b.max_salary, amount: b.amount,
         });
       }
-      setDeductions((dedRes.data || []).map((d: any, i: number) => ({
-        key: String(i),
-        deduction_name: d.deduction_name,
-        deduction_type: d.deduction_type || 'percentage',
-        employee_rate: d.employee_rate ?? 0,
-        employer_rate: d.employer_rate ?? 0,
-        min_amount: d.min_amount ?? null,
-        max_amount: d.max_amount ?? null,
-        fixed_amount: d.fixed_amount ?? null,
-        paid_by_company: d.paid_by_company === 1 || d.paid_by_company === true,
-        brackets: bracketMap[d.deduction_name] || [],
-      })));
+
+      const overrideMap: Record<string, any> = {};
+      for (const o of (overridesRes.data || [])) {
+        overrideMap[o.deduction_name] = o;
+      }
+
+      const merged: DeductionItem[] = (defaultsRes.data || []).map((d: any) => {
+        const existing = overrideMap[d.name];
+        const brackets = bracketMap[d.name] || [];
+        return {
+          sourceId: existing?.id,
+          deduction_name: d.name,
+          deduction_type: existing?.deduction_type || 'percentage',
+          employee_rate: existing?.employee_rate ?? d.employee_rate ?? 0,
+          employer_rate: existing?.employer_rate ?? d.employer_rate ?? 0,
+          min_amount: existing?.min_amount ?? null,
+          max_amount: existing?.max_amount ?? null,
+          fixed_amount: existing?.fixed_amount ?? null,
+          paid_by_company: existing?.paid_by_company === 1 || existing?.paid_by_company === true,
+          enabled: !!existing,
+          brackets,
+        };
+      });
+
+      // Also add any custom deductions (ones in overrides but not in defaults)
+      for (const o of (overridesRes.data || [])) {
+        if (!merged.find(m => m.deduction_name === o.deduction_name)) {
+          merged.push({
+            sourceId: o.id,
+            deduction_name: o.deduction_name,
+            deduction_type: o.deduction_type || 'percentage',
+            employee_rate: o.employee_rate ?? 0,
+            employer_rate: o.employer_rate ?? 0,
+            min_amount: o.min_amount ?? null,
+            max_amount: o.max_amount ?? null,
+            fixed_amount: o.fixed_amount ?? null,
+            paid_by_company: o.paid_by_company === 1 || o.paid_by_company === true,
+            enabled: true,
+            brackets: bracketMap[o.deduction_name] || [],
+          });
+        }
+      }
+
+      setDeductions(merged);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -85,10 +127,41 @@ export default function HRSettingsPage() {
     }
   }
 
-  function addRow() {
+  function toggleDeduction(name: string, enabled: boolean) {
+    setDeductions(prev => prev.map(d => d.deduction_name === name ? { ...d, enabled } : d));
+  }
+
+  function updateDeduction(name: string, field: string, value: any) {
+    setDeductions(prev => prev.map(d => d.deduction_name === name ? { ...d, [field]: value } : d));
+  }
+
+  function addBracket(name: string) {
+    setDeductions(prev => prev.map(d => d.deduction_name === name ? {
+      ...d, brackets: [...d.brackets, { key: String(Date.now()), min_salary: 0, max_salary: null, amount: 0 }],
+    } : d));
+  }
+
+  function updateBracket(name: string, bracketKey: string, field: string, value: any) {
+    setDeductions(prev => prev.map(d => d.deduction_name === name ? {
+      ...d, brackets: d.brackets.map(b => b.key === bracketKey ? { ...b, [field]: value } : b),
+    } : d));
+  }
+
+  function removeBracket(name: string, bracketKey: string) {
+    setDeductions(prev => prev.map(d => d.deduction_name === name ? {
+      ...d, brackets: d.brackets.filter(b => b.key !== bracketKey),
+    } : d));
+  }
+
+  function addCustomDeduction() {
+    const name = prompt('Enter deduction name:');
+    if (!name || name.trim() === '') return;
+    if (deductions.find(d => d.deduction_name === name.trim())) {
+      message.warning('Deduction already exists');
+      return;
+    }
     setDeductions(prev => [...prev, {
-      key: String(Date.now()),
-      deduction_name: '',
+      deduction_name: name.trim(),
       deduction_type: 'percentage',
       employee_rate: 0,
       employer_rate: 0,
@@ -96,58 +169,35 @@ export default function HRSettingsPage() {
       max_amount: null,
       fixed_amount: null,
       paid_by_company: false,
+      enabled: true,
       brackets: [],
     }]);
-  }
-
-  function updateRow(key: string, field: string, value: any) {
-    setDeductions(prev => prev.map(d => d.key === key ? { ...d, [field]: value } : d));
-  }
-
-  function addBracket(dedKey: string) {
-    setDeductions(prev => prev.map(d => d.key === dedKey ? {
-      ...d,
-      brackets: [...d.brackets, { key: String(Date.now()), min_salary: 0, max_salary: null, amount: 0 }],
-    } : d));
-  }
-
-  function updateBracket(dedKey: string, bracketKey: string, field: string, value: any) {
-    setDeductions(prev => prev.map(d => d.key === dedKey ? {
-      ...d,
-      brackets: d.brackets.map(b => b.key === bracketKey ? { ...b, [field]: value } : b),
-    } : d));
-  }
-
-  function removeBracket(dedKey: string, bracketKey: string) {
-    setDeductions(prev => prev.map(d => d.key === dedKey ? {
-      ...d,
-      brackets: d.brackets.filter(b => b.key !== bracketKey),
-    } : d));
-  }
-
-  function removeRow(key: string) {
-    setDeductions(prev => prev.filter(d => d.key !== key));
   }
 
   async function handleSave() {
     setSaving(true);
     try {
       const values = form.getFieldsValue();
-      const { error: updateErr } = await supabase.from('companies').update({
+      await supabase.from('companies').update({
         enable_attendance: values.enable_attendance ?? true,
         enable_training: values.enable_training ?? true,
         enable_recruitment: values.enable_recruitment ?? true,
         enable_performance: values.enable_performance ?? true,
         enable_documents: values.enable_documents ?? true,
       }).eq('id', companyId);
-      if (updateErr) throw updateErr;
 
-      const validDeds = deductions.filter(d => d.deduction_name.trim());
-      await supabase.from('company_statutory_deductions').delete().eq('company_id', companyId);
-      await supabase.from('company_deduction_brackets').delete().eq('company_id', companyId);
+      const enabled = deductions.filter(d => d.enabled && d.deduction_name.trim());
+      const disabledNames = deductions.filter(d => !d.enabled).map(d => d.deduction_name);
 
-      if (validDeds.length > 0) {
-        const inserts = validDeds.map(d => ({
+      // Remove disabled deductions and their brackets
+      if (disabledNames.length > 0) {
+        await supabase.from('company_statutory_deductions').delete().eq('company_id', companyId).in('deduction_name', disabledNames);
+        await supabase.from('company_deduction_brackets').delete().eq('company_id', companyId).in('deduction_name', disabledNames);
+      }
+
+      // Upsert enabled deductions
+      for (const d of enabled) {
+        const payload: any = {
           company_id: companyId,
           deduction_name: d.deduction_name.trim(),
           deduction_type: d.deduction_type,
@@ -157,27 +207,34 @@ export default function HRSettingsPage() {
           max_amount: d.max_amount ?? null,
           fixed_amount: d.fixed_amount ?? null,
           paid_by_company: d.paid_by_company ? 1 : 0,
-        }));
-        const { error: insertErr } = await supabase.from('company_statutory_deductions').insert(inserts);
-        if (insertErr) throw insertErr;
+        };
 
-        const bracketInserts = validDeds.flatMap(d =>
-          d.deduction_type === 'bracket'
-            ? d.brackets.filter(b => b.amount > 0).map(b => ({
+        if (d.sourceId) {
+          await supabase.from('company_statutory_deductions').update(payload).eq('id', d.sourceId);
+        } else {
+          const { data: inserted } = await supabase.from('company_statutory_deductions').insert(payload).select().single();
+          if (inserted) d.sourceId = inserted.id;
+        }
+
+        // Handle brackets
+        if (d.deduction_type === 'bracket') {
+          await supabase.from('company_deduction_brackets').delete().eq('company_id', companyId).eq('deduction_name', d.deduction_name.trim());
+          const validBrackets = d.brackets.filter(b => b.amount > 0);
+          if (validBrackets.length > 0) {
+            await supabase.from('company_deduction_brackets').insert(
+              validBrackets.map(b => ({
                 company_id: companyId,
                 deduction_name: d.deduction_name.trim(),
                 min_salary: b.min_salary ?? 0,
                 max_salary: b.max_salary ?? null,
                 amount: b.amount ?? 0,
               }))
-            : []
-        );
-        if (bracketInserts.length > 0) {
-          const { error: bracketErr } = await supabase.from('company_deduction_brackets').insert(bracketInserts);
-          if (bracketErr) throw bracketErr;
+            );
+          }
         }
       }
-      message.success(`${validDeds.length} deduction(s) saved`);
+
+      message.success(`${enabled.length} deduction(s) saved`);
     } catch (err: any) {
       message.error(err.message);
     } finally {
@@ -206,120 +263,129 @@ export default function HRSettingsPage() {
       </Card>
 
       <Card>
-        <Title level={5} style={{ color: '#fff' }}>Statutory Deductions</Title>
-        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginBottom: 16 }}>
-          Add statutory deductions for payroll. Supports percentage, percentage with min/max caps, fixed amount per employee, and salary bracket lookups.
-        </p>
-
-        <Button type="dashed" icon={<PlusOutlined />} onClick={addRow} style={{ marginBottom: 16 }}>Add Deduction</Button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div>
+            <Title level={5} style={{ color: '#fff', margin: 0 }}>Statutory Deductions</Title>
+            <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
+              {companyCountry} defaults pre-loaded. Toggle on to enable, adjust rates as needed.
+            </Text>
+          </div>
+          <Button icon={<PlusOutlined />} onClick={addCustomDeduction}>Add Custom</Button>
+        </div>
 
         {deductions.map(d => (
-          <div key={d.key} style={{
-            background: 'rgba(255,255,255,0.03)', borderRadius: 6, padding: 16, marginBottom: 12,
-            border: '1px solid rgba(255,255,255,0.06)',
+          <div key={d.deduction_name} style={{
+            background: 'rgba(255,255,255,0.03)', borderRadius: 6, padding: '12px 16px', marginBottom: 8,
+            border: `1px solid ${d.enabled ? 'rgba(120,200,255,0.2)' : 'rgba(255,255,255,0.04)'}`,
+            opacity: d.enabled ? 1 : 0.5,
           }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-              <Input size="small" style={{ width: 200 }} value={d.deduction_name}
-                onChange={e => updateRow(d.key, 'deduction_name', e.target.value)}
-                placeholder="Deduction name" />
-              <Select size="small" style={{ width: 200 }} value={d.deduction_type}
-                onChange={v => updateRow(d.key, 'deduction_type', v)}>
-                <Select.Option value="percentage">Percentage</Select.Option>
-                <Select.Option value="percentage_minmax">Percentage w/ Min/Max</Select.Option>
-                <Select.Option value="fixed">Fixed Amount</Select.Option>
-                <Select.Option value="bracket">Salary Bracket</Select.Option>
-              </Select>
-              <Button type="text" size="small" danger icon={<DeleteOutlined />}
-                onClick={() => removeRow(d.key)} />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: d.enabled ? 12 : 0 }}>
+              <Switch checked={d.enabled} onChange={v => toggleDeduction(d.deduction_name, v)} size="small" />
+              <Tag color={d.enabled ? 'blue' : 'default'} style={{ margin: 0 }}>{typeLabels[d.deduction_type]}</Tag>
+              <Text style={{ color: '#fff', fontWeight: 500, flex: 1 }}>{d.deduction_name}</Text>
+              {d.enabled && (
+                <Select size="small" style={{ width: 180 }} value={d.deduction_type}
+                  onChange={v => updateDeduction(d.deduction_name, 'deduction_type', v)}>
+                  <Select.Option value="percentage">Percentage</Select.Option>
+                  <Select.Option value="percentage_minmax">Percentage w/ Min/Max</Select.Option>
+                  <Select.Option value="fixed">Fixed Amount</Select.Option>
+                  <Select.Option value="bracket">Salary Bracket</Select.Option>
+                </Select>
+              )}
             </div>
 
-            {(d.deduction_type === 'percentage' || d.deduction_type === 'percentage_minmax') && (
-              <Row gutter={12}>
-                <Col span={6}>
-                  <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Employee Rate (%)</Text>
-                  <InputNumber size="small" style={{ width: '100%' }} min={0} max={100} step={0.1}
-                    value={d.employee_rate != null ? d.employee_rate * 100 : 0}
-                    onChange={v => updateRow(d.key, 'employee_rate', (v ?? 0) / 100)}
-                    formatter={v => `${v}%`}
-                    parser={v => parseFloat(v?.replace('%', '') ?? '0')} />
-                </Col>
-                <Col span={6}>
-                  <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Employer Rate (%)</Text>
-                  <InputNumber size="small" style={{ width: '100%' }} min={0} max={100} step={0.1}
-                    value={d.employer_rate != null ? d.employer_rate * 100 : 0}
-                    onChange={v => updateRow(d.key, 'employer_rate', (v ?? 0) / 100)}
-                    formatter={v => `${v}%`}
-                    parser={v => parseFloat(v?.replace('%', '') ?? '0')} />
-                </Col>
-                {d.deduction_type === 'percentage_minmax' && (
-                  <>
-                    <Col span={3}>
-                      <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Min Deduction $</Text>
-                      <InputNumber size="small" style={{ width: '100%' }} min={0} step={0.01}
-                        value={d.min_amount} onChange={v => updateRow(d.key, 'min_amount', v ?? null)}
-                        placeholder="0" />
-                    </Col>
-                    <Col span={3}>
-                      <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Max Deduction $</Text>
-                      <InputNumber size="small" style={{ width: '100%' }} min={0} step={0.01}
-                        value={d.max_amount} onChange={v => updateRow(d.key, 'max_amount', v ?? null)}
-                        placeholder="No max" />
-                    </Col>
-                  </>
-                )}
-                <Col span={3}>
-                  <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Paid by Company</Text>
-                  <Switch checked={d.paid_by_company} onChange={v => updateRow(d.key, 'paid_by_company', v)} size="small" />
-                </Col>
-              </Row>
-            )}
-
-            {d.deduction_type === 'fixed' && (
-              <Row gutter={12}>
-                <Col span={6}>
-                  <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Amount per Employee ($)</Text>
-                  <InputNumber size="small" style={{ width: '100%' }} min={0} step={0.01}
-                    value={d.fixed_amount} onChange={v => updateRow(d.key, 'fixed_amount', v ?? 0)}
-                    placeholder="0.00" />
-                </Col>
-                <Col span={3}>
-                  <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Paid by Company</Text>
-                  <Switch checked={d.paid_by_company} onChange={v => updateRow(d.key, 'paid_by_company', v)} size="small" />
-                </Col>
-              </Row>
-            )}
-
-            {d.deduction_type === 'bracket' && (
+            {d.enabled && (
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                  <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Salary Brackets</Text>
-                  <Switch checked={d.paid_by_company} onChange={v => updateRow(d.key, 'paid_by_company', v)}
-                    size="small" checkedChildren="Company Paid" unCheckedChildren="Employee Paid" />
-                </div>
-                {d.brackets.map(b => (
-                  <div key={b.key} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, width: 30 }}>$</span>
-                    <InputNumber size="small" style={{ width: 110 }} min={0} step={100}
-                      value={b.min_salary} onChange={v => updateBracket(d.key, b.key, 'min_salary', v ?? 0)}
-                      placeholder="Min" />
-                    <span style={{ color: 'rgba(255,255,255,0.3)' }}>to</span>
-                    <InputNumber size="small" style={{ width: 110 }} min={0} step={100}
-                      value={b.max_salary} onChange={v => updateBracket(d.key, b.key, 'max_salary', v ?? null)}
-                      placeholder="Max (blank = above)" />
-                    <span style={{ color: 'rgba(255,255,255,0.3)', width: 20 }}>$</span>
-                    <InputNumber size="small" style={{ width: 100 }} min={0} step={0.01}
-                      value={b.amount} onChange={v => updateBracket(d.key, b.key, 'amount', v ?? 0)}
-                      placeholder="Amount" />
-                    <Button type="text" size="small" danger icon={<DeleteOutlined />}
-                      onClick={() => removeBracket(d.key, b.key)} />
+                {(d.deduction_type === 'percentage' || d.deduction_type === 'percentage_minmax') && (
+                  <Row gutter={12}>
+                    <Col span={5}>
+                      <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>Employee Rate</Text>
+                      <InputNumber size="small" style={{ width: '100%' }} min={0} max={100} step={0.1}
+                        value={d.employee_rate != null ? d.employee_rate * 100 : 0}
+                        onChange={v => updateDeduction(d.deduction_name, 'employee_rate', (v ?? 0) / 100)}
+                        formatter={v => `${v}%`} parser={v => parseFloat(v?.replace('%', '') ?? '0')} />
+                    </Col>
+                    <Col span={5}>
+                      <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>Employer Rate</Text>
+                      <InputNumber size="small" style={{ width: '100%' }} min={0} max={100} step={0.1}
+                        value={d.employer_rate != null ? d.employer_rate * 100 : 0}
+                        onChange={v => updateDeduction(d.deduction_name, 'employer_rate', (v ?? 0) / 100)}
+                        formatter={v => `${v}%`} parser={v => parseFloat(v?.replace('%', '') ?? '0')} />
+                    </Col>
+                    {d.deduction_type === 'percentage_minmax' && (
+                      <>
+                        <Col span={4}>
+                          <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>Min Deduction $</Text>
+                          <InputNumber size="small" style={{ width: '100%' }} min={0} step={0.01}
+                            value={d.min_amount} onChange={v => updateDeduction(d.deduction_name, 'min_amount', v ?? null)} />
+                        </Col>
+                        <Col span={4}>
+                          <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>Max Deduction $</Text>
+                          <InputNumber size="small" style={{ width: '100%' }} min={0} step={0.01}
+                            value={d.max_amount} onChange={v => updateDeduction(d.deduction_name, 'max_amount', v ?? null)} />
+                        </Col>
+                      </>
+                    )}
+                    <Col span={3} style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
+                      <Switch checked={d.paid_by_company} onChange={v => updateDeduction(d.deduction_name, 'paid_by_company', v)}
+                        size="small" checkedChildren="Company" unCheckedChildren="Employee" />
+                    </Col>
+                  </Row>
+                )}
+
+                {d.deduction_type === 'fixed' && (
+                  <Row gutter={12}>
+                    <Col span={5}>
+                      <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>Amount per Employee ($)</Text>
+                      <InputNumber size="small" style={{ width: '100%' }} min={0} step={0.01}
+                        value={d.fixed_amount} onChange={v => updateDeduction(d.deduction_name, 'fixed_amount', v ?? 0)} />
+                    </Col>
+                    <Col span={3} style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
+                      <Switch checked={d.paid_by_company} onChange={v => updateDeduction(d.deduction_name, 'paid_by_company', v)}
+                        size="small" checkedChildren="Company" unCheckedChildren="Employee" />
+                    </Col>
+                  </Row>
+                )}
+
+                {d.deduction_type === 'bracket' && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                      <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>Brackets</Text>
+                      <Switch checked={d.paid_by_company} onChange={v => updateDeduction(d.deduction_name, 'paid_by_company', v)}
+                        size="small" checkedChildren="Company" unCheckedChildren="Employee" />
+                    </div>
+                    {d.brackets.map(b => (
+                      <div key={b.key} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, width: 24 }}>$</span>
+                        <InputNumber size="small" style={{ width: 110 }} min={0} step={100}
+                          value={b.min_salary} onChange={v => updateBracket(d.deduction_name, b.key, 'min_salary', v ?? 0)}
+                          placeholder="Min salary" />
+                        <span style={{ color: 'rgba(255,255,255,0.3)' }}>to</span>
+                        <InputNumber size="small" style={{ width: 110 }} min={0} step={100}
+                          value={b.max_salary} onChange={v => updateBracket(d.deduction_name, b.key, 'max_salary', v ?? null)}
+                          placeholder="Max (blank = above)" />
+                        <span style={{ color: 'rgba(255,255,255,0.3)', width: 16 }}>$</span>
+                        <InputNumber size="small" style={{ width: 100 }} min={0} step={0.01}
+                          value={b.amount} onChange={v => updateBracket(d.deduction_name, b.key, 'amount', v ?? 0)}
+                          placeholder="Deduction" />
+                        <Button type="text" size="small" danger icon={<DeleteOutlined />}
+                          onClick={() => removeBracket(d.deduction_name, b.key)} />
+                      </div>
+                    ))}
+                    <Button size="small" type="dashed" icon={<PlusOutlined />}
+                      onClick={() => addBracket(d.deduction_name)}>Add Bracket</Button>
                   </div>
-                ))}
-                <Button size="small" type="dashed" icon={<PlusOutlined />}
-                  onClick={() => addBracket(d.key)}>Add Bracket</Button>
+                )}
               </div>
             )}
           </div>
         ))}
+
+        {deductions.length === 0 && (
+          <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.3)' }}>
+            No statutory deductions found for {companyCountry}. Add a custom one or change the company country.
+          </div>
+        )}
 
         <div style={{ marginTop: 16 }}>
           <Button type="primary" onClick={handleSave} loading={saving}>Save HR Settings</Button>
