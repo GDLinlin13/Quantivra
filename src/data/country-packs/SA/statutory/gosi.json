@@ -1,0 +1,72 @@
+{
+  "general": {
+    "code": "GOSI",
+    "name": "GOSI (Social Insurance) — Saudi nationals",
+    "description": "General Organization for Social Insurance: pension (annuities), occupational hazards and SANED unemployment insurance for Saudi national employees.",
+    "agency": "GOSI",
+    "type": "pension",
+    "version": "2026.2",
+    "effectiveDate": "2026-07-01",
+    "status": "published"
+  },
+  "eligibility": {
+    "citizenship": ["SAUDI_NATIONAL", "GCC_NATIONAL"],
+    "visaTypes": [],
+    "employmentTypes": [],
+    "minimumAge": 18,
+    "maximumAge": 60,
+    "excludedCategories": ["EXPAT"],
+    "notes": "Saudi (and GCC) nationals. Rates shown are the post-July-2026 step of the new regime (members registered on/after 3 Jul 2024): employee 10.75% (pension 10% + SANED 0.75%), employer 12.75% (pension 10% + occupational hazards 2% + SANED 0.75%). Members on the pre-2024 regime remain at employee 9.75% / employer 11.75%."
+  },
+  "employeeCategories": [
+    { "code": "SAUDI_NEW", "name": "Saudi national (new regime)", "immigrationStatusCode": "SAUDI_NATIONAL" }
+  ],
+  "rateTables": [
+    { "employeeCategory": "SAUDI_NEW", "employeeRate": 10.75, "employerRate": 12.75, "effectiveDate": "2026-07-01" }
+  ],
+  "thresholds": [],
+  "caps": [
+    { "code": "MAX_WAGE", "name": "Maximum contributory wage (basic + housing)", "type": "monthly_ceiling", "value": 45000, "currency": "SAR" }
+  ],
+  "salaryComponents": [
+    { "componentCode": "BASIC", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_HOUSING", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_TRANSPORT", "classification": "excluded", "included": false },
+    { "componentCode": "OVERTIME", "classification": "excluded", "included": false },
+    { "componentCode": "BONUS", "classification": "excluded", "included": false }
+  ],
+  "calculationRules": [
+    {
+      "code": "GOSI_BASE",
+      "name": "Contributory wage",
+      "priority": 1,
+      "action": "CLAMP(BasicWage + HousingAllowance, 1500, 45000)",
+      "parameters": {},
+      "description": "Contributions are on basic wage plus the housing allowance, floored at SAR 1,500 and capped at SAR 45,000 per month."
+    }
+  ],
+  "rounding": {
+    "employee": { "method": "round", "decimals": 2 },
+    "employer": { "method": "round", "decimals": 2 }
+  },
+  "reporting": {
+    "agency": "GOSI",
+    "submissionFrequency": "Monthly",
+    "portal": "GOSI Online",
+    "fileFormat": "GOSI Contribution File",
+    "dueDate": "By the 15th of the following month",
+    "forms": [
+      { "name": "GOSI Monthly Contribution", "frequency": "Monthly", "deadline": "15th of following month" }
+    ]
+  },
+  "validations": [
+    {
+      "code": "GOSI_NATIONAL_ONLY",
+      "name": "Nationals only",
+      "type": "dependency",
+      "expression": "ImmigrationStatusCode IN ('SAUDI_NATIONAL','GCC_NATIONAL')",
+      "errorMessage": "The full GOSI scheme applies only to Saudi and GCC nationals; expatriates carry occupational-hazards cover only",
+      "severity": "error"
+    }
+  ]
+}

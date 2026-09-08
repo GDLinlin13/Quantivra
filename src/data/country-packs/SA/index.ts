@@ -1,0 +1,34 @@
+import type { CountryPackDef, PublicHolidayDef } from '../schema';
+import general from './general.json';
+import employment from './employment.json';
+import payroll from './payroll.json';
+import tax from './tax.json';
+import accounting from './accounting.json';
+import publicHolidays from './public-holidays.json';
+import governmentForms from './government-forms.json';
+import documentNumbering from './document-numbering.json';
+import workflowTemplates from './workflow-templates.json';
+import dashboardWidgets from './dashboard-widgets.json';
+import gosi from './statutory/gosi.json';
+import gosiOh from './statutory/gosi_oh.json';
+import eosb from './statutory/eosb.json';
+
+const pack: CountryPackDef = {
+  general,
+  employment,
+  payroll,
+  tax,
+  accounting,
+  publicHolidays: publicHolidays as PublicHolidayDef[],
+  governmentForms,
+  documentNumbering,
+  workflowTemplates,
+  dashboardWidgets,
+  statutorySchemes: {
+    gosi: gosi as any,
+    gosi_oh: gosiOh as any,
+    eosb: eosb as any,
+  },
+};
+
+export default pack;

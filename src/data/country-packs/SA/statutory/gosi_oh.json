@@ -1,0 +1,48 @@
+{
+  "general": {
+    "code": "GOSI_OH",
+    "name": "GOSI Occupational Hazards — expatriates",
+    "description": "Occupational hazards insurance for non-Saudi employees. Employer-only; expatriates are not covered by the pension or SANED schemes.",
+    "agency": "GOSI",
+    "type": "social_security",
+    "version": "2026.1",
+    "effectiveDate": "2026-01-01",
+    "status": "published"
+  },
+  "eligibility": {
+    "citizenship": [],
+    "visaTypes": ["EXPAT"],
+    "employmentTypes": [],
+    "excludedCategories": ["SAUDI_NATIONAL", "GCC_NATIONAL"],
+    "notes": "Non-Saudi employees. Employer pays 2% of the contributory wage for occupational hazards; the employee pays nothing."
+  },
+  "employeeCategories": [
+    { "code": "EXPAT_OH", "name": "Expatriate employee", "immigrationStatusCode": "EXPAT" }
+  ],
+  "rateTables": [
+    { "employeeCategory": "EXPAT_OH", "employeeRate": 0, "employerRate": 2, "effectiveDate": "2026-01-01" }
+  ],
+  "thresholds": [],
+  "caps": [
+    { "code": "MAX_WAGE", "name": "Maximum contributory wage", "type": "monthly_ceiling", "value": 45000, "currency": "SAR" }
+  ],
+  "salaryComponents": [
+    { "componentCode": "BASIC", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_HOUSING", "classification": "ordinary_wage", "included": true }
+  ],
+  "calculationRules": [
+    { "code": "OH_BASE", "name": "Contributory wage", "priority": 1, "action": "MIN(BasicWage + HousingAllowance, 45000)", "parameters": {}, "description": "2% of basic wage plus housing allowance, capped at SAR 45,000." }
+  ],
+  "rounding": {
+    "employee": { "method": "round", "decimals": 2 },
+    "employer": { "method": "round", "decimals": 2 }
+  },
+  "reporting": {
+    "agency": "GOSI",
+    "submissionFrequency": "Monthly",
+    "portal": "GOSI Online",
+    "dueDate": "By the 15th of the following month",
+    "forms": []
+  },
+  "validations": []
+}

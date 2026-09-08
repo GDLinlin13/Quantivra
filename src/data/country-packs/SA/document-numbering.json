@@ -1,0 +1,8 @@
+[
+  { "entity": "employee", "format": "EMP-{000001}" },
+  { "entity": "payroll", "format": "PAY-{YYYYMM}-{000001}" },
+  { "entity": "invoice", "format": "INV-{YYYY}-{000001}" },
+  { "entity": "purchase_order", "format": "PO-{YYYY}-{000001}" },
+  { "entity": "claim", "format": "CLM-{YYYY}-{000001}" },
+  { "entity": "leave", "format": "LV-{YYYY}-{000001}" }
+]

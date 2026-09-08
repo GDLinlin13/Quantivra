@@ -9,6 +9,7 @@ import dayjs from 'dayjs';
 const COUNTRY_PACK_LOADERS: Record<string, () => Promise<{ default: CountryPackDef }>> = {
   SG: () => import('../data/country-packs/SG/index'),
   AE: () => import('../data/country-packs/AE/index'),
+  SA: () => import('../data/country-packs/SA/index'),
 };
 
 export const SUPPORTED_PACK_CODES = Object.keys(COUNTRY_PACK_LOADERS);

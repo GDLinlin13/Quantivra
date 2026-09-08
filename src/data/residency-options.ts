@@ -15,6 +15,11 @@ const OPTIONS: Record<string, ResidencyOption[]> = {
     { label: 'GCC National', value: 'GCC_NATIONAL' },
     { label: 'Expatriate (residence visa)', value: 'EXPAT' },
   ],
+  SA: [
+    { label: 'Saudi National', value: 'SAUDI_NATIONAL' },
+    { label: 'GCC National', value: 'GCC_NATIONAL' },
+    { label: 'Expatriate (Iqama)', value: 'EXPAT' },
+  ],
 };
 
 const GENERIC: ResidencyOption[] = [

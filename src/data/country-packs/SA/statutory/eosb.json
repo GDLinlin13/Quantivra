@@ -1,0 +1,40 @@
+{
+  "general": {
+    "code": "EOSB",
+    "name": "End of Service Award (accrual)",
+    "description": "End-of-service award under the Saudi Labour Law: half a month's wage per year for the first five years of service, one month's wage per year thereafter. Shown here as a monthly employer provision.",
+    "agency": "MHRSD",
+    "type": "development",
+    "version": "2026.1",
+    "effectiveDate": "2026-01-01",
+    "status": "published"
+  },
+  "eligibility": {
+    "citizenship": [],
+    "visaTypes": ["EXPAT"],
+    "employmentTypes": [],
+    "minimumServiceMonths": 24,
+    "excludedCategories": ["SAUDI_NATIONAL", "GCC_NATIONAL"],
+    "notes": "Primarily accrued for expatriate employees (Saudi nationals draw a GOSI pension). Award is on the last full wage; the monthly figure here is an employer accrual, not an employee deduction."
+  },
+  "employeeCategories": [
+    { "code": "EXPAT_EOSB", "name": "Expatriate employee", "immigrationStatusCode": "EXPAT" }
+  ],
+  "rateTables": [
+    { "employeeCategory": "EXPAT_EOSB", "employeeRate": 0, "employerRate": 4.17, "effectiveDate": "2026-01-01" }
+  ],
+  "thresholds": [],
+  "caps": [],
+  "salaryComponents": [
+    { "componentCode": "BASIC", "classification": "ordinary_wage", "included": true }
+  ],
+  "calculationRules": [
+    { "code": "EOSB_ACCRUAL", "name": "Monthly award accrual", "priority": 1, "action": "FullWage * (0.5 / 12)", "parameters": {}, "description": "First five years: half a month's wage per year -> about 4.17% of wage per month. From year six: one month per year -> about 8.33%." }
+  ],
+  "rounding": {
+    "employee": { "method": "round", "decimals": 2 },
+    "employer": { "method": "round", "decimals": 2 }
+  },
+  "reporting": { "agency": "MHRSD", "submissionFrequency": "On termination", "dueDate": "One week from contract end", "forms": [] },
+  "validations": []
+}

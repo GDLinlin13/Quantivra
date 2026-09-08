@@ -1,0 +1,28 @@
+{
+  "statuses": [
+    { "code": "PERMANENT", "name": "Permanent", "enabled": true },
+    { "code": "FULL_TIME", "name": "Full-Time", "enabled": true },
+    { "code": "PART_TIME", "name": "Part-Time", "enabled": true },
+    { "code": "FIXED_TERM", "name": "Fixed-Term", "enabled": true },
+    { "code": "TEMPORARY", "name": "Temporary", "enabled": true }
+  ],
+  "immigrationStatuses": [
+    { "code": "SAUDI_NATIONAL", "name": "Saudi National" },
+    { "code": "GCC_NATIONAL", "name": "GCC National" },
+    { "code": "EXPAT", "name": "Expatriate (Iqama / work permit)" }
+  ],
+  "rules": [
+    { "key": "standard_weekly_hours", "value": "48", "editableByCompany": true, "referenceOnly": false, "description": "48 hours/week, 8 hours/day; 36 hours/week (6/day) during Ramadan for Muslim employees" },
+    { "key": "minimum_rest_day", "value": "1 per week", "editableByCompany": false, "referenceOnly": false, "description": "Weekly rest day, typically Friday" },
+    { "key": "default_probation_months", "value": "3", "editableByCompany": true, "referenceOnly": false, "description": "90 days probation, extendable to 180 days by written agreement" },
+    { "key": "retirement_age", "value": "60", "editableByCompany": false, "referenceOnly": true, "description": "Statutory retirement age is 60 (Hijri)" },
+    { "key": "overtime_multiplier", "value": "1.5", "editableByCompany": false, "referenceOnly": false, "description": "Overtime paid at 150% of the hourly wage" },
+    { "key": "annual_leave_days", "value": "21", "editableByCompany": true, "referenceOnly": false, "description": "21 days/year, rising to 30 days after five years of service" },
+    { "key": "sick_leave_days", "value": "120", "editableByCompany": false, "referenceOnly": false, "description": "Per year of illness: first 30 days full pay, next 60 days 75%, next 30 days unpaid" },
+    { "key": "gratuity_rule", "value": "EOSB", "editableByCompany": false, "referenceOnly": false, "description": "End-of-service award: half a month's wage per year for the first five years, one month's wage per year thereafter" }
+  ],
+  "noticePeriods": [
+    { "minServiceMonths": 0, "maxServiceMonths": 3, "noticeDays": 1, "description": "During probation" },
+    { "minServiceMonths": 3, "maxServiceMonths": null, "noticeDays": 60, "description": "Indefinite contracts, monthly-paid — 60 days; 30 days for others" }
+  ]
+}

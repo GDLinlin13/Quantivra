@@ -27,9 +27,7 @@
   "rateTables": [
     { "employeeCategory": "NATIONAL_2023", "employeeRate": 11, "employerRate": 15, "effectiveDate": "2023-10-31" }
   ],
-  "thresholds": [
-    { "code": "MIN_CONTRIB_SALARY", "name": "Minimum contribution account salary", "type": "minimum_earnings", "value": 1000, "currency": "AED", "frequency": "monthly" }
-  ],
+  "thresholds": [],
   "caps": [
     { "code": "MAX_CONTRIB_SALARY", "name": "Maximum contribution account salary (private sector, new members)", "type": "monthly_ceiling", "value": 100000, "currency": "AED" }
   ],

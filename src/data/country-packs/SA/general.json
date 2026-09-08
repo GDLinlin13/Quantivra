@@ -1,0 +1,16 @@
+{
+  "name": "Saudi Arabia",
+  "code": "SA",
+  "currency": "SAR",
+  "currencySymbol": "SAR",
+  "phoneCode": "+966",
+  "timezone": "Asia/Riyadh",
+  "primaryLanguage": "Arabic",
+  "secondaryLanguage": "English",
+  "dateFormat": "DD/MM/YYYY",
+  "timeFormat": "24h",
+  "weekStartsOn": "Sunday",
+  "financialYear": "01-01",
+  "taxYear": "01-01",
+  "defaultPayrollFrequency": "Monthly"
+}

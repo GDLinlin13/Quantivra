@@ -1,0 +1,14 @@
+{
+  "fiscalYearStart": "01-01",
+  "defaultTaxCode": "SR",
+  "invoiceNumberFormat": "INV-{YYYY}-{0000}",
+  "paymentTerms": "Net 30",
+  "taxCodes": [
+    { "code": "SR", "name": "Standard Rated (15% VAT)", "rate": 15, "isDefault": true },
+    { "code": "ZR", "name": "Zero Rated", "rate": 0, "isDefault": false },
+    { "code": "EX", "name": "Exempt", "rate": 0, "isDefault": false },
+    { "code": "OS", "name": "Out of Scope", "rate": 0, "isDefault": false }
+  ],
+  "supportedBanks": ["Al Rajhi", "SNB", "Riyad Bank", "SAB", "Alinma"],
+  "paymentMethods": ["WPS", "SARIE Transfer", "Cheque"]
+}
