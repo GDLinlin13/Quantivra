@@ -1,0 +1,9 @@
+[
+  { "name": "IR8A", "agency": "IRAS", "frequency": "Annual", "deadline": "1 Mar" },
+  { "name": "IR8S", "agency": "IRAS", "frequency": "Annual", "deadline": "1 Mar" },
+  { "name": "Appendix 8A", "agency": "IRAS", "frequency": "Annual", "deadline": "1 Mar" },
+  { "name": "Appendix 8B", "agency": "IRAS", "frequency": "Annual", "deadline": "1 Mar" },
+  { "name": "IR21", "agency": "IRAS", "frequency": "As required", "deadline": "Within 30 days" },
+  { "name": "CPF Statement", "agency": "CPF Board", "frequency": "Monthly", "deadline": "14th of month" },
+  { "name": "ECF", "agency": "IRAS", "frequency": "Annual", "deadline": "15 Apr" }
+]

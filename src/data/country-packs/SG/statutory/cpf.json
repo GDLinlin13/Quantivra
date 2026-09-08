@@ -1,0 +1,173 @@
+{
+  "general": {
+    "code": "CPF",
+    "name": "Central Provident Fund",
+    "description": "Singapore's comprehensive social security savings scheme covering retirement, healthcare, housing, and family protection.",
+    "agency": "CPF Board",
+    "type": "provident_fund",
+    "version": "2026.1",
+    "effectiveDate": "2026-01-01",
+    "status": "published"
+  },
+  "eligibility": {
+    "citizenship": ["SC", "PR"],
+    "visaTypes": [],
+    "employmentTypes": [],
+    "minimumAge": 0,
+    "maximumAge": null,
+    "minimumServiceMonths": 0,
+    "minimumSalary": 0,
+    "maximumSalary": null,
+    "excludedCategories": ["EP", "SP", "WP", "DP", "LTVP", "ONE"],
+    "notes": "All employees who are Singapore Citizens or Permanent Residents. Graduated rates for PRs in Years 1-2. Full rates from Year 3+. Foreigners (EP, SP, WP, DP, LTVP, ONE Pass) are exempt."
+  },
+  "employeeCategories": [
+    { "code": "SC", "name": "Singapore Citizen", "immigrationStatusCode": "SC" },
+    { "code": "PR_Y1", "name": "PR Year 1", "immigrationStatusCode": "PR", "prStage": "year_1" },
+    { "code": "PR_Y2", "name": "PR Year 2", "immigrationStatusCode": "PR", "prStage": "year_2" },
+    { "code": "PR_Y3", "name": "PR Year 3+", "immigrationStatusCode": "PR", "prStage": "year_3_plus" }
+  ],
+  "rateTables": [
+    { "employeeCategory": "SC", "ageFrom": 0, "ageTo": 55, "employeeRate": 20, "employerRate": 17, "effectiveDate": "2026-01-01" },
+    { "employeeCategory": "SC", "ageFrom": 55, "ageTo": 60, "employeeRate": 16, "employerRate": 15, "effectiveDate": "2026-01-01" },
+    { "employeeCategory": "SC", "ageFrom": 60, "ageTo": 65, "employeeRate": 10.5, "employerRate": 11.5, "effectiveDate": "2026-01-01" },
+    { "employeeCategory": "SC", "ageFrom": 65, "ageTo": 70, "employeeRate": 7.5, "employerRate": 8.5, "effectiveDate": "2026-01-01" },
+    { "employeeCategory": "SC", "ageFrom": 70, "ageTo": null, "employeeRate": 5, "employerRate": 7.5, "effectiveDate": "2026-01-01" },
+    { "employeeCategory": "PR_Y1", "ageFrom": 0, "ageTo": null, "employeeRate": 5, "employerRate": 4, "effectiveDate": "2026-01-01" },
+    { "employeeCategory": "PR_Y2", "ageFrom": 0, "ageTo": null, "employeeRate": 15, "employerRate": 9, "effectiveDate": "2026-01-01" },
+    { "employeeCategory": "PR_Y3", "ageFrom": 0, "ageTo": 55, "employeeRate": 20, "employerRate": 17, "effectiveDate": "2026-01-01" },
+    { "employeeCategory": "PR_Y3", "ageFrom": 55, "ageTo": 60, "employeeRate": 16, "employerRate": 15, "effectiveDate": "2026-01-01" },
+    { "employeeCategory": "PR_Y3", "ageFrom": 60, "ageTo": 65, "employeeRate": 10.5, "employerRate": 11.5, "effectiveDate": "2026-01-01" },
+    { "employeeCategory": "PR_Y3", "ageFrom": 65, "ageTo": 70, "employeeRate": 7.5, "employerRate": 8.5, "effectiveDate": "2026-01-01" },
+    { "employeeCategory": "PR_Y3", "ageFrom": 70, "ageTo": null, "employeeRate": 5, "employerRate": 7.5, "effectiveDate": "2026-01-01" }
+  ],
+  "thresholds": [
+    {
+      "code": "MIN_EARNINGS",
+      "name": "Minimum CPF Earnings",
+      "type": "minimum_earnings",
+      "value": 0,
+      "currency": "SGD",
+      "frequency": "monthly"
+    }
+  ],
+  "caps": [
+    {
+      "code": "OW_CEILING",
+      "name": "Ordinary Wage Ceiling",
+      "type": "monthly_ceiling",
+      "value": 8000,
+      "currency": "SGD"
+    },
+    {
+      "code": "ANNUAL_CEILING",
+      "name": "Annual CPF Ceiling",
+      "type": "annual_ceiling",
+      "value": 102000,
+      "currency": "SGD"
+    },
+    {
+      "code": "AW_CEILING",
+      "name": "Additional Wage Ceiling",
+      "type": "annual_ceiling",
+      "formula": "MAX(0, ANNUAL_CEILING - YTD_OW_SubjectToCPF)",
+      "currency": "SGD"
+    }
+  ],
+  "salaryComponents": [
+    { "componentCode": "BASIC", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_TRANSPORT", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_HOUSING", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_MEAL", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_MOBILE", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_SHIFT", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_NIGHT", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_ATTENDANCE", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "OVERTIME", "classification": "additional_wage", "included": true },
+    { "componentCode": "BONUS", "classification": "additional_wage", "included": true },
+    { "componentCode": "COMMISSION", "classification": "additional_wage", "included": true },
+    { "componentCode": "AWS", "classification": "additional_wage", "included": true },
+    { "componentCode": "BACKPAY", "classification": "additional_wage", "included": true },
+    { "componentCode": "LEAVE_ENCASHMENT", "classification": "additional_wage", "included": true },
+    { "componentCode": "TIP", "classification": "excluded", "included": false },
+    { "componentCode": "DIRECTOR_FEE", "classification": "excluded", "included": false },
+    { "componentCode": "SALARY_IN_KIND", "classification": "excluded", "included": false },
+    { "componentCode": "STOCK", "classification": "excluded", "included": false }
+  ],
+  "calculationRules": [
+    {
+      "code": "CPF_AW_CEILING",
+      "name": "Additional Wage Ceiling",
+      "priority": 1,
+      "condition": "YTD_OW_SubjectToCPF < ANNUAL_CEILING",
+      "action": "MAX(0, ANNUAL_CEILING - YTD_OW_SubjectToCPF)",
+      "parameters": {},
+      "description": "Additional Wage subject to CPF = Annual ceiling minus year-to-date Ordinary Wages that have been subject to CPF."
+    },
+    {
+      "code": "CPF_OW_CALC",
+      "name": "Ordinary Wage CPF",
+      "priority": 2,
+      "action": "MIN(OrdinaryWage, OW_CEILING) * AgeBandRate",
+      "parameters": {},
+      "description": "CPF on Ordinary Wage = lesser of actual wage and OW ceiling, multiplied by applicable age-based rate."
+    },
+    {
+      "code": "CPF_PR_TRANSITION",
+      "name": "PR Transition Rules",
+      "priority": 3,
+      "condition": "EmployeeCategory IN ['PR_Y1','PR_Y2']",
+      "action": "ApplyGraduatedRate(EmployeeCategory, PRStage, Age)",
+      "parameters": {},
+      "description": "PR Year 1: 5/4% flat. PR Year 2: 15/9% flat. PR Year 3+: same as citizen rates."
+    }
+  ],
+  "rounding": {
+    "employee": { "method": "round", "decimals": 2 },
+    "employer": { "method": "round", "decimals": 2 }
+  },
+  "reporting": {
+    "agency": "CPF Board",
+    "submissionFrequency": "Monthly",
+    "portal": "CPF EZPay",
+    "fileFormat": "CSV",
+    "dueDate": "14th of following month",
+    "forms": [
+      { "name": "CPF Contribution Return", "frequency": "Monthly", "deadline": "14th of following month" }
+    ]
+  },
+  "validations": [
+    {
+      "code": "CPF_OW_LIMIT",
+      "name": "Ordinary Wage Ceiling Check",
+      "type": "range",
+      "expression": "OrdinaryWage <= 8000",
+      "errorMessage": "Ordinary wage subject to CPF exceeds ceiling of S$8,000",
+      "severity": "error"
+    },
+    {
+      "code": "CPF_AW_LIMIT",
+      "name": "Additional Wage Ceiling Check",
+      "type": "cross_field",
+      "expression": "(OW_SubjectToCPF + AW_SubjectToCPF) <= 102000",
+      "errorMessage": "Total CPF-attracting wages exceed annual ceiling of S$102,000",
+      "severity": "error"
+    },
+    {
+      "code": "CPF_AGE_RATE",
+      "name": "Age Rate Applicability",
+      "type": "dependency",
+      "expression": "EmployeeAge BETWEEN RateTable.ageFrom AND COALESCE(RateTable.ageTo, 999)",
+      "errorMessage": "No CPF rate defined for employee's age group",
+      "severity": "error"
+    },
+    {
+      "code": "CPF_PR_STAGE",
+      "name": "PR Stage Required",
+      "type": "required",
+      "expression": "ImmigrationStatusCode != 'PR' OR PRStage IS NOT NULL",
+      "errorMessage": "PR stage (Year 1, 2, or 3+) is required for PR employees",
+      "severity": "error"
+    }
+  ]
+}

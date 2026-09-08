@@ -1,0 +1,152 @@
+{
+  "general": {
+    "code": "MBMF",
+    "name": "MBMF (Yayasan MENDAKI — Malay Community Fund)",
+    "description": "Self-help group contribution for Malay employees. Voluntary contribution collected via payroll.",
+    "agency": "Yayasan MENDAKI",
+    "type": "development",
+    "version": "2026.1",
+    "effectiveDate": "2026-01-01",
+    "status": "published"
+  },
+  "eligibility": {
+    "notes": "Applies to Malay employees who have opted in. Rate based on monthly wages. Collected monthly alongside CPF.",
+    "ethnicities": [
+      "malay"
+    ]
+  },
+  "employeeCategories": [
+    {
+      "code": "MBMF_MEMBER",
+      "name": "Malay Employee (Opted In)",
+      "immigrationStatusCode": null
+    }
+  ],
+  "rateTables": [
+    {
+      "employeeCategory": "MBMF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 3,
+      "wageMin": 0,
+      "wageMax": 1000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "MBMF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 4.5,
+      "wageMin": 1000,
+      "wageMax": 2000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "MBMF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 6.5,
+      "wageMin": 2000,
+      "wageMax": 3000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "MBMF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 15,
+      "wageMin": 3000,
+      "wageMax": 4000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "MBMF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 19.5,
+      "wageMin": 4000,
+      "wageMax": 6000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "MBMF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 22,
+      "wageMin": 6000,
+      "wageMax": 8000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "MBMF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 24,
+      "wageMin": 8000,
+      "wageMax": 10000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "MBMF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 26,
+      "wageMin": 10000,
+      "wageMax": null,
+      "effectiveDate": "2026-01-01"
+    }
+  ],
+  "thresholds": [],
+  "caps": [],
+  "salaryComponents": [
+    {
+      "componentCode": "BASIC",
+      "classification": "ordinary_wage",
+      "included": true
+    },
+    {
+      "componentCode": "OVERTIME",
+      "classification": "additional_wage",
+      "included": true
+    },
+    {
+      "componentCode": "BONUS",
+      "classification": "additional_wage",
+      "included": true
+    }
+  ],
+  "calculationRules": [
+    {
+      "code": "SHG_CALC",
+      "name": "Self-Help Group Fixed Contribution",
+      "priority": 1,
+      "action": "LOOKUP_FIXED_BY_WAGE_BAND(MonthlyTotalWages)",
+      "description": "Flat monthly amount by total-wage band per MBMF 2026 schedule (employee-only, remitted with CPF)."
+    }
+  ],
+  "rounding": {
+    "employee": {
+      "method": "round",
+      "decimals": 2
+    },
+    "employer": {
+      "method": "round",
+      "decimals": 2
+    }
+  },
+  "reporting": {
+    "agency": "Yayasan MENDAKI",
+    "submissionFrequency": "Monthly",
+    "portal": "CPF EZPay",
+    "fileFormat": "CSV",
+    "dueDate": "14th of following month",
+    "forms": [
+      {
+        "name": "MBMF Contribution Statement",
+        "frequency": "Monthly",
+        "deadline": "14th of following month"
+      }
+    ]
+  },
+  "validations": []
+}

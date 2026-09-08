@@ -1,0 +1,16 @@
+{
+  "name": "Singapore",
+  "code": "SG",
+  "currency": "SGD",
+  "currencySymbol": "S$",
+  "phoneCode": "+65",
+  "timezone": "Asia/Singapore",
+  "primaryLanguage": "English",
+  "secondaryLanguage": "Chinese (Mandarin)",
+  "dateFormat": "DD/MM/YYYY",
+  "timeFormat": "24h",
+  "weekStartsOn": "Monday",
+  "financialYear": "01-01",
+  "taxYear": "01-01",
+  "defaultPayrollFrequency": "Monthly"
+}

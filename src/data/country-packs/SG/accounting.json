@@ -1,0 +1,14 @@
+{
+  "fiscalYearStart": "01-01",
+  "defaultTaxCode": "SR",
+  "invoiceNumberFormat": "INV-{YYYY}-{0000}",
+  "paymentTerms": "Net 30",
+  "taxCodes": [
+    { "code": "SR", "name": "Standard Rated", "rate": 9, "isDefault": true },
+    { "code": "ZR", "name": "Zero Rated", "rate": 0, "isDefault": false },
+    { "code": "ES33", "name": "Exempt", "rate": 0, "isDefault": false },
+    { "code": "TX", "name": "Out of Scope", "rate": 0, "isDefault": false }
+  ],
+  "supportedBanks": ["DBS", "OCBC", "UOB", "Maybank", "CIMB"],
+  "paymentMethods": ["GIRO", "Bank Transfer", "FAST"]
+}

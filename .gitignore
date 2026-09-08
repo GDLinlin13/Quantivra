@@ -1,0 +1,19 @@
+# dependencies / build
+node_modules/
+dist/
+dist-electron/
+.vite/
+*.tsbuildinfo
+
+# env & secrets
+.env
+.env.*
+!.env.example
+scripts/.sbtoken
+scripts/key.txt
+scripts/*.out.txt
+
+# editor / OS
+.DS_Store
+.vscode/
+.idea/

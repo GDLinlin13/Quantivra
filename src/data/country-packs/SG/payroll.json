@@ -1,0 +1,8 @@
+{
+  "frequencies": ["Monthly", "Weekly", "Fortnightly"],
+  "minimumWage": 0,
+  "payrollCutoff": "Last day of month",
+  "payrollLockDate": "5th of next month",
+  "thirteenthMonth": "Not mandatory",
+  "bankFileFormat": "GIRO CSV"
+}

@@ -1,0 +1,219 @@
+[
+  {
+    "name": "Citizen Age 35 — Below OW Ceiling",
+    "scenario": "Singapore Citizen, age 35, S$5,500 monthly salary, no bonus. Full CPF at 20/17% applies.",
+    "inputs": {
+      "immigrationStatus": "SC",
+      "prStage": null,
+      "age": 35,
+      "basicSalary": 5500,
+      "bonus": 0,
+      "payrollPeriod": "2026-01"
+    },
+    "expected": {
+      "cpfEmployee": 1100,
+      "cpfEmployer": 935,
+      "netPay": 4400
+    }
+  },
+  {
+    "name": "Citizen Age 35 — Above OW Ceiling",
+    "scenario": "Singapore Citizen, age 35, S$10,000 monthly salary. CPF calculated on OW ceiling of S$8,000, not actual salary.",
+    "inputs": {
+      "immigrationStatus": "SC",
+      "prStage": null,
+      "age": 35,
+      "basicSalary": 10000,
+      "bonus": 0,
+      "payrollPeriod": "2026-01"
+    },
+    "expected": {
+      "cpfEmployee": 1600,
+      "cpfEmployer": 1360,
+      "netPay": 8400
+    }
+  },
+  {
+    "name": "Citizen Age 35 — S$20,000 Annual Bonus (AW Ceiling)",
+    "scenario": "S$8,000 monthly salary, S$20,000 annual bonus. OW ceiling S$8,000. AW ceiling = S$102,000 - (12 × S$8,000) = S$6,000. Bonus CPF on S$6,000 at 20/17%.",
+    "inputs": {
+      "immigrationStatus": "SC",
+      "prStage": null,
+      "age": 35,
+      "basicSalary": 8000,
+      "bonus": 20000,
+      "ytdOrdinaryWagesSubjectToCPF": 96000,
+      "payrollPeriod": "2026-12"
+    },
+    "expected": {
+      "cpfEmployeeBonus": 1200,
+      "cpfEmployerBonus": 1020,
+      "bonusNet": 18600
+    }
+  },
+  {
+    "name": "PR Year 1",
+    "scenario": "PR Year 1, age 30, S$5,000 salary. Reduced CPF at 5/4% flat across all ages.",
+    "inputs": {
+      "immigrationStatus": "PR",
+      "prStage": "year_1",
+      "age": 30,
+      "basicSalary": 5000,
+      "bonus": 0,
+      "payrollPeriod": "2026-01"
+    },
+    "expected": {
+      "cpfEmployee": 250,
+      "cpfEmployer": 200,
+      "netPay": 4750
+    }
+  },
+  {
+    "name": "PR Year 2",
+    "scenario": "PR Year 2, age 30, S$5,000 salary. Graduated CPF at 15/9% flat across all ages.",
+    "inputs": {
+      "immigrationStatus": "PR",
+      "prStage": "year_2",
+      "age": 30,
+      "basicSalary": 5000,
+      "bonus": 0,
+      "payrollPeriod": "2026-01"
+    },
+    "expected": {
+      "cpfEmployee": 750,
+      "cpfEmployer": 450,
+      "netPay": 4250
+    }
+  },
+  {
+    "name": "PR Year 3+",
+    "scenario": "PR Year 3+, age 30, S$5,000 salary. Full CPF rates (same as citizen).",
+    "inputs": {
+      "immigrationStatus": "PR",
+      "prStage": "year_3_plus",
+      "age": 30,
+      "basicSalary": 5000,
+      "bonus": 0,
+      "payrollPeriod": "2026-01"
+    },
+    "expected": {
+      "cpfEmployee": 1000,
+      "cpfEmployer": 850,
+      "netPay": 4000
+    }
+  },
+  {
+    "name": "Citizen Turning 55 Mid-Year",
+    "scenario": "Employee turns 55 during the year. Rate changes from 20/17% (≤55) to 16/15% (>55-60) in the month after birthday.",
+    "inputs": {
+      "immigrationStatus": "SC",
+      "prStage": null,
+      "age": 54,
+      "ageNextMonth": 55,
+      "basicSalary": 6000,
+      "bonus": 0,
+      "payrollPeriod": "2026-06",
+      "birthdayMonth": "2026-07"
+    },
+    "expected": {
+      "rateBeforeBirthday": "20/17",
+      "rateAfterBirthday": "16/15"
+    }
+  },
+  {
+    "name": "Mid-Month Joiner",
+    "scenario": "Employee joins on 15th of month. CPF calculated on prorated salary. OW ceiling applies to full month.",
+    "inputs": {
+      "immigrationStatus": "SC",
+      "prStage": null,
+      "age": 35,
+      "basicSalary": 6000,
+      "joinDate": "2026-01-15",
+      "payrollPeriod": "2026-01"
+    },
+    "expected": {
+      "note": "Prorated salary = S$3,000 (15 days). CPF on S$3,000 at 20/17%. OW ceiling check uses full-month ceiling S$8,000."
+    }
+  },
+  {
+    "name": "Employment Pass — No CPF",
+    "scenario": "EP holder, age 35, S$10,000 salary. No CPF contributions.",
+    "inputs": {
+      "immigrationStatus": "EP",
+      "prStage": null,
+      "age": 35,
+      "basicSalary": 10000,
+      "bonus": 0,
+      "payrollPeriod": "2026-01"
+    },
+    "expected": {
+      "cpfEmployee": 0,
+      "cpfEmployer": 0,
+      "netPay": 10000
+    }
+  },
+  {
+    "name": "SDL Calculation — Below S$800",
+    "scenario": "Employee earns S$600/month. SDL = S$2.00 (minimum).",
+    "inputs": {
+      "immigrationStatus": "SC",
+      "prStage": null,
+      "age": 35,
+      "basicSalary": 600,
+      "bonus": 0,
+      "payrollPeriod": "2026-01"
+    },
+    "expected": {
+      "sdl": 2
+    }
+  },
+  {
+    "name": "SDL Calculation — S$5,000 Salary",
+    "scenario": "Employee earns S$5,000/month. SDL = 0.25% × S$5,000 = S$12.50, capped at S$11.25.",
+    "inputs": {
+      "immigrationStatus": "SC",
+      "prStage": null,
+      "age": 35,
+      "basicSalary": 5000,
+      "bonus": 0,
+      "payrollPeriod": "2026-01"
+    },
+    "expected": {
+      "sdl": 11.25
+    }
+  },
+  {
+    "name": "CDAC Contribution — S$3,000 Salary",
+    "scenario": "Chinese employee opted into CDAC, earns S$3,000/month. CDAC = 1% × S$3,000 = S$30.",
+    "inputs": {
+      "immigrationStatus": "SC",
+      "prStage": null,
+      "age": 35,
+      "basicSalary": 3000,
+      "bonus": 0,
+      "schemeOptIns": ["CDAC"],
+      "payrollPeriod": "2026-01"
+    },
+    "expected": {
+      "cdacEmployee": 30,
+      "cdacEmployer": 0
+    }
+  },
+  {
+    "name": "SINDA Contribution — S$1,500 Salary",
+    "scenario": "Indian employee opted into SINDA, earns S$1,500/month. SINDA = 0.5% × S$1,500 = S$7.50.",
+    "inputs": {
+      "immigrationStatus": "SC",
+      "prStage": null,
+      "age": 35,
+      "basicSalary": 1500,
+      "bonus": 0,
+      "schemeOptIns": ["SINDA"],
+      "payrollPeriod": "2026-01"
+    },
+    "expected": {
+      "sindaEmployee": 7.5,
+      "sindaEmployer": 0
+    }
+  }
+]

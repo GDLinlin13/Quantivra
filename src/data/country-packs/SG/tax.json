@@ -1,0 +1,16 @@
+{
+  "brackets": [
+    { "min": 0, "max": 20000, "rate": 0, "fixed": 0 },
+    { "min": 20000, "max": 30000, "rate": 2, "fixed": 0 },
+    { "min": 30000, "max": 40000, "rate": 3.5, "fixed": 200 },
+    { "min": 40000, "max": 80000, "rate": 7, "fixed": 550 },
+    { "min": 80000, "max": 120000, "rate": 11.5, "fixed": 3350 },
+    { "min": 120000, "max": 200000, "rate": 15, "fixed": 7950 },
+    { "min": 200000, "max": 320000, "rate": 18, "fixed": 19950 },
+    { "min": 320000, "max": null, "rate": 24, "fixed": 41550 }
+  ],
+  "residentRules": "183 days/year",
+  "nonResidentRate": 24,
+  "filingFrequency": "Annual (IR8A)",
+  "formTypes": ["IR8A", "IR8S", "Appendix 8A", "Appendix 8B", "IR21"]
+}

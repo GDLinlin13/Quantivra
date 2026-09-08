@@ -1,0 +1,125 @@
+{
+  "general": {
+    "code": "CDAC",
+    "name": "CDAC (Chinese Development Assistance Council)",
+    "description": "Self-help group contribution for Chinese employees. Voluntary contribution collected via payroll.",
+    "agency": "CDAC",
+    "type": "development",
+    "version": "2026.1",
+    "effectiveDate": "2026-01-01",
+    "status": "published"
+  },
+  "eligibility": {
+    "notes": "Applies to Chinese employees who have opted in. Rate based on monthly wages. Collected monthly alongside CPF.",
+    "ethnicities": [
+      "chinese"
+    ]
+  },
+  "employeeCategories": [
+    {
+      "code": "CDAC_MEMBER",
+      "name": "Chinese Employee (Opted In)",
+      "immigrationStatusCode": null
+    }
+  ],
+  "rateTables": [
+    {
+      "employeeCategory": "CDAC_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 0.5,
+      "wageMin": 0,
+      "wageMax": 2000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "CDAC_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 1,
+      "wageMin": 2000,
+      "wageMax": 3500,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "CDAC_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 1.5,
+      "wageMin": 3500,
+      "wageMax": 5000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "CDAC_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 2,
+      "wageMin": 5000,
+      "wageMax": 7500,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "CDAC_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 3,
+      "wageMin": 7500,
+      "wageMax": null,
+      "effectiveDate": "2026-01-01"
+    }
+  ],
+  "thresholds": [],
+  "caps": [],
+  "salaryComponents": [
+    {
+      "componentCode": "BASIC",
+      "classification": "ordinary_wage",
+      "included": true
+    },
+    {
+      "componentCode": "OVERTIME",
+      "classification": "additional_wage",
+      "included": true
+    },
+    {
+      "componentCode": "BONUS",
+      "classification": "additional_wage",
+      "included": true
+    }
+  ],
+  "calculationRules": [
+    {
+      "code": "SHG_CALC",
+      "name": "Self-Help Group Fixed Contribution",
+      "priority": 1,
+      "action": "LOOKUP_FIXED_BY_WAGE_BAND(MonthlyTotalWages)",
+      "description": "Flat monthly amount by total-wage band per CDAC 2026 schedule (employee-only, remitted with CPF)."
+    }
+  ],
+  "rounding": {
+    "employee": {
+      "method": "round",
+      "decimals": 2
+    },
+    "employer": {
+      "method": "round",
+      "decimals": 2
+    }
+  },
+  "reporting": {
+    "agency": "CDAC",
+    "submissionFrequency": "Monthly",
+    "portal": "CPF EZPay",
+    "fileFormat": "CSV",
+    "dueDate": "14th of following month",
+    "forms": [
+      {
+        "name": "CDAC Contribution Statement",
+        "frequency": "Monthly",
+        "deadline": "14th of following month"
+      }
+    ]
+  },
+  "validations": []
+}

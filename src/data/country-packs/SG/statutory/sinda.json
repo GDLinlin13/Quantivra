@@ -1,0 +1,152 @@
+{
+  "general": {
+    "code": "SINDA",
+    "name": "SINDA (Singapore Indian Development Association)",
+    "description": "Self-help group contribution for Indian employees. Voluntary contribution collected via payroll.",
+    "agency": "SINDA",
+    "type": "development",
+    "version": "2026.1",
+    "effectiveDate": "2026-01-01",
+    "status": "published"
+  },
+  "eligibility": {
+    "notes": "Applies to Indian employees who have opted in. Rate based on monthly wages. Collected monthly alongside CPF.",
+    "ethnicities": [
+      "indian"
+    ]
+  },
+  "employeeCategories": [
+    {
+      "code": "SINDA_MEMBER",
+      "name": "Indian Employee (Opted In)",
+      "immigrationStatusCode": null
+    }
+  ],
+  "rateTables": [
+    {
+      "employeeCategory": "SINDA_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 1,
+      "wageMin": 0,
+      "wageMax": 1000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "SINDA_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 3,
+      "wageMin": 1000,
+      "wageMax": 1500,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "SINDA_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 5,
+      "wageMin": 1500,
+      "wageMax": 2500,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "SINDA_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 7,
+      "wageMin": 2500,
+      "wageMax": 4500,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "SINDA_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 9,
+      "wageMin": 4500,
+      "wageMax": 7500,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "SINDA_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 12,
+      "wageMin": 7500,
+      "wageMax": 10000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "SINDA_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 18,
+      "wageMin": 10000,
+      "wageMax": 15000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "SINDA_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 30,
+      "wageMin": 15000,
+      "wageMax": null,
+      "effectiveDate": "2026-01-01"
+    }
+  ],
+  "thresholds": [],
+  "caps": [],
+  "salaryComponents": [
+    {
+      "componentCode": "BASIC",
+      "classification": "ordinary_wage",
+      "included": true
+    },
+    {
+      "componentCode": "OVERTIME",
+      "classification": "additional_wage",
+      "included": true
+    },
+    {
+      "componentCode": "BONUS",
+      "classification": "additional_wage",
+      "included": true
+    }
+  ],
+  "calculationRules": [
+    {
+      "code": "SHG_CALC",
+      "name": "Self-Help Group Fixed Contribution",
+      "priority": 1,
+      "action": "LOOKUP_FIXED_BY_WAGE_BAND(MonthlyTotalWages)",
+      "description": "Flat monthly amount by total-wage band per SINDA 2026 schedule (employee-only, remitted with CPF)."
+    }
+  ],
+  "rounding": {
+    "employee": {
+      "method": "round",
+      "decimals": 2
+    },
+    "employer": {
+      "method": "round",
+      "decimals": 2
+    }
+  },
+  "reporting": {
+    "agency": "SINDA",
+    "submissionFrequency": "Monthly",
+    "portal": "CPF EZPay",
+    "fileFormat": "CSV",
+    "dueDate": "14th of following month",
+    "forms": [
+      {
+        "name": "SINDA Contribution Statement",
+        "frequency": "Monthly",
+        "deadline": "14th of following month"
+      }
+    ]
+  },
+  "validations": []
+}

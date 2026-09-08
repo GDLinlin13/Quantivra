@@ -1,0 +1,143 @@
+{
+  "general": {
+    "code": "ECF",
+    "name": "ECF (Eurasian Community Fund)",
+    "description": "Self-help group contribution for Eurasian employees. Voluntary contribution collected via payroll.",
+    "agency": "Eurasian Association Singapore",
+    "type": "development",
+    "version": "2026.1",
+    "effectiveDate": "2026-01-01",
+    "status": "published"
+  },
+  "eligibility": {
+    "notes": "Applies to Eurasian employees who have opted in. Rate based on monthly wages. Collected monthly alongside CPF.",
+    "ethnicities": [
+      "eurasian"
+    ]
+  },
+  "employeeCategories": [
+    {
+      "code": "ECF_MEMBER",
+      "name": "Eurasian Employee (Opted In)",
+      "immigrationStatusCode": null
+    }
+  ],
+  "rateTables": [
+    {
+      "employeeCategory": "ECF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 2,
+      "wageMin": 0,
+      "wageMax": 1000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "ECF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 4,
+      "wageMin": 1000,
+      "wageMax": 1500,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "ECF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 6,
+      "wageMin": 1500,
+      "wageMax": 2500,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "ECF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 9,
+      "wageMin": 2500,
+      "wageMax": 4000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "ECF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 12,
+      "wageMin": 4000,
+      "wageMax": 7000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "ECF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 16,
+      "wageMin": 7000,
+      "wageMax": 10000,
+      "effectiveDate": "2026-01-01"
+    },
+    {
+      "employeeCategory": "ECF_MEMBER",
+      "employeeRate": 0,
+      "employerRate": 0,
+      "fixedEmployeeAmount": 20,
+      "wageMin": 10000,
+      "wageMax": null,
+      "effectiveDate": "2026-01-01"
+    }
+  ],
+  "thresholds": [],
+  "caps": [],
+  "salaryComponents": [
+    {
+      "componentCode": "BASIC",
+      "classification": "ordinary_wage",
+      "included": true
+    },
+    {
+      "componentCode": "OVERTIME",
+      "classification": "additional_wage",
+      "included": true
+    },
+    {
+      "componentCode": "BONUS",
+      "classification": "additional_wage",
+      "included": true
+    }
+  ],
+  "calculationRules": [
+    {
+      "code": "SHG_CALC",
+      "name": "Self-Help Group Fixed Contribution",
+      "priority": 1,
+      "action": "LOOKUP_FIXED_BY_WAGE_BAND(MonthlyTotalWages)",
+      "description": "Flat monthly amount by total-wage band per ECF 2026 schedule (employee-only, remitted with CPF)."
+    }
+  ],
+  "rounding": {
+    "employee": {
+      "method": "round",
+      "decimals": 2
+    },
+    "employer": {
+      "method": "round",
+      "decimals": 2
+    }
+  },
+  "reporting": {
+    "agency": "Eurasian Association Singapore",
+    "submissionFrequency": "Monthly",
+    "portal": "CPF EZPay",
+    "fileFormat": "CSV",
+    "dueDate": "14th of following month",
+    "forms": [
+      {
+        "name": "ECF Contribution Statement",
+        "frequency": "Monthly",
+        "deadline": "14th of following month"
+      }
+    ]
+  },
+  "validations": []
+}

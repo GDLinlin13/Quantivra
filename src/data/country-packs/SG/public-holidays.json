@@ -1,0 +1,12 @@
+[
+  { "name": "New Year's Day", "date": "2026-01-01", "type": "fixed", "recurring": true },
+  { "name": "Chinese New Year", "date": "2026-02-17", "type": "calculated", "recurring": true, "calculationRule": "First day of first lunar month" },
+  { "name": "Good Friday", "type": "floating", "recurring": true, "calculationRule": "2 days before Easter Sunday" },
+  { "name": "Hari Raya Puasa", "date": "2026-03-20", "type": "calculated", "recurring": true, "calculationRule": "First day of Shawal (Islamic calendar)" },
+  { "name": "Hari Raya Haji", "date": "2026-05-27", "type": "calculated", "recurring": true, "calculationRule": "10th day of Zulhijjah (Islamic calendar)" },
+  { "name": "Labour Day", "date": "2026-05-01", "type": "fixed", "recurring": true },
+  { "name": "Vesak Day", "date": "2026-05-31", "type": "calculated", "recurring": true, "calculationRule": "Full moon of the fifth lunar month" },
+  { "name": "National Day", "date": "2026-08-09", "type": "fixed", "recurring": true, "observedRule": "If falls on weekend, following Monday observed" },
+  { "name": "Deepavali", "date": "2026-11-08", "type": "calculated", "recurring": true, "calculationRule": "14th day of the dark fortnight of Aipasi (Tamil calendar)" },
+  { "name": "Christmas Day", "date": "2026-12-25", "type": "fixed", "recurring": true }
+]

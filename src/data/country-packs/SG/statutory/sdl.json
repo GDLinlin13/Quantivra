@@ -1,0 +1,94 @@
+{
+  "general": {
+    "code": "SDL",
+    "name": "Skills Development Levy",
+    "description": "Levy to fund skills development and training programmes administered by SkillsFuture Singapore.",
+    "agency": "SkillsFuture Singapore (SSG)",
+    "type": "training",
+    "version": "2026.1",
+    "effectiveDate": "2026-01-01",
+    "status": "published"
+  },
+  "eligibility": {
+    "citizenship": ["SC", "PR"],
+    "visaTypes": ["EP", "SP", "WP"],
+    "employmentTypes": [],
+    "minimumAge": 0,
+    "maximumAge": null,
+    "minimumSalary": 0,
+    "notes": "All employees earning S$800/month or more. Levy collected monthly alongside CPF."
+  },
+  "employeeCategories": [
+    { "code": "ALL", "name": "All Employees", "immigrationStatusCode": null }
+  ],
+  "rateTables": [
+    { "employeeCategory": "ALL", "employeeRate": 0, "employerRate": 0.25, "wageMin": 0, "wageMax": null, "effectiveDate": "2026-01-01" }
+  ],
+  "thresholds": [
+    {
+      "code": "SDL_MIN_LEVY",
+      "name": "Minimum SDL Levy",
+      "type": "minimum_earnings",
+      "value": 2,
+      "currency": "SGD",
+      "frequency": "monthly"
+    },
+    {
+      "code": "SDL_MAX_LEVY",
+      "name": "Maximum SDL Levy",
+      "type": "lower",
+      "value": 11.25,
+      "currency": "SGD",
+      "frequency": "monthly"
+    }
+  ],
+  "caps": [],
+  "salaryComponents": [
+    { "componentCode": "BASIC", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "OVERTIME", "classification": "additional_wage", "included": true },
+    { "componentCode": "BONUS", "classification": "additional_wage", "included": true },
+    { "componentCode": "COMMISSION", "classification": "additional_wage", "included": true },
+    { "componentCode": "AWS", "classification": "additional_wage", "included": true }
+  ],
+  "calculationRules": [
+    {
+      "code": "SDL_CALC",
+      "name": "SDL Calculation",
+      "priority": 1,
+      "action": "MAX(2, MIN(TotalWages * 0.0025, 11.25))",
+      "description": "SDL = 0.25% of total wages, subject to minimum S$2 and maximum S$11.25 per employee per month."
+    }
+  ],
+  "rounding": {
+    "employee": { "method": "round", "decimals": 2 },
+    "employer": { "method": "round", "decimals": 2 }
+  },
+  "reporting": {
+    "agency": "CPF Board",
+    "submissionFrequency": "Monthly",
+    "portal": "CPF EZPay",
+    "fileFormat": "CSV",
+    "dueDate": "14th of following month",
+    "forms": [
+      { "name": "SDL Statement", "frequency": "Monthly", "deadline": "14th of following month" }
+    ]
+  },
+  "validations": [
+    {
+      "code": "SDL_MIN_CHECK",
+      "name": "SDL Minimum Levy Check",
+      "type": "range",
+      "expression": "SDL >= 2",
+      "errorMessage": "SDL cannot be less than S$2 per employee per month",
+      "severity": "error"
+    },
+    {
+      "code": "SDL_MAX_CHECK",
+      "name": "SDL Maximum Levy Check",
+      "type": "range",
+      "expression": "SDL <= 11.25",
+      "errorMessage": "SDL cannot exceed S$11.25 per employee per month",
+      "severity": "error"
+    }
+  ]
+}
