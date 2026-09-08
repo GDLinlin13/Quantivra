@@ -3,6 +3,7 @@ import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Sp
 import { PlusOutlined, EditOutlined, CloseOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { COUNTRY_PACKS } from '../../../data/countries';
+import { SectionEditor, SECTION_DEFS, normalizeSection } from './country-packs/SectionEditor';
 
 const { Title, Text } = Typography;
 
@@ -39,6 +40,7 @@ export function CountryPacksPage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editSection, setEditSection] = useState('');
   const [editValue, setEditValue] = useState('');
+  const [editData, setEditData] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -221,7 +223,8 @@ export function CountryPacksPage() {
       ? { currency: selectedVersion.config?.currency }
       : selectedVersion.config?.[section];
     setEditSection(section);
-    setEditValue(JSON.stringify(value, null, 2));
+    setEditValue(JSON.stringify(value ?? (SECTION_DEFS[section]?.kind === 'array' ? [] : {}), null, 2));
+    setEditData(value ?? (SECTION_DEFS[section]?.kind === 'array' ? [] : {}));
     setEditModalOpen(true);
   };
 
@@ -229,7 +232,9 @@ export function CountryPacksPage() {
     if (!selectedVersion) return;
     setSaving(true);
     try {
-      const parsed = JSON.parse(editValue);
+      const parsed = SECTION_DEFS[editSection]
+        ? normalizeSection(editSection, editData)
+        : JSON.parse(editValue);
       let updatedConfig = { ...selectedVersion.config };
       if (editSection === 'general') {
         updatedConfig.currency = parsed.currency;
@@ -832,19 +837,23 @@ export function CountryPacksPage() {
         onOk={handleEditSave}
         confirmLoading={saving}
         okText="Save"
-        width={700}
-        styles={{ header: { background: '#151a1e', color: '#f0ede6' }, body: { background: '#151a1e' } }}
+        width={SECTION_DEFS[editSection] ? 860 : 700}
+        styles={{ header: { background: '#151a1e', color: '#f0ede6' }, body: { background: '#151a1e', maxHeight: '65vh', overflow: 'auto' } }}
       >
-        <Input.TextArea
-          value={editValue}
-          onChange={e => setEditValue(e.target.value)}
-          rows={16}
-          style={{
-            fontFamily: 'monospace', fontSize: 13,
-            background: '#0b0f12', color: '#f0ede6',
-            borderColor: 'rgba(255,255,255,0.1)',
-          }}
-        />
+        {SECTION_DEFS[editSection] ? (
+          <SectionEditor section={editSection} value={editData} onChange={setEditData} />
+        ) : (
+          <Input.TextArea
+            value={editValue}
+            onChange={e => setEditValue(e.target.value)}
+            rows={16}
+            style={{
+              fontFamily: 'monospace', fontSize: 13,
+              background: '#0b0f12', color: '#f0ede6',
+              borderColor: 'rgba(255,255,255,0.1)',
+            }}
+          />
+        )}
       </Modal>
     </div>
   );
