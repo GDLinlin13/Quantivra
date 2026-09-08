@@ -35,8 +35,18 @@ export const companyService = {
     return data;
   },
 
+  async setActive(id: number, active: boolean): Promise<void> {
+    const { error } = await supabase.rpc('company_set_active', { p_company_id: id, p_active: active });
+    if (error) throw new Error(error.message);
+  },
+
   async deactivate(id: number): Promise<void> {
-    await supabase.from('companies').update({ is_active: false }).eq('id', id);
+    return this.setActive(id, false);
+  },
+
+  async remove(id: number): Promise<void> {
+    const { error } = await supabase.rpc('company_delete', { p_company_id: id });
+    if (error) throw new Error(error.message);
   },
 };
 

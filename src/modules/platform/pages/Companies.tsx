@@ -106,6 +106,9 @@ export function CompaniesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
   const [provisionSteps, setProvisionSteps] = useState<ProvisionStep[]>(getProvisionSteps());
+  const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const [form] = Form.useForm();
   const provisionStarted = useRef(false);
 
@@ -235,11 +238,22 @@ export function CompaniesPage() {
     {
       title: 'Actions', key: 'actions',
       render: (_: any, record: Company) => (
-        <Space>
-          <Popconfirm title="Deactivate this company?" onConfirm={() => companyService.deactivate(record.id).then(load)}>
+        record.is_active ? (
+          <Popconfirm title="Deactivate this company?"
+            description="All its users will be signed out and blocked from logging in."
+            onConfirm={() => companyService.setActive(record.id, false).then(load).catch(e => message.error(e.message))}>
             <Button type="link" danger>Deactivate</Button>
           </Popconfirm>
-        </Space>
+        ) : (
+          <Space>
+            <Popconfirm title="Reinstate this company?"
+              description="Its users regain access."
+              onConfirm={() => companyService.setActive(record.id, true).then(load).catch(e => message.error(e.message))}>
+              <Button type="link">Reinstate</Button>
+            </Popconfirm>
+            <Button type="link" danger onClick={() => setDeleteTarget(record)}>Delete…</Button>
+          </Space>
+        )
       ),
     },
   ];
@@ -536,6 +550,31 @@ export function CompaniesPage() {
             )}
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        title={<span style={{ color: '#ff4d4f' }}>Delete company permanently</span>}
+        open={!!deleteTarget}
+        onCancel={() => { setDeleteTarget(null); setDeleteConfirmText(''); }}
+        okText="Delete everything"
+        okButtonProps={{ danger: true, disabled: deleteConfirmText !== deleteTarget?.name, loading: deleting }}
+        onOk={async () => {
+          if (!deleteTarget) return;
+          setDeleting(true);
+          try {
+            await companyService.remove(deleteTarget.id);
+            message.success(`${deleteTarget.name} and all its data were deleted`);
+            setDeleteTarget(null); setDeleteConfirmText('');
+            load();
+          } catch (e: any) { message.error(e.message); }
+          setDeleting(false);
+        }}
+      >
+        <Alert type="error" showIcon style={{ marginBottom: 12 }}
+          message="This cannot be undone"
+          description="Users, employees, leave records, payroll runs, payslips, branding and all settings for this company are removed." />
+        <p style={{ color: '#f0ede6' }}>Type <b>{deleteTarget?.name}</b> to confirm:</p>
+        <Input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder={deleteTarget?.name} />
       </Modal>
     </div>
   );
