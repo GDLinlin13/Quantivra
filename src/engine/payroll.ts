@@ -279,12 +279,21 @@ function runPipeline(ctx: PipelineContext): EmployeePayrollResult {
 
   const taxableIncome = Math.max(0, salaryComponentsTotal - taxableDeductions);
 
-  const taxResult = calculateIncomeTax({
-    brackets: countryPack.tax.brackets,
-    taxableIncome,
-    isResident: true,
-    nonResidentRate: countryPack.tax.nonResidentRate,
-  });
+  // Pack tax rates are percentages (14 = 14%); the engine wants decimals.
+  const periodsPerYear = { monthly: 12, semi_monthly: 24, weekly: 52, fortnightly: 26, daily: 260 }[period.frequency] ?? 12;
+  const withholding = countryPack.tax.withholding ?? 'monthly';
+  const taxResult = withholding === 'none'
+    ? { grossPay: taxableIncome, taxableIncome, taxWithheld: 0, effectiveRate: 0, bracketsApplied: [], nonResident: false, steps: [] as CalculationStep[] }
+    : (() => {
+        // Annualise this period's taxable pay, tax it, then spread back over the year (PAYE-style).
+        const annual = calculateIncomeTax({
+          brackets: countryPack.tax.brackets.map(b => ({ ...b, rate: b.rate / 100 })),
+          taxableIncome: taxableIncome * periodsPerYear,
+          isResident: true,
+          nonResidentRate: countryPack.tax.nonResidentRate != null ? countryPack.tax.nonResidentRate / 100 : undefined,
+        });
+        return { ...annual, taxWithheld: roundAmount(annual.taxWithheld / periodsPerYear), taxableIncome };
+      })();
 
   if (taxResult.steps) empSteps.push(...taxResult.steps);
 

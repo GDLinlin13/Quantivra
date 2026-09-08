@@ -1,9 +1,15 @@
 {
   "brackets": [
-    { "min": 0, "max": null, "rate": 0, "fixed": 0 }
+    {
+      "min": 0,
+      "max": null,
+      "rate": 0,
+      "fixed": 0
+    }
   ],
   "residentRules": "No personal income tax in the UAE",
   "nonResidentRate": 0,
   "filingFrequency": "None",
-  "formTypes": []
+  "formTypes": [],
+  "withholding": "none"
 }

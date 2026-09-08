@@ -73,9 +73,16 @@ export interface TaxBracketDef {
 export interface TaxDef {
   brackets: TaxBracketDef[];
   residentRules: string;
+  /** Bracket/flat rates are expressed as percentages (e.g. 14 for 14%). */
   nonResidentRate?: number;
   filingFrequency: string;
   formTypes: string[];
+  /**
+   * How employment income tax is withheld each payroll run:
+   *  - "monthly": annualise the period's taxable pay, apply the brackets, divide back (PAYE-style)
+   *  - "none": no withholding at payroll time (e.g. Singapore residents, UAE, Saudi Arabia)
+   */
+  withholding?: 'monthly' | 'none';
 }
 
 // === ACCOUNTING ===

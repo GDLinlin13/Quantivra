@@ -16,7 +16,7 @@ const pack: CountryPackDef = {
   general,
   employment,
   payroll,
-  tax,
+  tax: tax as any,
   accounting,
   publicHolidays: publicHolidays as PublicHolidayDef[],
   governmentForms,

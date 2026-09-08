@@ -1,7 +1,15 @@
 {
-  "brackets": [{ "min": 0, "max": null, "rate": 0, "fixed": 0 }],
+  "brackets": [
+    {
+      "min": 0,
+      "max": null,
+      "rate": 0,
+      "fixed": 0
+    }
+  ],
   "residentRules": "No personal income tax on employment income in Saudi Arabia",
   "nonResidentRate": 0,
   "filingFrequency": "None",
-  "formTypes": []
+  "formTypes": [],
+  "withholding": "none"
 }
