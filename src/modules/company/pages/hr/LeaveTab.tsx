@@ -4,6 +4,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { leaveService, businessDays, type LeaveType, type LeaveBalance, type LeaveRequest, type Employee } from '../../../../services/hr';
 import { useAuth } from '../../../../contexts/AuthContext';
+import { supabase } from '../../../../utils/supabase';
 
 const YEAR = new Date().getFullYear();
 const statusColor: Record<string, string> = { pending: 'gold', approved: 'green', rejected: 'red', cancelled: 'default' };
@@ -27,10 +28,9 @@ export function LeaveTab({ companyId }: { companyId: number }) {
       const rec = await leaveService.myEmployeeRecord(companyId, user!.id);
       setMe(rec);
       if (rec) {
-        // make sure a balance row exists for each active type
-        for (const lt of t.filter(x => x.active)) {
-          await leaveService.ensureBalance(companyId, rec.id, lt.id, YEAR, lt.default_days);
-        }
+        const { data: co } = await supabase.from('companies').select('country').eq('id', companyId).maybeSingle();
+        // (re)compute entitlements from this employee's facts + dependents
+        await leaveService.syncEntitlements(companyId, rec, co?.country || 'SG', YEAR);
         const [b, r] = await Promise.all([
           leaveService.balances(rec.id, YEAR),
           leaveService.requests(companyId, { employeeId: rec.id }),
@@ -97,6 +97,14 @@ export function LeaveTab({ companyId }: { companyId: number }) {
                 </div>
                 <Progress percent={total ? Math.round((used / total) * 100) : 0} showInfo={false} size="small"
                   strokeColor={lt?.color || '#4fc3f7'} />
+                {b.entitlement_basis && (
+                  <div style={{ fontSize: 11, color: 'rgba(240,237,230,0.35)', marginTop: 2 }}>
+                    {b.entitlement_source === 'manual' ? '✎ ' : ''}{b.entitlement_basis}
+                  </div>
+                )}
+                {b.below_statutory && (
+                  <div style={{ fontSize: 11, color: '#ff7875', marginTop: 2 }}>Below statutory minimum</div>
+                )}
               </Card>
             </Col>
           );

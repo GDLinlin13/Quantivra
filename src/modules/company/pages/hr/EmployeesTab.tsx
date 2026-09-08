@@ -34,15 +34,18 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
 
   useEffect(() => { load(); }, [load]);
 
+  const [deps, setDeps] = useState<any[]>([]);
+
   const openNew = () => {
-    setEditing(null);
+    setEditing(null); setDeps([]);
     form.resetFields();
-    form.setFieldsValue({ employment_type: 'full_time', status: 'active', residency_status: defaultResidency(country), employee_code: `EMP-${String(rows.length + 1).padStart(3, '0')}` });
+    form.setFieldsValue({ employment_type: 'full_time', status: 'active', residency_status: defaultResidency(country), marital_status: 'single', employee_code: `EMP-${String(rows.length + 1).padStart(3, '0')}` });
     setOpen(true);
   };
 
-  const openEdit = (r: Employee) => {
+  const openEdit = async (r: Employee) => {
     setEditing(r);
+    setDeps(await hrService.dependents(r.id));
     form.setFieldsValue({
       ...r,
       join_date: r.join_date ? dayjs(r.join_date) : null,
@@ -54,7 +57,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
 
   const submit = async (v: any) => {
     try {
-      await hrService.upsertEmployee({
+      const id = await hrService.upsertEmployee({
         id: editing?.id ?? '',
         company_id: companyId,
         ...v,
@@ -66,6 +69,9 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
         manager_id: v.manager_id ?? '',
         department_id: v.department_id ?? '',
       });
+      await hrService.saveDependents(companyId, id, deps.map(d => ({
+        ...d, date_of_birth: d.date_of_birth ? dayjs(d.date_of_birth).format('YYYY-MM-DD') : null,
+      })));
       message.success(editing ? 'Employee updated' : 'Employee added');
       setOpen(false);
       load();
@@ -160,7 +166,29 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
                 { label: 'Other / none', value: 'other' },
               ]} />
             </Form.Item>
+            <Form.Item name="marital_status" label="Marital status"
+              tooltip="Used for leave eligibility (e.g. paternity leave)">
+              <Select options={['single', 'married', 'divorced', 'widowed'].map(s => ({ label: s[0].toUpperCase() + s.slice(1), value: s }))} />
+            </Form.Item>
           </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '8px 0' }}>
+            <span style={{ color: 'rgba(240,237,230,0.6)', fontSize: 13 }}>Dependents (for childcare / maternity leave)</span>
+            <Button size="small" icon={<PlusOutlined />} onClick={() => setDeps(d => [...d, { relationship: 'child', name: '', date_of_birth: null, citizenship: 'SC' }])}>Add</Button>
+          </div>
+          {deps.map((d, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 6 }}>
+              <Input size="small" placeholder="Name" value={d.name || ''} onChange={e => setDeps(x => x.map((v, vi) => vi === i ? { ...v, name: e.target.value } : v))} />
+              <Select size="small" value={d.relationship} onChange={v => setDeps(x => x.map((r, ri) => ri === i ? { ...r, relationship: v } : r))}
+                options={['child', 'spouse', 'parent'].map(s => ({ label: s, value: s }))} />
+              <DatePicker size="small" value={d.date_of_birth ? dayjs(d.date_of_birth) : null} placeholder="DOB"
+                onChange={v => setDeps(x => x.map((r, ri) => ri === i ? { ...r, date_of_birth: v ? v.format('YYYY-MM-DD') : null } : r))} />
+              <Select size="small" value={d.citizenship} placeholder="Citizenship"
+                onChange={v => setDeps(x => x.map((r, ri) => ri === i ? { ...r, citizenship: v } : r))}
+                options={[{ label: 'Citizen', value: 'SC' }, { label: 'PR', value: 'PR' }, { label: 'Foreigner', value: 'FOREIGNER' }]} />
+              <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setDeps(x => x.filter((_, xi) => xi !== i))} />
+            </div>
+          ))}
           <div style={{ color: 'rgba(240,237,230,0.4)', fontSize: 12, margin: '4px 0 8px' }}>PII below is encrypted at rest.</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Form.Item name="national_id" label="National ID / NRIC"><Input /></Form.Item>

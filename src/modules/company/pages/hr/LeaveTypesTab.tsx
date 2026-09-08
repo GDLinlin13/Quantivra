@@ -21,7 +21,7 @@ export function LeaveTypesTab({ companyId }: { companyId: number }) {
     setEditing(r);
     form.resetFields();
     if (r) form.setFieldsValue(r);
-    else form.setFieldsValue({ is_paid: true, requires_approval: true, active: true, default_days: 14, carry_forward_cap: 0, encashable: false, color: '#4fc3f7' });
+    else form.setFieldsValue({ is_paid: true, requires_approval: true, active: true, default_days: 14, statutory_min: 7, carry_forward_cap: 0, encashable: false, color: '#4fc3f7' });
     setOpen(true);
   };
 
@@ -42,7 +42,8 @@ export function LeaveTypesTab({ companyId }: { companyId: number }) {
         locale={{ emptyText: <span style={{ color: 'rgba(240,237,230,0.4)' }}>No leave types</span> }}
         columns={[
           { title: 'Name', dataIndex: 'name', key: 'n', render: (v: string, r: LeaveType) => <Space><span style={{ width: 10, height: 10, borderRadius: 3, background: r.color, display: 'inline-block' }} /><span style={{ color: '#f0ede6' }}>{v}</span></Space> },
-          { title: 'Default Days', dataIndex: 'default_days', key: 'd' },
+          { title: 'Company default', dataIndex: 'default_days', key: 'd' },
+          { title: 'Statutory min', dataIndex: 'statutory_min', key: 'sm', render: (v: number) => v || 0 },
           { title: 'Paid', dataIndex: 'is_paid', key: 'p', render: (v: boolean) => v ? <Tag color="green">Paid</Tag> : <Tag>Unpaid</Tag> },
           { title: 'Approval', dataIndex: 'requires_approval', key: 'a', render: (v: boolean) => v ? 'Required' : 'Auto' },
           { title: 'Carry Cap', dataIndex: 'carry_forward_cap', key: 'c' },
@@ -55,7 +56,8 @@ export function LeaveTypesTab({ companyId }: { companyId: number }) {
         <Form form={form} layout="vertical" onFinish={submit}>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Form.Item name="default_days" label="Default Days / Year"><InputNumber style={{ width: '100%' }} min={0} /></Form.Item>
+            <Form.Item name="default_days" label="Company default (days/yr)"><InputNumber style={{ width: '100%' }} min={0} /></Form.Item>
+            <Form.Item name="statutory_min" label="Statutory minimum (days/yr)"><InputNumber style={{ width: '100%' }} min={0} /></Form.Item>
             <Form.Item name="carry_forward_cap" label="Carry-forward Cap"><InputNumber style={{ width: '100%' }} min={0} /></Form.Item>
             <Form.Item name="color" label="Colour"><Input type="color" style={{ width: '100%', height: 32 }} /></Form.Item>
           </div>

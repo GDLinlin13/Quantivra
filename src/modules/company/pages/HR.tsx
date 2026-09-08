@@ -4,6 +4,7 @@ import { EmployeesTab } from './hr/EmployeesTab';
 import { LeaveTab } from './hr/LeaveTab';
 import { ApprovalsTab } from './hr/ApprovalsTab';
 import { LeaveTypesTab } from './hr/LeaveTypesTab';
+import { BalancesTab } from './hr/BalancesTab';
 import { PayrollTab } from './hr/PayrollTab';
 
 const { Title } = Typography;
@@ -21,6 +22,7 @@ export function CompanyHRPage() {
           { key: 'approvals', label: 'Approvals', children: <ApprovalsTab companyId={companyId} /> },
           { key: 'payroll', label: 'Payroll', children: <PayrollTab companyId={companyId} /> },
           { key: 'employees', label: 'Employees', children: <EmployeesTab companyId={companyId} /> },
+          { key: 'balances', label: 'Leave Balances', children: <BalancesTab companyId={companyId} /> },
           { key: 'types', label: 'Leave Types', children: <LeaveTypesTab companyId={companyId} /> },
         ]}
       />
