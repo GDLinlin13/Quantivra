@@ -1,0 +1,8 @@
+{
+  "frequencies": ["Monthly"],
+  "minimumWage": 0,
+  "payrollCutoff": "Last day of month",
+  "payrollLockDate": "10th of next month",
+  "thirteenthMonth": "Not mandatory",
+  "bankFileFormat": "WPS SIF (Wage Protection System)"
+}

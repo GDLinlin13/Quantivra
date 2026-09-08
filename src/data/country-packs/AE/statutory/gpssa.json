@@ -1,0 +1,85 @@
+{
+  "general": {
+    "code": "GPSSA",
+    "name": "GPSSA Pension & Social Security",
+    "description": "Mandatory pension and social security for UAE and GCC national employees, administered by the General Pension and Social Security Authority. Expatriates are not covered.",
+    "agency": "GPSSA",
+    "type": "pension",
+    "version": "2026.1",
+    "effectiveDate": "2026-01-01",
+    "status": "published"
+  },
+  "eligibility": {
+    "citizenship": ["UAE_NATIONAL", "GCC_NATIONAL"],
+    "visaTypes": [],
+    "employmentTypes": [],
+    "minimumAge": 18,
+    "maximumAge": 60,
+    "minimumServiceMonths": 0,
+    "minimumSalary": 0,
+    "maximumSalary": null,
+    "excludedCategories": ["EXPAT"],
+    "notes": "UAE nationals (and GCC nationals under the unified system) in the private sector. Rates below are the Federal Decree-Law No. 57 of 2023 regime for members first registered on/after 31 Oct 2023. Members registered earlier remain on the pre-2023 regime: employee 5%, employer 12.5% (+ 2.5% government)."
+  },
+  "employeeCategories": [
+    { "code": "NATIONAL_2023", "name": "UAE/GCC National (2023 law)", "immigrationStatusCode": "UAE_NATIONAL" }
+  ],
+  "rateTables": [
+    { "employeeCategory": "NATIONAL_2023", "employeeRate": 11, "employerRate": 15, "effectiveDate": "2023-10-31" }
+  ],
+  "thresholds": [
+    { "code": "MIN_CONTRIB_SALARY", "name": "Minimum contribution account salary", "type": "minimum_earnings", "value": 1000, "currency": "AED", "frequency": "monthly" }
+  ],
+  "caps": [
+    { "code": "MAX_CONTRIB_SALARY", "name": "Maximum contribution account salary (private sector, new members)", "type": "monthly_ceiling", "value": 100000, "currency": "AED" }
+  ],
+  "salaryComponents": [
+    { "componentCode": "BASIC", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_HOUSING", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_TRANSPORT", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "OVERTIME", "classification": "excluded", "included": false },
+    { "componentCode": "BONUS", "classification": "excluded", "included": false }
+  ],
+  "calculationRules": [
+    {
+      "code": "GPSSA_BASE",
+      "name": "Contribution Account Salary",
+      "priority": 1,
+      "action": "CLAMP(BasicWage + FixedAllowances, 1000, 100000)",
+      "parameters": {},
+      "description": "Contribution is levied on basic wage plus contractual fixed allowances, subject to a floor of AED 1,000 and a ceiling of AED 100,000 for new private-sector members."
+    }
+  ],
+  "rounding": {
+    "employee": { "method": "round", "decimals": 2 },
+    "employer": { "method": "round", "decimals": 2 }
+  },
+  "reporting": {
+    "agency": "GPSSA",
+    "submissionFrequency": "Monthly",
+    "portal": "GPSSA e-Services",
+    "fileFormat": "GPSSA Contribution File",
+    "dueDate": "By the 15th of the following month",
+    "forms": [
+      { "name": "GPSSA Contribution Return", "frequency": "Monthly", "deadline": "1st-15th of following month" }
+    ]
+  },
+  "validations": [
+    {
+      "code": "GPSSA_NATIONAL_ONLY",
+      "name": "Nationals only",
+      "type": "dependency",
+      "expression": "ImmigrationStatusCode IN ('UAE_NATIONAL','GCC_NATIONAL')",
+      "errorMessage": "GPSSA applies only to UAE and GCC national employees",
+      "severity": "error"
+    },
+    {
+      "code": "GPSSA_SALARY_CEILING",
+      "name": "Contribution salary ceiling",
+      "type": "range",
+      "expression": "ContributionAccountSalary <= 100000",
+      "errorMessage": "Contribution account salary exceeds the AED 100,000 ceiling",
+      "severity": "warning"
+    }
+  ]
+}

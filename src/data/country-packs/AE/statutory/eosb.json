@@ -1,0 +1,66 @@
+{
+  "general": {
+    "code": "EOSB",
+    "name": "End of Service Gratuity (accrual)",
+    "description": "End-of-service benefit for expatriate employees under the UAE Labour Law: 21 days' basic wage per year of service for the first five years, 30 days' basic wage per year thereafter, capped at two years' total pay. Shown here as a monthly employer provision, not an employee deduction.",
+    "agency": "MoHRE",
+    "type": "development",
+    "version": "2026.1",
+    "effectiveDate": "2026-01-01",
+    "status": "published"
+  },
+  "eligibility": {
+    "citizenship": [],
+    "visaTypes": ["EXPAT"],
+    "employmentTypes": [],
+    "minimumServiceMonths": 12,
+    "excludedCategories": ["UAE_NATIONAL", "GCC_NATIONAL"],
+    "notes": "Expatriate employees who have completed at least one year of continuous service. Nationals are covered by GPSSA instead. Gratuity is paid on termination; the monthly figure here is an accrual/provision for the employer."
+  },
+  "employeeCategories": [
+    { "code": "EXPAT_EOSB", "name": "Expatriate employee", "immigrationStatusCode": "EXPAT" }
+  ],
+  "rateTables": [
+    { "employeeCategory": "EXPAT_EOSB", "employeeRate": 0, "employerRate": 5.83, "effectiveDate": "2026-01-01" }
+  ],
+  "thresholds": [],
+  "caps": [
+    { "code": "EOSB_CAP", "name": "Total gratuity cap", "type": "contribution_ceiling", "formula": "2 x AnnualBasicWage", "currency": "AED" }
+  ],
+  "salaryComponents": [
+    { "componentCode": "BASIC", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_HOUSING", "classification": "excluded", "included": false },
+    { "componentCode": "ALLOWANCE_TRANSPORT", "classification": "excluded", "included": false }
+  ],
+  "calculationRules": [
+    {
+      "code": "EOSB_ACCRUAL",
+      "name": "Monthly gratuity accrual",
+      "priority": 1,
+      "action": "BasicWage * (21 / 360)",
+      "parameters": {},
+      "description": "First five years: 21 days' basic wage per year -> about 5.83% of basic wage per month. From year six: 30 days per year -> about 8.33%. Only the basic wage counts (allowances excluded)."
+    }
+  ],
+  "rounding": {
+    "employee": { "method": "round", "decimals": 2 },
+    "employer": { "method": "round", "decimals": 2 }
+  },
+  "reporting": {
+    "agency": "MoHRE",
+    "submissionFrequency": "On termination",
+    "portal": "MoHRE",
+    "dueDate": "Within 14 days of the last working day",
+    "forms": []
+  },
+  "validations": [
+    {
+      "code": "EOSB_EXPAT_ONLY",
+      "name": "Expatriates only",
+      "type": "dependency",
+      "expression": "ImmigrationStatusCode = 'EXPAT'",
+      "errorMessage": "End-of-service gratuity applies to expatriate employees; nationals are covered by GPSSA",
+      "severity": "info"
+    }
+  ]
+}

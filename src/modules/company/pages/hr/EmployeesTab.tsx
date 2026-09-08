@@ -4,6 +4,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { hrService, type Employee } from '../../../../services/hr';
 import { supabase } from '../../../../utils/supabase';
+import { residencyOptions, defaultResidency } from '../../../../data/residency-options';
 
 const EMP_TYPES = ['full_time', 'part_time', 'contract', 'intern', 'casual'];
 
@@ -11,6 +12,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
   const [rows, setRows] = useState<Employee[]>([]);
   const [depts, setDepts] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [country, setCountry] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
@@ -19,12 +21,13 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [e, d, u] = await Promise.all([
+      const [e, d, u, co] = await Promise.all([
         hrService.listEmployees(companyId),
         hrService.departments(companyId),
         supabase.from('company_users').select('id, full_name, email').eq('company_id', companyId),
+        supabase.from('companies').select('country').eq('id', companyId).maybeSingle(),
       ]);
-      setRows(e); setDepts(d); setUsers(u.data || []);
+      setRows(e); setDepts(d); setUsers(u.data || []); setCountry(co.data?.country ?? null);
     } catch (err: any) { message.error(err.message); }
     setLoading(false);
   }, [companyId]);
@@ -34,7 +37,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
   const openNew = () => {
     setEditing(null);
     form.resetFields();
-    form.setFieldsValue({ employment_type: 'full_time', status: 'active', residency_status: 'SC', employee_code: `EMP-${String(rows.length + 1).padStart(3, '0')}` });
+    form.setFieldsValue({ employment_type: 'full_time', status: 'active', residency_status: defaultResidency(country), employee_code: `EMP-${String(rows.length + 1).padStart(3, '0')}` });
     setOpen(true);
   };
 
@@ -137,16 +140,9 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
             <Form.Item name="base_salary" label="Base Salary (monthly)"><InputNumber style={{ width: '100%' }} min={0} /></Form.Item>
             <Form.Item name="date_of_birth" label="Date of Birth"><DatePicker style={{ width: '100%' }} /></Form.Item>
             <Form.Item name="residency_status" label="Residency (for statutory)">
-              <Select options={[
-                { label: 'Singapore Citizen', value: 'SC' },
-                { label: 'PR', value: 'PR' },
-                { label: 'Employment Pass', value: 'EP' },
-                { label: 'S Pass', value: 'SP' },
-                { label: 'Work Permit', value: 'WP' },
-                { label: 'Other / Foreigner', value: 'OTHER' },
-              ]} />
+              <Select options={residencyOptions(country).map(o => ({ label: o.label, value: o.value }))} />
             </Form.Item>
-            <Form.Item name="pr_stage" label="PR Stage" dependencies={['residency_status']}>
+            <Form.Item name="pr_stage" label="PR Stage (Singapore)" dependencies={['residency_status']}>
               <Select allowClear disabled={form.getFieldValue('residency_status') !== 'PR'}
                 options={[
                   { label: 'Year 1', value: 'year_1' },

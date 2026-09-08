@@ -5,14 +5,20 @@ import type { EmployeePayrollInput, PayrollPeriod, PayrollRunResult } from '../e
 import { hrService, type Employee } from './hr';
 import dayjs from 'dayjs';
 
-/** Country packs available to the engine. Only SG is authored so far. */
+/** Country packs authored for the payroll engine. */
+const COUNTRY_PACK_LOADERS: Record<string, () => Promise<{ default: CountryPackDef }>> = {
+  SG: () => import('../data/country-packs/SG/index'),
+  AE: () => import('../data/country-packs/AE/index'),
+};
+
+export const SUPPORTED_PACK_CODES = Object.keys(COUNTRY_PACK_LOADERS);
+
 async function loadCountryPack(code: string): Promise<CountryPackDef> {
-  switch (code.toUpperCase()) {
-    case 'SG':
-      return (await import('../data/country-packs/SG/index')).default;
-    default:
-      throw new Error(`Country pack for "${code}" is not built yet — only Singapore (SG) is available.`);
+  const loader = COUNTRY_PACK_LOADERS[code.toUpperCase()];
+  if (!loader) {
+    throw new Error(`Country pack for "${code}" is not built yet — available: ${SUPPORTED_PACK_CODES.join(', ')}.`);
   }
+  return (await loader()).default;
 }
 
 const STATUS_MAP: Record<string, string> = {

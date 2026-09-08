@@ -1,0 +1,11 @@
+[
+  { "name": "New Year's Day", "date": "2026-01-01", "type": "fixed", "recurring": true },
+  { "name": "Eid Al Fitr", "type": "calculated", "recurring": true, "calculationRule": "1-3 Shawwal (Islamic calendar), typically 3 days" },
+  { "name": "Arafat Day", "type": "calculated", "recurring": true, "calculationRule": "9 Dhu al-Hijjah (Islamic calendar)" },
+  { "name": "Eid Al Adha", "type": "calculated", "recurring": true, "calculationRule": "10-12 Dhu al-Hijjah (Islamic calendar), typically 3 days" },
+  { "name": "Hijri New Year", "type": "calculated", "recurring": true, "calculationRule": "1 Muharram (Islamic calendar)" },
+  { "name": "Prophet Muhammad's Birthday", "type": "calculated", "recurring": true, "calculationRule": "12 Rabi al-Awwal (Islamic calendar)" },
+  { "name": "Commemoration Day", "date": "2026-12-01", "type": "fixed", "recurring": true },
+  { "name": "National Day", "date": "2026-12-02", "type": "fixed", "recurring": true },
+  { "name": "National Day Holiday", "date": "2026-12-03", "type": "fixed", "recurring": true }
+]

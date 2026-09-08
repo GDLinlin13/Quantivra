@@ -75,7 +75,7 @@ export function PayrollTab({ companyId }: { companyId: number }) {
             style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>Run Payroll</Button>
         </Space>
         <div style={{ color: 'rgba(240,237,230,0.35)', fontSize: 12, marginTop: 8 }}>
-          Calculates gross, CPF/SDL/SHG, tax and net for all active employees using the {company?.country || 'SG'} country pack. Re-runnable while in draft.
+          Calculates gross pay, statutory contributions, tax and net for all active employees using the {company?.country || 'SG'} country pack. Re-runnable while in draft.
         </div>
       </Card>
 

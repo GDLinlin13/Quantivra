@@ -1,0 +1,4 @@
+[
+  { "name": "WPS Salary Information File (SIF)", "agency": "MoHRE / Central Bank", "frequency": "Monthly", "deadline": "Within 15 days of the pay period" },
+  { "name": "GPSSA Contribution Return", "agency": "GPSSA", "frequency": "Monthly", "deadline": "1st-15th of the following month" }
+]

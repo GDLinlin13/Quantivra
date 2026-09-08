@@ -1,0 +1,28 @@
+{
+  "statuses": [
+    { "code": "PERMANENT", "name": "Permanent (unlimited)", "enabled": true },
+    { "code": "FULL_TIME", "name": "Full-Time", "enabled": true },
+    { "code": "PART_TIME", "name": "Part-Time", "enabled": true },
+    { "code": "FIXED_TERM", "name": "Fixed-Term (limited)", "enabled": true },
+    { "code": "TEMPORARY", "name": "Temporary", "enabled": true }
+  ],
+  "immigrationStatuses": [
+    { "code": "UAE_NATIONAL", "name": "UAE National (Emirati)" },
+    { "code": "GCC_NATIONAL", "name": "GCC National" },
+    { "code": "EXPAT", "name": "Expatriate (residence visa / work permit)" }
+  ],
+  "rules": [
+    { "key": "standard_weekly_hours", "value": "48", "editableByCompany": true, "referenceOnly": false, "description": "Max 48 hours/week, 8 hours/day; reduced by 2 hours/day during Ramadan" },
+    { "key": "minimum_rest_day", "value": "1 per week", "editableByCompany": false, "referenceOnly": false, "description": "At least one paid rest day per week (commonly Friday/Saturday weekend)" },
+    { "key": "default_probation_months", "value": "6", "editableByCompany": true, "referenceOnly": false, "description": "Maximum probation period is 6 months" },
+    { "key": "retirement_age", "value": "60", "editableByCompany": false, "referenceOnly": true, "description": "Retirement age for UAE nationals is 60 (extendable); no fixed retirement age for expatriates" },
+    { "key": "overtime_multiplier", "value": "1.25", "editableByCompany": false, "referenceOnly": false, "description": "Overtime at 125% of basic wage; 150% for work between 10pm-4am or on rest days" },
+    { "key": "annual_leave_days", "value": "30", "editableByCompany": true, "referenceOnly": false, "description": "30 calendar days paid annual leave after one year of service; 2 days/month between 6 and 12 months" },
+    { "key": "sick_leave_days", "value": "90", "editableByCompany": false, "referenceOnly": false, "description": "Up to 90 days/year after probation: first 15 full pay, next 30 half pay, remainder unpaid" },
+    { "key": "gratuity_rule", "value": "EOSB", "editableByCompany": false, "referenceOnly": false, "description": "Expatriates: end-of-service gratuity of 21 days' basic wage per year for the first 5 years, 30 days/year thereafter, capped at 2 years' pay" }
+  ],
+  "noticePeriods": [
+    { "minServiceMonths": 0, "maxServiceMonths": 6, "noticeDays": 14, "description": "During probation" },
+    { "minServiceMonths": 6, "maxServiceMonths": null, "noticeDays": 30, "description": "After probation — 30 to 90 days by agreement" }
+  ]
+}
