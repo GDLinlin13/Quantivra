@@ -3,6 +3,7 @@ import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Sp
 import { PlusOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
+import { adminUsersService, MIN_PASSWORD_LENGTH } from '../../../services/adminUsers';
 
 const { Title } = Typography;
 
@@ -18,7 +19,7 @@ export function CompanyUsersPage() {
     if (!companyId) return;
     setLoading(true);
     const [u, r] = await Promise.all([
-      supabase.from('company_users').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+      supabase.from('company_users').select('id, company_id, email, full_name, job_title, is_active, created_at').eq('company_id', companyId).order('created_at', { ascending: false }),
       supabase.from('company_roles').select('*').eq('company_id', companyId),
     ]);
     setUsers(u.data || []);
@@ -29,22 +30,27 @@ export function CompanyUsersPage() {
   useEffect(() => { load(); }, [companyId]);
 
   const handleCreate = async (values: any) => {
-    const { data, error } = await supabase.from('company_users').insert({
-      company_id: companyId,
-      email: values.email,
-      full_name: values.full_name,
-      password_hash: 'pending',
-      job_title: values.job_title,
-    }).select().single();
-    if (error) { message.error(error.message); return; }
-    await supabase.rpc('set_company_user_password', { p_user_id: data.id, p_password: values.password });
-    if (values.role_id) {
-      await supabase.from('company_user_roles').insert({ user_id: data.id, role_id: values.role_id });
+    if (!companyId) return;
+    try {
+      const res = await adminUsersService.createCompanyUser({
+        company_id: companyId,
+        email: values.email,
+        password: values.password,
+        full_name: values.full_name,
+        job_title: values.job_title,
+        role_id: values.role_id,
+      });
+      if (res.existing_login) {
+        message.info('This person already had a Quantivra login, so they keep their existing password.');
+      } else {
+        message.success('User created');
+      }
+      setModalOpen(false);
+      form.resetFields();
+      load();
+    } catch (e: any) {
+      message.error(e.message);
     }
-    message.success('User created');
-    setModalOpen(false);
-    form.resetFields();
-    load();
   };
 
   const columns = [
@@ -80,7 +86,7 @@ export function CompanyUsersPage() {
           <Form.Item name="job_title" label="Job Title">
             <Input />
           </Form.Item>
-          <Form.Item name="password" label="Temporary Password" rules={[{ required: true, min: 6 }]}>
+          <Form.Item name="password" label="Temporary Password" rules={[{ required: true, min: MIN_PASSWORD_LENGTH }]}>
             <Input.Password />
           </Form.Item>
           <Form.Item name="role_id" label="Role">

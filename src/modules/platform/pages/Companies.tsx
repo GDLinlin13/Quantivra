@@ -3,6 +3,7 @@ import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Sp
 import { PlusOutlined, CheckCircleOutlined, CheckOutlined, LoadingOutlined, CloseCircleOutlined, BankOutlined, CopyOutlined } from '@ant-design/icons';
 import { companyService } from '../../../services';
 import { supabase } from '../../../utils/supabase';
+import { adminUsersService, MIN_PASSWORD_LENGTH } from '../../../services/adminUsers';
 import type { Company } from '../../../types';
 import { MODULES } from '../../../types';
 import { provisionCompany, getProvisionSteps, type ProvisionInput, type ProvisionResult, type ProvisionStep } from '../../../services/provisioning';
@@ -111,9 +112,40 @@ export function CompaniesPage() {
   const [deleting, setDeleting] = useState(false);
   const [form] = Form.useForm();
   const provisionStarted = useRef(false);
+  const [legacyLogins, setLegacyLogins] = useState(0);
+  const [migrating, setMigrating] = useState(false);
+
+  // Company logins created before the switch to Supabase Auth, not yet moved over.
+  const loadLegacyLogins = async () => {
+    const { count } = await supabase.from('company_users')
+      .select('id', { count: 'exact', head: true }).is('auth_user_id', null);
+    setLegacyLogins(count || 0);
+  };
+
+  const handleMigrateLogins = async () => {
+    setMigrating(true);
+    try {
+      const r = await adminUsersService.migrateLegacyUsers();
+      const moved = r.migrated + r.linked_to_existing_login;
+      if (r.failed.length) {
+        Modal.warning({
+          title: `Moved ${moved} login(s); ${r.failed.length} could not be moved`,
+          content: r.failed.map(f => `${f.email}: ${f.reason}`).join('\n'),
+        });
+      } else {
+        message.success(`Moved ${moved} login(s). Everyone keeps their current password.`);
+      }
+    } catch (e: any) {
+      message.error(e.message);
+    } finally {
+      setMigrating(false);
+      loadLegacyLogins();
+    }
+  };
 
   const load = async () => {
     setLoading(true);
+    loadLegacyLogins();
     try {
       const [comps, cntrs] = await Promise.all([
         companyService.list(),
@@ -265,10 +297,20 @@ export function CompaniesPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <Title level={4} style={{ color: '#f0ede6', margin: 0 }}>Companies</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}
-          style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
-          Create Company
-        </Button>
+        <Space>
+          {legacyLogins > 0 && (
+            <Popconfirm
+              title={`Move ${legacyLogins} older login(s) to secure sign-in?`}
+              description="People keep their current passwords. Logins that are not moved cannot sign in."
+              onConfirm={handleMigrateLogins}>
+              <Button loading={migrating}>Upgrade {legacyLogins} older login(s)</Button>
+            </Popconfirm>
+          )}
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}
+            style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
+            Create Company
+          </Button>
+        </Space>
       </div>
 
       <Table
@@ -399,7 +441,7 @@ export function CompaniesPage() {
                 </Col>
                 <Col span={12}>
                   <Form.Item name="owner_password" label={<Text style={{ color: '#f0ede6' }}>Temporary Password</Text>}
-                    rules={[{ required: true, message: 'Required' }]}>
+                    rules={[{ required: true, message: 'Required' }, { min: MIN_PASSWORD_LENGTH, message: `At least ${MIN_PASSWORD_LENGTH} characters` }]}>
                     <Input.Password placeholder="Enter password" />
                   </Form.Item>
                 </Col>

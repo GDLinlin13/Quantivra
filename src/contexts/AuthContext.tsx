@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { authService } from '../services/auth';
+import { authService, type Session } from '../services/auth';
+import { supabase } from '../utils/supabase';
 import type { User } from '../types';
 
 interface AuthState {
@@ -21,30 +22,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [companyId, setCompanyId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const apply = (session: Session | null) => {
+    setUser(session?.user ?? null);
+    setType(session?.type ?? null);
+    setCompanyId(session?.companyId ?? null);
+  };
+
   useEffect(() => {
-    const session = authService.getSession();
-    if (session) {
-      setUser(session.user);
-      setType(session.type);
-      setCompanyId(session.companyId || null);
-    }
-    setLoading(false);
+    let active = true;
+    authService.restoreSession()
+      .then(session => { if (active) apply(session); })
+      .catch(() => { if (active) apply(null); })
+      .finally(() => { if (active) setLoading(false); });
+
+    // Signed out elsewhere (another tab, expired refresh token): drop the UI session.
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') { authService.clearLocal(); apply(null); }
+    });
+    return () => { active = false; sub.subscription.unsubscribe(); };
   }, []);
 
   const login = async (username: string, password: string, loginType: 'platform' | 'company', remember = false, companyCode?: string) => {
     const session = loginType === 'platform'
       ? await authService.loginPlatform(username, password, remember)
       : await authService.loginCompany(username, password, remember, companyCode);
-    setUser(session.user);
-    setType(session.type);
-    setCompanyId(session.companyId || null);
+    apply(session);
   };
 
   const logout = () => {
-    authService.logout();
-    setUser(null);
-    setType(null);
-    setCompanyId(null);
+    apply(null);
+    void authService.logout();
   };
 
   return (

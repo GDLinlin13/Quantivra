@@ -20,13 +20,24 @@ console.log('company', co.id);
 
 // owner + a staff user
 async function mkUser(email, name, title, pw) {
+  // Supabase Auth login (needs migration 011). Re-running resets the password.
+  let authId;
+  const created = await s.auth.admin.createUser({ email, password: pw, email_confirm: true });
+  if (created.data?.user) authId = created.data.user.id;
+  else {
+    const found = await s.rpc('app_find_auth_user', { p_email: email });
+    if (found.error || !found.data) throw created.error || found.error;
+    authId = found.data;
+    await s.auth.admin.updateUserById(authId, { password: pw });
+  }
   let { data: u } = await s.from('company_users').select('*').eq('company_id', co.id).eq('email', email).maybeSingle();
   if (!u) {
-    const r = await s.from('company_users').insert({ company_id: co.id, email, full_name: name, job_title: title, password_hash: 'pending', is_active: true }).select().single();
+    const r = await s.from('company_users').insert({ company_id: co.id, email, full_name: name, job_title: title, auth_user_id: authId, is_active: true }).select().single();
     if (r.error) throw r.error;
     u = r.data;
+  } else if (u.auth_user_id !== authId) {
+    await s.from('company_users').update({ auth_user_id: authId }).eq('id', u.id);
   }
-  await s.rpc('set_company_user_password', { p_user_id: u.id, p_password: pw });
   return u;
 }
 const owner = await mkUser('alice@testco.sg', 'Alice Tan', 'Director', 'test1234');

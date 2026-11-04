@@ -16,12 +16,12 @@ export function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      const uname = values.username.toUpperCase();
-      if (uname === 'AEGIS' || !values.company_code) {
-        await login('aegis', values.password, 'platform', remember);
+      // No company code → platform administrator sign-in.
+      if (!values.company_code?.trim()) {
+        await login(values.username, values.password, 'platform', remember);
         navigate('/platform');
       } else {
-        await login(values.username, values.password, 'company', remember, values.company_code.toLowerCase());
+        await login(values.username, values.password, 'company', remember, values.company_code.trim().toLowerCase());
         navigate('/company');
       }
     } catch (err: any) {
@@ -109,13 +109,14 @@ export function LoginPage() {
               style={{ background: '#0b0f12', border: '1px solid rgba(255,255,255,0.1)', color: '#f0ede6', height: 46, textTransform: 'uppercase' }}
             />
           </Form.Item>
-          <Form.Item name="username" rules={[{ required: true }]}>
+          <Form.Item name="username" rules={[{ required: true, type: 'email', message: 'Enter your email' }]}>
             <Input
               prefix={<UserOutlined style={{ color: 'rgba(240,237,230,0.3)' }} />}
-              placeholder="USERNAME"
+              placeholder="EMAIL"
+              type="email"
+              autoComplete="username"
               size="large"
-              style={{ background: '#0b0f12', border: '1px solid rgba(255,255,255,0.1)', color: '#f0ede6', height: 46, textTransform: 'uppercase' }}
-              onChange={(e) => form.setFieldValue('username', e.target.value.toUpperCase())}
+              style={{ background: '#0b0f12', border: '1px solid rgba(255,255,255,0.1)', color: '#f0ede6', height: 46 }}
             />
           </Form.Item>
           <Form.Item name="password" rules={[{ required: true }]}>
@@ -123,7 +124,7 @@ export function LoginPage() {
               prefix={<LockOutlined style={{ color: 'rgba(240,237,230,0.3)' }} />}
               placeholder="PASSWORD"
               size="large"
-              autoComplete="off"
+              autoComplete="current-password"
               style={{ background: '#0b0f12', border: '1px solid rgba(255,255,255,0.1)', color: '#f0ede6', height: 46 }}
             />
           </Form.Item>
