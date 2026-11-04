@@ -29,6 +29,9 @@ export interface LeaveRuleInput {
   /** company template values for this leave type */
   templateDefault: number;
   statutoryMin: number;
+  /** company policy: extra days per completed year of service, capped at maxDays */
+  incrementPerYear?: number;
+  maxDays?: number | null;
   asOf?: Date;
 }
 
@@ -39,6 +42,21 @@ export interface LeaveEntitlement {
   warnings: string[];
   /** true when a country rule engine produced this, false = plain template fallback */
   computed: boolean;
+}
+
+/** A country rule's result; policyApplies = the company's own policy may be more generous. */
+type RuleResult = LeaveEntitlement & { policyApplies?: boolean };
+
+/** Company policy: base + increment per completed year, capped. */
+export function companyPolicyDays(base: number, incrementPerYear: number, maxDays: number | null | undefined, years: number) {
+  const raw = base + Math.max(0, incrementPerYear) * Math.max(0, years);
+  return maxDays != null && maxDays >= 0 ? Math.min(raw, Math.max(maxDays, base)) : raw;
+}
+
+function describePolicy(base: number, inc: number, max: number | null | undefined, years: number, days: number) {
+  if (!inc) return `Company policy: ${base} days`;
+  return `Company policy: ${base} + ${inc} × ${years} year(s) of service = ${base + inc * years}`
+    + (max != null && days < base + inc * years ? `, capped at ${max}` : '') + ` → ${days} days`;
 }
 
 const WK = 5; // working days per week
@@ -63,7 +81,7 @@ const isPR = (code?: string | null) => code === 'PR';
 // ---------------------------------------------------------------------------
 // Singapore — Ministry of Manpower
 // ---------------------------------------------------------------------------
-function singapore(i: LeaveRuleInput): LeaveEntitlement | null {
+function singapore(i: LeaveRuleInput): RuleResult | null {
   const asOf = i.asOf ?? new Date();
   const name = i.leaveTypeName.toLowerCase();
   const res = i.employee.residency_status;
@@ -78,7 +96,7 @@ function singapore(i: LeaveRuleInput): LeaveEntitlement | null {
     // 7 days in year 1, +1 for each further completed year, capped at 14
     const days = Math.min(7 + svc, 14);
     return {
-      days, statutoryMin: days, computed: true,
+      days, statutoryMin: days, computed: true, policyApplies: true,
       basis: `${svc} completed year(s) of service → 7 + ${svc}, capped at 14`,
       warnings: [],
     };
@@ -147,7 +165,7 @@ function singapore(i: LeaveRuleInput): LeaveEntitlement | null {
     return {
       days: name.includes('hospital') ? 60 : 14,
       statutoryMin: name.includes('hospital') ? 60 : 14,
-      computed: true,
+      computed: true, policyApplies: true,
       basis: name.includes('hospital') ? '60 days hospitalisation leave (after 6 months service)' : '14 days outpatient sick leave (after 6 months service)',
       warnings: eligible ? [] : ['Full paid sick leave applies only after 6 months of service (pro-rated between 3 and 6 months).'],
     };
@@ -156,18 +174,32 @@ function singapore(i: LeaveRuleInput): LeaveEntitlement | null {
   return null; // fall through to template
 }
 
-const COUNTRY_RULES: Record<string, (i: LeaveRuleInput) => LeaveEntitlement | null> = {
+const COUNTRY_RULES: Record<string, (i: LeaveRuleInput) => RuleResult | null> = {
   SG: singapore,
 };
 
 export function computeLeaveEntitlement(i: LeaveRuleInput): LeaveEntitlement {
+  const years = completedYears(i.employee.join_date, i.asOf ?? new Date());
+  const inc = Number(i.incrementPerYear || 0);
+  const policy = companyPolicyDays(Number(i.templateDefault || 0), inc, i.maxDays, years);
+
   const rule = COUNTRY_RULES[i.countryCode?.toUpperCase()];
   const computed = rule?.(i);
-  if (computed) return computed;
+  if (computed) {
+    const { policyApplies, ...result } = computed;
+    // Statutory rules set the floor. For service-based leave (annual, sick) a
+    // more generous company policy wins; eligibility-based leave (maternity,
+    // childcare…) follows the law, and HR can still override per employee.
+    if (policyApplies && policy > result.days) {
+      return { ...result, days: policy,
+        basis: `${describePolicy(Number(i.templateDefault || 0), inc, i.maxDays, years, policy)} (law requires ${result.statutoryMin})` };
+    }
+    return result;
+  }
   return {
-    days: i.templateDefault,
+    days: Math.max(policy, Number(i.statutoryMin || 0)),
     statutoryMin: i.statutoryMin,
-    basis: 'Company statutory-default entitlement (no country-specific rule)',
+    basis: describePolicy(Number(i.templateDefault || 0), inc, i.maxDays, years, policy),
     warnings: [],
     computed: false,
   };

@@ -363,12 +363,12 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
 
   // 15. Numbering Formats
   const numberingFormats = [
-    { entity: 'employee', format: 'EMP-{YYYY}-{0000}', next: 1 },
-    { entity: 'invoice', format: 'INV-{YYYY}-{0000}', next: 1 },
-    { entity: 'purchase_order', format: 'PO-{YYYY}-{0000}', next: 1 },
-    { entity: 'claim', format: 'CLM-{YYYY}-{0000}', next: 1 },
-    { entity: 'leave', format: 'LEV-{YYYY}-{0000}', next: 1 },
-    { entity: 'journal', format: 'JRN-{YYYY}-{0000}', next: 1 },
+    { entity: 'employee', format: 'EMP-{0000}', next: 1, reset: 'never' },
+    { entity: 'invoice', format: 'INV-{YYYY}-{0000}', next: 1, reset: 'yearly' },
+    { entity: 'purchase_order', format: 'PO-{YYYY}-{0000}', next: 1, reset: 'yearly' },
+    { entity: 'claim', format: 'CLM-{YYYY}-{0000}', next: 1, reset: 'yearly' },
+    { entity: 'leave', format: 'LEV-{YYYY}-{0000}', next: 1, reset: 'yearly' },
+    { entity: 'journal', format: 'JRN-{YYYY}-{0000}', next: 1, reset: 'yearly' },
   ];
   const savedNumbering = await run(15, async () => {
     const { error } = await supabase.from('company_settings').upsert({
