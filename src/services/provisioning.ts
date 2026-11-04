@@ -1,6 +1,6 @@
 import { supabase } from '../utils/supabase';
 import { adminUsersService } from './adminUsers';
-import { COUNTRY_PACKS } from '../data/countries';
+import { packFor2026 } from '../data/country-law-2026';
 
 export interface ProvisionInput {
   name: string;
@@ -210,11 +210,11 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
   const departments: string[] = ['Management', 'Finance', 'HR', 'Operations'];
   const positions: string[] = ['CEO', 'Manager', 'Executive', 'Assistant'];
   // The country pack's statutory leave list, falling back to a generic set.
-  const packLeave = COUNTRY_PACKS[input.country]?.leave?.types;
+  const packLeave = packFor2026(input.country)?.leave?.types;
   const leaveTypes: any[] = packLeave && packLeave.length > 0
     ? packLeave.map(t => ({
       name: t.name, carry_forward: t.carry_forward, encashable: t.encashable,
-      // pack minimums are in working days; week-based types are held in weeks
+      // pack minimums: working days (weeks types → held in weeks), calendar days for calendar_days types
       count_method: t.count_method || 'working_days', allow_single_days: !!t.allow_single_days,
       days: t.count_method === 'weeks' ? Math.round((t.min_days / 5) * 100) / 100 : t.min_days,
     }))

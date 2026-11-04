@@ -41,4 +41,8 @@ describe('counting leave', () => {
   it('bad stored patterns fall back to Mon–Fri', () => {
     expect(normalisePattern({ sat: 3 } as any).sat).toBe(0);
   });
+
+  it('calendar days: everything counts', () => {
+    expect(countLeave({ start: '2026-11-04', end: '2026-11-11', method: 'calendar_days', pattern: p('mon_fri'), holidays: sg2026 }).amount).toBe(8);
+  });
 });
