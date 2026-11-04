@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Space } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
+import { adminUsersService, MIN_PASSWORD_LENGTH } from '../../../services/adminUsers';
 
 const { Title } = Typography;
 
@@ -15,7 +16,7 @@ export function PlatformUsersPage() {
   const load = async () => {
     setLoading(true);
     const [u, c] = await Promise.all([
-      supabase.from('company_users').select('*, companies(name)').order('created_at', { ascending: false }),
+      supabase.from('company_users').select('id, company_id, email, full_name, is_active, created_at, companies(name)').order('created_at', { ascending: false }),
       supabase.from('companies').select('id, name, company_code').eq('is_active', true),
     ]);
     setUsers(u.data || []);
@@ -26,22 +27,27 @@ export function PlatformUsersPage() {
   useEffect(() => { load(); }, []);
 
   const handleCreate = async (values: any) => {
-    const { error } = await supabase.from('company_users').insert({
-      company_id: values.company_id,
-      email: values.email,
-      username: values.username,
-      full_name: values.full_name,
-      password_hash: 'temp',
-    });
-    if (error) { message.error(error.message); return; }
-    message.success('User created');
-    setModalOpen(false);
-    form.resetFields();
-    load();
+    try {
+      const res = await adminUsersService.createCompanyUser({
+        company_id: values.company_id,
+        email: values.email,
+        password: values.password,
+        full_name: values.full_name,
+      });
+      if (res.existing_login) {
+        message.info('This email already had a Quantivra login, so it keeps its existing password.');
+      } else {
+        message.success('User created');
+      }
+      setModalOpen(false);
+      form.resetFields();
+      load();
+    } catch (e: any) {
+      message.error(e.message);
+    }
   };
 
   const columns = [
-    { title: 'Username', dataIndex: 'username', key: 'username', render: (v: string) => <span style={{ color: '#f0ede6' }}>{v || '-'}</span> },
     { title: 'Email', dataIndex: 'email', key: 'email' },
     { title: 'Name', dataIndex: 'full_name', key: 'full_name' },
     { title: 'Company', key: 'company', render: (_: any, r: any) => r.companies?.name || r.company_id },
@@ -68,14 +74,14 @@ export function PlatformUsersPage() {
           <Form.Item name="company_id" label="Company" rules={[{ required: true }]}>
             <Select options={companies.map((c: any) => ({ label: c.name, value: c.id }))} />
           </Form.Item>
-          <Form.Item name="username" label="Username" rules={[{ required: true }]}>
-            <Input placeholder="johndoe" />
-          </Form.Item>
           <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email' }]}>
             <Input placeholder="john@company.com" />
           </Form.Item>
           <Form.Item name="full_name" label="Full Name" rules={[{ required: true }]}>
             <Input placeholder="John Doe" />
+          </Form.Item>
+          <Form.Item name="password" label="Temporary Password" rules={[{ required: true, min: MIN_PASSWORD_LENGTH }]}>
+            <Input.Password />
           </Form.Item>
           <Button type="primary" htmlType="submit" block style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
             Create

@@ -1,0 +1,245 @@
+-- Security tests for migration 011 (tenant isolation, anon lockout, RPC
+-- checks). Run through scripts/security-tests/run.sh, which connects as
+-- "authenticator" — the same login PostgREST uses on Supabase — and switches
+-- roles per test, so RLS and grants behave as they do in production.
+\set ON_ERROR_STOP 1
+\set QUIET 1
+
+-- Act as a signed-in user (or anon / service key) for the current transaction.
+\set as_a     'SELECT set_config(''request.jwt.claims'', ''{"sub":"aaaaaaaa-0000-0000-0000-000000000001","role":"authenticated"}'', true); SET LOCAL ROLE authenticated;'
+\set as_b     'SELECT set_config(''request.jwt.claims'', ''{"sub":"bbbbbbbb-0000-0000-0000-000000000002","role":"authenticated"}'', true); SET LOCAL ROLE authenticated;'
+\set as_c     'SELECT set_config(''request.jwt.claims'', ''{"sub":"cccccccc-0000-0000-0000-000000000003","role":"authenticated"}'', true); SET LOCAL ROLE authenticated;'
+\set as_admin 'SELECT set_config(''request.jwt.claims'', ''{"sub":"dddddddd-0000-0000-0000-000000000004","role":"authenticated"}'', true); SET LOCAL ROLE authenticated;'
+\set as_stranger 'SELECT set_config(''request.jwt.claims'', ''{"sub":"eeeeeeee-0000-0000-0000-000000000005","role":"authenticated"}'', true); SET LOCAL ROLE authenticated;'
+\set as_anon  'SELECT set_config(''request.jwt.claims'', ''{"role":"anon"}'', true); SET LOCAL ROLE anon;'
+\set as_service 'SELECT set_config(''request.jwt.claims'', ''{"role":"service_role"}'', true); SET LOCAL ROLE service_role;'
+
+\o /dev/null
+
+\echo '1. anon (the public key in the web app) can read and change nothing'
+BEGIN; :as_anon
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['companies','company_users','employees','payslips','platform_users','country_profiles','company_settings'] LOOP
+    BEGIN
+      EXECUTE format('SELECT count(*) FROM public.%I', t);
+      RAISE EXCEPTION 'FAIL: anon can read %', t;
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
+  END LOOP;
+  BEGIN PERFORM * FROM public.hr_list_employees(1); RAISE EXCEPTION 'FAIL: anon can list employees';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM public.company_delete(1); RAISE EXCEPTION 'FAIL: anon can delete a company';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM * FROM public.app_sign_in_company('alpha'); RAISE EXCEPTION 'FAIL: anon can call sign-in lookup';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+
+\echo '2. a company user sees only their own company'
+BEGIN; :as_a
+DO $$
+BEGIN
+  ASSERT (SELECT array_agg(company_code ORDER BY company_code) FROM companies) = ARRAY['alpha'], 'FAIL: A sees other companies';
+  ASSERT (SELECT count(*) FROM employees) = 2 AND NOT EXISTS (SELECT 1 FROM employees WHERE company_id <> 1), 'FAIL: A sees other employees';
+  ASSERT (SELECT count(*) FROM company_users) = 2, 'FAIL: A sees other companies'' users';
+  ASSERT (SELECT count(*) FROM company_permissions) = 1, 'FAIL: A sees other companies'' permissions';
+  ASSERT (SELECT count(*) FROM company_user_roles) = 1, 'FAIL: A sees other companies'' role links';
+  ASSERT (SELECT count(*) FROM payslips) = 1, 'FAIL: A sees other companies'' payslips';
+  ASSERT (SELECT count(*) FROM platform_users) = 0, 'FAIL: A sees platform users';
+  ASSERT (SELECT count(*) FROM platform_subscriptions) = 1, 'FAIL: A subscription visibility';
+  ASSERT (SELECT count(*) FROM country_profiles) > 0, 'FAIL: A cannot read reference data';
+  ASSERT (SELECT count(*) FROM hr_list_employees(1)) = 2, 'FAIL: A cannot list own employees';
+  ASSERT (SELECT national_id FROM hr_list_employees(1) WHERE employee_code = 'A1') = 'S1234567A', 'FAIL: A cannot read own decrypted PII';
+END $$;
+ROLLBACK;
+
+\echo '3. a company user cannot reach another company through RPCs'
+BEGIN; :as_a
+DO $$
+BEGIN
+  BEGIN PERFORM * FROM hr_list_employees(2); RAISE EXCEPTION 'FAIL: A listed B employees';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM hr_upsert_employee('{"company_id":2,"employee_code":"X","full_name":"Intruder"}'); RAISE EXCEPTION 'FAIL: A added employee to B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM hr_upsert_employee(jsonb_build_object('id', (SELECT id FROM employees WHERE employee_code='B1' LIMIT 1), 'employee_code','B1','full_name','Hacked'));
+    RAISE EXCEPTION 'FAIL: A edited B employee';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM hr_upsert_employee('{"company_id":1,"employee_code":"A9","full_name":"New","manager_id":3}');
+    RAISE EXCEPTION 'FAIL: A linked a manager from B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM hr_delete_employee(3); RAISE EXCEPTION 'FAIL: A deleted B employee';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM leave_apply('{"company_id":2,"employee_id":3,"leave_type_id":2,"start_date":"2026-01-05","end_date":"2026-01-05","days":1}');
+    RAISE EXCEPTION 'FAIL: A applied leave in B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM leave_apply('{"company_id":1,"employee_id":3,"leave_type_id":1,"start_date":"2026-01-05","end_date":"2026-01-05","days":1}');
+    RAISE EXCEPTION 'FAIL: A applied leave for a B employee';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM leave_decide(2, 'approved', 'x', 1); RAISE EXCEPTION 'FAIL: A decided B leave';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM company_set_active(2, false); RAISE EXCEPTION 'FAIL: A deactivated B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM company_delete(1); RAISE EXCEPTION 'FAIL: A deleted a company';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+
+\echo '4. a company user cannot reach another company through tables'
+BEGIN; :as_a
+DO $$
+DECLARE n int;
+BEGIN
+  UPDATE employees SET full_name = 'Hacked' WHERE company_id = 2;
+  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: A updated B employees';
+  DELETE FROM payslips WHERE company_id = 2;
+  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: A deleted B payslips';
+  UPDATE companies SET name = 'Hacked' WHERE id = 2;
+  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: A renamed B';
+  BEGIN INSERT INTO company_settings (company_id, category, key, value) VALUES (2, 'x', 'y', '{}');
+    RAISE EXCEPTION 'FAIL: A wrote B settings';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN UPDATE company_settings SET company_id = 2 WHERE company_id = 1;
+    RAISE EXCEPTION 'FAIL: A moved a row into B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO company_permissions (role_id, module, feature, action) VALUES (2, 'hr', 'x', 'y');
+    RAISE EXCEPTION 'FAIL: A added a permission to a B role';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO companies (name, company_code, country) VALUES ('New', 'new', 'SG');
+    RAISE EXCEPTION 'FAIL: A created a company';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO country_profiles (code, name, currency, phone_code) VALUES ('ZZ', 'Z', 'ZZZ', '+0');
+    RAISE EXCEPTION 'FAIL: A changed reference data';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO platform_audit_log (action, entity_type) VALUES ('x', 'y');
+    RAISE EXCEPTION 'FAIL: A wrote the platform audit log';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+
+\echo '5. a company user can work inside their own company, but not change status, code or logins'
+BEGIN; :as_a
+DO $$
+DECLARE n int; v bigint;
+BEGIN
+  UPDATE companies SET name = 'Alpha Renamed' WHERE id = 1;
+  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 1, 'FAIL: A cannot edit own company';
+  BEGIN UPDATE companies SET is_active = false WHERE id = 1; RAISE EXCEPTION 'FAIL: A changed own status';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN UPDATE companies SET company_code = 'beta2' WHERE id = 1; RAISE EXCEPTION 'FAIL: A changed own code';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN UPDATE company_users SET auth_user_id = 'bbbbbbbb-0000-0000-0000-000000000002' WHERE company_id = 1;
+    RAISE EXCEPTION 'FAIL: A re-pointed a login';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  INSERT INTO company_settings (company_id, category, key, value) VALUES (1, 'x', 'y', '{}');
+  v := hr_upsert_employee('{"company_id":1,"employee_code":"A3","full_name":"New Hire","manager_id":1}');
+  ASSERT v IS NOT NULL, 'FAIL: A cannot add own employee';
+  v := leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-01-05","end_date":"2026-01-05","days":1}');
+  PERFORM leave_decide(v, 'approved', 'ok', 1);
+  ASSERT (SELECT status FROM leave_requests WHERE id = v) = 'approved', 'FAIL: A cannot approve own leave';
+  INSERT INTO audit_log (company_id, user_id, action, entity_type) VALUES (1, 1, 'test', 'x');
+  DELETE FROM audit_log WHERE company_id = 1;
+  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: A deleted audit entries';
+END $$;
+ROLLBACK;
+
+\echo '6. sign-in lookup only matches your own membership'
+BEGIN; :as_a
+DO $$
+BEGIN
+  ASSERT (SELECT count(*) FROM app_sign_in_company('ALPHA')) = 1, 'FAIL: A cannot sign in to alpha';
+  ASSERT (SELECT count(*) FROM app_sign_in_company('beta')) = 0, 'FAIL: A signed in to beta';
+  ASSERT (SELECT count(*) FROM app_sign_in_platform()) = 0, 'FAIL: A signed in to platform';
+END $$;
+ROLLBACK;
+BEGIN; :as_stranger
+DO $$
+BEGIN
+  ASSERT (SELECT count(*) FROM companies) = 0, 'FAIL: stranger sees companies';
+  ASSERT (SELECT count(*) FROM app_sign_in_company('alpha')) = 0, 'FAIL: stranger signed in';
+  BEGIN PERFORM * FROM hr_list_employees(1); RAISE EXCEPTION 'FAIL: stranger listed employees';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+
+\echo '7. users of a deactivated company are locked out'
+BEGIN; :as_c
+DO $$
+BEGIN
+  ASSERT (SELECT count(*) FROM companies) = 0, 'FAIL: C sees its inactive company';
+  ASSERT (SELECT count(*) FROM employees) = 0, 'FAIL: C sees employees';
+  ASSERT (SELECT count(*) FROM app_sign_in_company('gamma')) = 0, 'FAIL: C signed in to inactive company';
+END $$;
+ROLLBACK;
+
+\echo '8. a platform admin sees and manages every company'
+BEGIN; :as_admin
+DO $$
+BEGIN
+  ASSERT (SELECT count(*) FROM companies) = 3, 'FAIL: admin does not see all companies';
+  ASSERT (SELECT count(*) FROM employees) >= 3, 'FAIL: admin does not see all employees';
+  ASSERT (SELECT count(*) FROM hr_list_employees(2)) = 1, 'FAIL: admin cannot list B employees';
+  ASSERT (SELECT count(*) FROM app_sign_in_platform()) = 1, 'FAIL: admin cannot sign in to platform';
+  INSERT INTO country_profiles (code, name, currency, phone_code) VALUES ('ZZ', 'Z', 'ZZZ', '+0');
+  INSERT INTO companies (name, company_code, country) VALUES ('New', 'new', 'SG');
+  PERFORM company_set_active(2, false);
+  ASSERT NOT (SELECT is_active FROM companies WHERE id = 2), 'FAIL: admin cannot deactivate';
+  ASSERT NOT EXISTS (SELECT 1 FROM company_users WHERE company_id = 2 AND is_active), 'FAIL: deactivate did not lock users';
+  PERFORM company_delete(2);
+  ASSERT NOT EXISTS (SELECT 1 FROM employees WHERE company_id = 2), 'FAIL: delete did not cascade';
+END $$;
+ROLLBACK;
+
+\echo '9. server-only functions: service key yes, browser no'
+BEGIN; :as_a
+DO $$
+BEGIN
+  BEGIN PERFORM app_find_auth_user('b@beta.test'); RAISE EXCEPTION 'FAIL: browser looked up auth users';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM * FROM app_legacy_password_hashes(); RAISE EXCEPTION 'FAIL: browser read legacy hashes';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM grant_platform_admin('a@alpha.test'); RAISE EXCEPTION 'FAIL: browser granted platform admin';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM count(*) FROM private.legacy_password_hashes; RAISE EXCEPTION 'FAIL: browser read private schema';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM private.dec(national_id_enc) FROM employees; RAISE EXCEPTION 'FAIL: browser decrypted PII directly';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_service
+DO $$
+BEGIN
+  ASSERT app_find_auth_user('B@Beta.test') = 'bbbbbbbb-0000-0000-0000-000000000002', 'FAIL: service cannot look up auth users';
+  ASSERT (SELECT count(*) FROM app_legacy_password_hashes()) = 1, 'FAIL: service cannot read legacy hashes';
+  ASSERT (SELECT count(*) FROM hr_list_employees(2)) = 1, 'FAIL: service key cannot use employee RPCs';
+  UPDATE company_users SET auth_user_id = 'eeeeeeee-0000-0000-0000-000000000005' WHERE email = 'legacy@alpha.test';
+  PERFORM app_clear_legacy_password((SELECT id FROM company_users WHERE email = 'legacy@alpha.test'));
+END $$;
+ROLLBACK;
+
+\echo '10. structure: no password hashes in public tables, RLS on everywhere, no anon grants'
+DO $$
+DECLARE v text;
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND column_name = 'password_hash'), 'FAIL: password_hash column still public';
+  SELECT string_agg(relname, ', ') INTO v FROM pg_class
+  WHERE relnamespace = 'public'::regnamespace AND relkind = 'r' AND NOT relrowsecurity;
+  ASSERT v IS NULL, 'FAIL: tables without RLS: ' || coalesce(v, '');
+  SELECT string_agg(DISTINCT table_name, ', ') INTO v FROM information_schema.role_table_grants
+  WHERE table_schema = 'public' AND grantee = 'anon';
+  ASSERT v IS NULL, 'FAIL: anon still has table grants: ' || coalesce(v, '');
+  SELECT string_agg(p.proname, ', ') INTO v FROM pg_proc p
+  WHERE p.pronamespace = 'public'::regnamespace AND has_function_privilege('anon', p.oid, 'EXECUTE');
+  ASSERT v IS NULL, 'FAIL: anon can execute: ' || coalesce(v, '');
+  SELECT string_agg(p.proname, ', ') INTO v FROM pg_proc p
+  WHERE p.pronamespace = 'public'::regnamespace AND p.prosecdef
+    AND p.prosrc !~ 'app_require_(company|platform_admin)|app_is_privileged_role|auth\.uid\(\)'
+    AND p.proname NOT IN ('app_is_platform_admin', 'app_my_company_ids', 'app_can_access_company',
+                          'app_require_company', 'app_require_platform_admin');
+  ASSERT v IS NULL, 'FAIL: SECURITY DEFINER functions without a caller check: ' || coalesce(v, '');
+END $$;
+
+\o
+\echo 'ALL SECURITY TESTS PASSED'

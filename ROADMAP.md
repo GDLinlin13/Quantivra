@@ -26,18 +26,12 @@ Here's where the July rebuild actually stands against that.
 | Statutory filing exports (IR8A, CPF file, EPF, etc.) | none |
 | Engine ↔ real employee data wiring | none |
 
-## Security gaps ⚠️ (your explicit asks)
-1. **Passwords are plaintext.** `company_users.password_hash` stores the raw
-   password (`provisioning.ts:172`); platform login is hardcoded `=== '123456'`
-   (`auth.ts:32`). Needs real hashing — best path is adopting **Supabase Auth**
-   (bcrypt + sessions + RLS), interim is a `pgcrypto crypt()` RPC.
-2. **PII is plaintext** — NRIC/FIN, tax IDs, bank account numbers. Needs
-   column encryption (`pgcrypto` + key in Supabase Vault) with decryption only
-   through checked server-side RPCs.
-3. **No hard-delete company.** Only "Deactivate" exists. Cascade FKs are in place
-   for the *current* tables, but a real "delete company + all data + storage files"
-   flow needs building (and every new HR/finance table must carry
-   `ON DELETE CASCADE` + a storage-bucket sweep).
+## Security ✅ (foundation, 2026-11-04 — see `SECURITY_SETUP.md`)
+- Passwords: Supabase Auth (bcrypt + sessions). The hardcoded platform password is gone.
+- Tenant isolation: RLS on every table. The public key alone reads nothing. A company sees only its own rows. Tested by `scripts/security-tests/run.sh`.
+- PII (NRIC/FIN, tax ID, bank account) encrypted with `pgcrypto`. Decrypted only by checked RPCs.
+- Hard-delete company: `company_delete()` (platform admin only, company must be deactivated first; cascades).
+- **Next:** roles/permissions inside a company, PII key → Supabase Vault, forgot-password email, storage cleanup on company delete.
 
 ## Suggested build order
 1. **Security foundation** — Supabase Auth migration + PII encryption + hard-delete-company flow. Do this first; retrofitting later is worse.

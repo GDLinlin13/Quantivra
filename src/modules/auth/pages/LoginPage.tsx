@@ -3,6 +3,7 @@ import { Card, Form, Input, Button, Checkbox } from 'antd';
 import { UserOutlined, LockOutlined, BankOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
+import { isPlatformUsername } from '../../../services/auth';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -16,12 +17,12 @@ export function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      const uname = values.username.toUpperCase();
-      if (uname === 'AEGIS' || !values.company_code) {
-        await login('aegis', values.password, 'platform', remember);
+      // AEGIS (or no company code) → platform administrator sign-in.
+      if (isPlatformUsername(values.username) || !values.company_code?.trim()) {
+        await login(values.username, values.password, 'platform', remember);
         navigate('/platform');
       } else {
-        await login(values.username, values.password, 'company', remember, values.company_code.toLowerCase());
+        await login(values.username, values.password, 'company', remember, values.company_code.trim().toLowerCase());
         navigate('/company');
       }
     } catch (err: any) {
@@ -109,13 +110,13 @@ export function LoginPage() {
               style={{ background: '#0b0f12', border: '1px solid rgba(255,255,255,0.1)', color: '#f0ede6', height: 46, textTransform: 'uppercase' }}
             />
           </Form.Item>
-          <Form.Item name="username" rules={[{ required: true }]}>
+          <Form.Item name="username" rules={[{ required: true, message: 'Enter your username or email' }]}>
             <Input
               prefix={<UserOutlined style={{ color: 'rgba(240,237,230,0.3)' }} />}
-              placeholder="USERNAME"
+              placeholder="USERNAME OR EMAIL"
+              autoComplete="username"
               size="large"
-              style={{ background: '#0b0f12', border: '1px solid rgba(255,255,255,0.1)', color: '#f0ede6', height: 46, textTransform: 'uppercase' }}
-              onChange={(e) => form.setFieldValue('username', e.target.value.toUpperCase())}
+              style={{ background: '#0b0f12', border: '1px solid rgba(255,255,255,0.1)', color: '#f0ede6', height: 46 }}
             />
           </Form.Item>
           <Form.Item name="password" rules={[{ required: true }]}>
@@ -123,7 +124,7 @@ export function LoginPage() {
               prefix={<LockOutlined style={{ color: 'rgba(240,237,230,0.3)' }} />}
               placeholder="PASSWORD"
               size="large"
-              autoComplete="off"
+              autoComplete="current-password"
               style={{ background: '#0b0f12', border: '1px solid rgba(255,255,255,0.1)', color: '#f0ede6', height: 46 }}
             />
           </Form.Item>

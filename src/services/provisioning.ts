@@ -1,4 +1,5 @@
 import { supabase } from '../utils/supabase';
+import { adminUsersService } from './adminUsers';
 
 export interface ProvisionInput {
   name: string;
@@ -165,19 +166,16 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
 
   // 2. Owner Account
   const owner = await run(2, async () => {
-    const { data, error } = await supabase.from('company_users').insert({
+    // Login is created server-side (Supabase Auth); the password never touches our tables.
+    const res = await adminUsersService.createCompanyUser({
       company_id: company.id,
       full_name: input.owner_full_name,
       email: input.owner_email,
-      password_hash: input.owner_password,
+      password: input.owner_password,
       phone: input.owner_mobile || '',
       job_title: 'Owner',
-      is_active: true,
-    }).select().single();
-    if (error) throw error;
-    // Replace the plaintext with a bcrypt hash (server-side).
-    await supabase.rpc('set_company_user_password', { p_user_id: data.id, p_password: input.owner_password });
-    return data;
+    });
+    return res.user;
   });
 
   // 3. Branch
