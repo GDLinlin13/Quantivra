@@ -1,5 +1,6 @@
 import { supabase } from '../utils/supabase';
 import { adminUsersService } from './adminUsers';
+import { COUNTRY_PACKS } from '../data/countries';
 
 export interface ProvisionInput {
   name: string;
@@ -208,12 +209,16 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
 
   const departments: string[] = ['Management', 'Finance', 'HR', 'Operations'];
   const positions: string[] = ['CEO', 'Manager', 'Executive', 'Assistant'];
-  const leaveTypes: any[] = [
-    { name: 'Annual Leave', days: 14, carry_forward: 7, encashable: true },
-    { name: 'Sick Leave', days: 14, carry_forward: 0, encashable: false },
-    { name: 'Hospitalization Leave', days: 60, carry_forward: 0, encashable: false },
-    { name: 'Maternity Leave', days: 98, carry_forward: 0, encashable: false },
-  ];
+  // The country pack's statutory leave list, falling back to a generic set.
+  const packLeave = COUNTRY_PACKS[input.country]?.leave?.types;
+  const leaveTypes: any[] = packLeave && packLeave.length > 0
+    ? packLeave.map(t => ({ name: t.name, days: t.min_days, carry_forward: t.carry_forward, encashable: t.encashable }))
+    : [
+      { name: 'Annual Leave', days: 14, carry_forward: 7, encashable: true },
+      { name: 'Sick Leave', days: 14, carry_forward: 0, encashable: false },
+      { name: 'Hospitalization Leave', days: 60, carry_forward: 0, encashable: false },
+      { name: 'Maternity Leave', days: 98, carry_forward: 0, encashable: false },
+    ];
   const payrollComponents: any[] = [
     { name: 'Basic Salary', type: 'Earning', is_taxable: true },
     { name: 'Allowance', type: 'Earning', is_taxable: true },
