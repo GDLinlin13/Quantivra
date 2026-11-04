@@ -3,6 +3,8 @@
 //   working_days: only days the person normally works count; public holidays
 //                 and rest days are skipped. A half working day (e.g. Saturday
 //                 morning) counts 0.5.
+//   calendar_days: every day counts, weekends and holidays included
+//                 (e.g. "98 consecutive days" of maternity leave).
 //   weeks:        taken in whole-week blocks of 7 calendar days, weekends and
 //                 public holidays included (e.g. Singapore maternity leave). If
 //                 the leave type allows single days by agreement, a part-week
@@ -10,7 +12,7 @@
 
 export type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 export type WorkPattern = Record<DayKey, number>; // 1 full day, 0.5 half day, 0 rest day
-export type CountMethod = 'working_days' | 'weeks';
+export type CountMethod = 'working_days' | 'weeks' | 'calendar_days';
 
 export const DAY_KEYS: DayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 export const DAY_LABELS: Record<DayKey, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
@@ -85,6 +87,8 @@ export function countLeave(i: LeaveCountInput): LeaveCount {
   const base = { calendarDays, workingDays: working, skippedRestDays, skippedHolidays };
 
   if (calendarDays === 0) return { ...base, amount: 0, unit: i.method === 'weeks' ? 'weeks' : 'days', error: 'The end date is before the start date' };
+
+  if (i.method === 'calendar_days') return { ...base, amount: calendarDays, unit: 'days' };
 
   if (i.method === 'weeks') {
     if (calendarDays % 7 === 0 && !i.halfDay) return { ...base, amount: calendarDays / 7, unit: 'weeks' };

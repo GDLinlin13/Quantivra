@@ -65,7 +65,7 @@ export function LeaveTypesTab({ companyId }: { companyId: number }) {
           { title: 'Statutory min', dataIndex: 'statutory_min', key: 'sm', render: (v: number) => v || 0 },
           { title: 'Counted in', key: 'cm', render: (_: any, r: LeaveType) => r.count_method === 'weeks'
             ? <span>Whole weeks{r.allow_single_days ? <Typography.Text type="secondary" style={{ display: 'block', fontSize: 11 }}>single days allowed</Typography.Text> : null}</span>
-            : 'Working days' },
+            : r.count_method === 'calendar_days' ? 'Calendar days' : 'Working days' },
           { title: 'Paid', dataIndex: 'is_paid', key: 'p', render: (v: boolean) => v ? <Tag color="green">Paid</Tag> : <Tag>Unpaid</Tag> },
           { title: 'Approval', dataIndex: 'requires_approval', key: 'a', render: (v: boolean) => v ? 'Required' : 'Auto' },
           { title: 'Carry over (max)', dataIndex: 'carry_forward_cap', key: 'c' },
@@ -81,6 +81,7 @@ export function LeaveTypesTab({ companyId }: { companyId: number }) {
             <Select options={[
               { value: 'working_days', label: 'Working days — skips rest days and public holidays' },
               { value: 'weeks', label: 'Whole weeks — 7-day blocks, weekends and holidays included' },
+              { value: 'calendar_days', label: 'Calendar days — every day counts, weekends and holidays included' },
             ]} />
           </Form.Item>
           <Form.Item noStyle shouldUpdate={(a, b) => a.count_method !== b.count_method}>

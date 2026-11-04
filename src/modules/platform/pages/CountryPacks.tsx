@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Space, Descriptions, Tabs, List, InputNumber, Divider, Row, Col } from 'antd';
+import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Space, Descriptions, Tabs, List, InputNumber, Divider, Row, Col , Alert } from 'antd';
 import { PlusOutlined, EditOutlined, CloseOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { COUNTRY_PACKS } from '../../../data/countries';
+import { buildPackConfig } from '../../../data/packConfig';
+import { packFor2026 } from '../../../data/country-law-2026';
 import { SectionEditor, SECTION_DEFS, normalizeSection } from './country-packs/SectionEditor';
 
 const { Title, Text } = Typography;
@@ -82,55 +84,9 @@ export function CountryPacksPage() {
 
   const localFallback = useMemo(() => {
     if (!selectedCountry) return null;
-    const p = COUNTRY_PACKS[selectedCountry];
+    const p = packFor2026(selectedCountry);
     if (!p) return null;
-    const config = {
-      currency: p.general?.currency,
-      currency_symbol: p.general?.currency_symbol,
-      timezone: p.general?.timezone,
-      primary_language: p.general?.primary_language,
-      secondary_language: p.general?.secondary_language,
-      date_format: p.general?.date_format,
-      statutory_deductions: p.statutory_contributions,
-      payroll_components: p.payroll_components,
-      payroll: p.payroll,
-      employment_rules: {
-        max_weekly_hours: p.employment?.max_weekly_hours,
-        probation_months: p.employment?.probation_months,
-        notice_period_days: p.employment?.notice_period_days,
-        retirement_age: p.employment?.retirement_age,
-        rest_days: p.employment?.rest_days,
-        termination_rules: p.termination?.notice_period || '',
-      },
-      employment_types: p.employment_types,
-      employee_categories: p.employee_categories,
-      tax_brackets: p.income_tax?.brackets,
-      gst_rate: p.sales_tax && p.sales_tax.length > 0 ? p.sales_tax[0].rate : undefined,
-      tax_filing_frequency: p.income_tax?.filing_frequency,
-      leave_minimums: p.leave?.types,
-      public_holidays: p.public_holidays,
-      government_agencies: p.government_agencies,
-      government_forms: p.government_forms,
-      fiscal_year_start: p.accounting?.fiscal_year_start,
-      default_tax_code: p.accounting?.default_tax_code,
-      invoice_number_format: p.accounting?.invoice_number_format,
-      payment_terms: p.accounting?.payment_terms,
-      tax_codes: p.accounting?.tax_codes,
-      payment_methods: p.banking?.payment_methods,
-      document_numbering: p.document_numbering,
-      workflow_templates: p.workflow_templates,
-      dashboard_widgets: p.dashboard_widgets,
-      compliance: {
-        employment_act: p.compliance?.employment_act,
-        record_retention_years: p.compliance?.record_retention_years,
-        payslip_requirements: p.compliance?.payslip_requirements,
-        privacy_law: p.compliance?.privacy_law,
-        checklist: p.compliance?.checklist,
-      },
-      localisation: p.localisation,
-      statutory_contribution_rate: undefined,
-      overtime_rules: [],
-    };
+    const config = buildPackConfig(p, selectedCountry);
     return {
       id: null,
       country_code: selectedCountry,
@@ -299,6 +255,26 @@ export function CountryPacksPage() {
             <Descriptions.Item label="Version">{selectedVersion.version}</Descriptions.Item>
             <Descriptions.Item label="Effective">{selectedVersion.effective_from} ~ {selectedVersion.effective_to || 'Current'}</Descriptions.Item>
           </Descriptions>
+          {(selectedVersion.config?.law_sources?.length > 0 || selectedVersion.config?.law_verify?.length > 0) && (
+            <div style={{ marginTop: 16 }}>
+              <Text style={{ color: 'rgba(240,237,230,0.6)' }}>
+                Law as of {selectedVersion.config?.law_effective_from || selectedVersion.effective_from}.
+                {selectedVersion.config?.minimum_wage_note ? ` Minimum wage: ${selectedVersion.config.minimum_wage_note}.` : ''}
+              </Text>
+              {selectedVersion.config?.law_verify?.length > 0 && (
+                <Alert type="warning" showIcon style={{ marginTop: 8 }}
+                  message="Please verify before relying on these"
+                  description={<ul style={{ margin: 0, paddingLeft: 18 }}>{selectedVersion.config.law_verify.map((v: string) => <li key={v}>{v}</li>)}</ul>} />
+              )}
+              {selectedVersion.config?.law_sources?.length > 0 && (
+                <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(240,237,230,0.5)' }}>
+                  Sources: {selectedVersion.config.law_sources.map((u: string, k: number) => (
+                    <span key={u}>{k > 0 && ' · '}{u.startsWith('http') ? <a href={u.split(' ')[0]} target="_blank" rel="noreferrer">{u.replace(/^https?:\/\//, '')}</a> : u}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ),
     },
@@ -518,7 +494,7 @@ export function CountryPacksPage() {
             <div>
               <Title level={5} style={{ color: '#f0ede6', margin: 0 }}>Legal Leave Minimums</Title>
               <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
-                The legal floor in working days, copied to new companies as a starting point. Each company sets its own policy under HR → Leave Types.
+                The legal floor, copied to new companies as a starting point. Each company sets its own policy under HR → Leave Types.
               </Text>
             </div>
             <Button icon={<EditOutlined />} size="small" onClick={() => openEdit('leave_minimums')}>Edit</Button>
@@ -529,7 +505,12 @@ export function CountryPacksPage() {
             pagination={false} size="small" style={{ background: 'transparent' }}
             columns={[
               { title: 'Leave Type', dataIndex: 'name', key: 'name', render: (v: string) => <Text style={{ color: '#f0ede6' }}>{v}</Text> },
-              { title: 'Legal minimum', dataIndex: 'min_days', key: 'min_days', render: (v: number) => (v ? `${v} days${v >= 5 && v % 5 === 0 ? ` (${v / 5} weeks)` : ''}` : '-') },
+              { title: 'Legal minimum', dataIndex: 'min_days', key: 'min_days', render: (v: number, r: any) => {
+                if (!v) return 'Not required';
+                if (r.count_method === 'weeks') return `${Math.round((v / 5) * 100) / 100} weeks`;
+                if (r.count_method === 'calendar_days') return `${v} calendar days`;
+                return `${v} working days`;
+              } },
               { title: 'Carry Forward', dataIndex: 'carry_forward', key: 'carry_forward', render: (v: any) => v ? `${v} days` : '-' },
               { title: 'Encashable', dataIndex: 'encashable', key: 'encashable', render: (v: boolean) => v ? 'Yes' : 'No' },
             ]}

@@ -55,8 +55,8 @@ export interface CountryPackConfig {
     name: string; rate: number; notes: string;
   }[];
   leave: {
-    /** min_days is always in working days (5 per week); count_method 'weeks' = taken in whole weeks */
-    types: { name: string; min_days: number; carry_forward: number; encashable: boolean; count_method?: 'working_days' | 'weeks'; allow_single_days?: boolean }[];
+    /** min_days: working days (5 per week) for working_days and weeks types; calendar days for calendar_days types */
+    types: { name: string; min_days: number; carry_forward: number; encashable: boolean; count_method?: 'working_days' | 'weeks' | 'calendar_days'; allow_single_days?: boolean }[];
   };
   public_holidays: (string | { name: string; date: string; recurring: boolean })[] | string[];
   government_agencies: { name: string; submission_frequency: string; portal: string }[];
