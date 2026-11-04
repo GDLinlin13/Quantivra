@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Row, Col, Card, Statistic, Typography } from 'antd';
 import { BuildOutlined, GlobalOutlined, TeamOutlined, CrownOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
+import { PLATFORM_USERNAMES } from '../../../services/auth';
 
 const { Title, Text } = Typography;
 
@@ -13,7 +14,9 @@ export function PlatformDashboard() {
       supabase.from('companies').select('*', { count: 'exact', head: true }),
       supabase.from('country_profiles').select('*', { count: 'exact', head: true }),
       supabase.from('industry_profiles').select('*', { count: 'exact', head: true }),
-      supabase.from('platform_users').select('*', { count: 'exact', head: true }),
+      // The built-in AEGIS system account is not counted as a platform user.
+      supabase.from('platform_users').select('*', { count: 'exact', head: true })
+        .not('email', 'in', `(${Object.values(PLATFORM_USERNAMES).map(e => `"${e}"`).join(',')})`),
     ]).then(([c, ct, i, u]) => {
       setStats({
         companies: c.count || 0,

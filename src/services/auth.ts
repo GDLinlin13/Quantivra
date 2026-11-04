@@ -46,11 +46,31 @@ function toEmail(identifier: string): string {
   return PLATFORM_USERNAMES[id] ?? id;
 }
 
+// Plain-language reasons, so a failed sign-in says what to fix.
+function signInMessage(error: { message?: string; status?: number; code?: string } | null): string {
+  const msg = error?.message || '';
+  if (/invalid login credentials/i.test(msg) || error?.code === 'invalid_credentials') return 'Wrong username/email or password';
+  if (/email not confirmed/i.test(msg)) return 'This login has not been confirmed yet (Supabase → Authentication → Users → Confirm)';
+  if (/fetch|network|failed to fetch/i.test(msg) || error?.status === 0) return 'Cannot reach the sign-in service. Check your connection and try again.';
+  return msg ? `Sign-in failed: ${msg}` : INVALID;
+}
+
 async function signIn(email: string, password: string, remember: boolean): Promise<string> {
   setRememberMe(remember);
-  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
-  if (error || !data.user) throw new Error(INVALID);
-  return data.user.id;
+  let result;
+  try {
+    result = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+  } catch (e: any) {
+    throw new Error(signInMessage({ message: e?.message || 'network error', status: 0 }));
+  }
+  if (result.error || !result.data.user) throw new Error(signInMessage(result.error));
+  return result.data.user.id;
+}
+
+/** Password was right, but this login has no access here: sign out and explain. */
+async function rejectAccess(reason: string, error?: { message?: string } | null): Promise<never> {
+  await supabase.auth.signOut();
+  throw new Error(error?.message ? `${reason} (${error.message})` : reason);
 }
 
 export const authService = {
@@ -58,10 +78,8 @@ export const authService = {
     const authUserId = await signIn(toEmail(identifier), password, remember);
     const { data, error } = await supabase.rpc('app_sign_in_platform');
     const row = Array.isArray(data) ? data[0] : data;
-    if (error || !row) {
-      await supabase.auth.signOut();
-      throw new Error(INVALID);
-    }
+    if (error) await rejectAccess('Signed in, but could not check platform access', error);
+    if (!row) await rejectAccess('This login is not a platform administrator');
     const user: User = {
       id: row.id, username: row.username, email: row.email, full_name: row.full_name,
       roles: ['super_admin'], is_super_admin: true, is_active: true, created_at: new Date().toISOString(),
@@ -76,10 +94,8 @@ export const authService = {
     const authUserId = await signIn(email, password, remember);
     const { data, error } = await supabase.rpc('app_sign_in_company', { p_company_code: companyCode });
     const row = Array.isArray(data) ? data[0] : data;
-    if (error || !row) {
-      await supabase.auth.signOut();
-      throw new Error(INVALID);
-    }
+    if (error) await rejectAccess('Signed in, but could not check company access', error);
+    if (!row) await rejectAccess(`This login has no active access to company "${companyCode.toUpperCase()}"`);
     const user: User = {
       id: row.id, company_id: row.company_id, email: row.email, full_name: row.full_name,
       username: row.email, roles: [], is_super_admin: false, is_active: true, created_at: new Date().toISOString(),
