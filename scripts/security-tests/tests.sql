@@ -218,6 +218,27 @@ BEGIN
 END $$;
 ROLLBACK;
 
+\echo '9b. work weeks and holidays stay inside their company'
+BEGIN; :as_a
+DO $$
+BEGIN
+  INSERT INTO company_holidays (company_id, holiday_date, name) VALUES (1, '2026-12-31', 'Alpha day');
+  BEGIN INSERT INTO company_holidays (company_id, holiday_date, name) VALUES (2, '2026-12-31', 'Beta day');
+    RAISE EXCEPTION 'FAIL: A added a holiday to B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  INSERT INTO employee_work_patterns (employee_id, company_id, pattern) VALUES (1, 1, '{"sat":1}');
+  BEGIN INSERT INTO employee_work_patterns (employee_id, company_id, pattern) VALUES (3, 1, '{"sat":1}');
+    RAISE EXCEPTION 'FAIL: A set the work week of a B employee';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_b
+DO $$
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM company_holidays WHERE company_id = 1), 'FAIL: B sees A holidays';
+END $$;
+ROLLBACK;
+
 \echo '10. structure: no password hashes in public tables, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;

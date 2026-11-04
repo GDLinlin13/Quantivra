@@ -1,5 +1,7 @@
 import { supabase } from '../utils/supabase';
 import { computeLeaveEntitlement } from '../data/leave-rules';
+import { normalisePattern, DEFAULT_WORK_PATTERN, type CountMethod, type WorkPattern } from '../utils/workdays';
+import { officialHolidays } from '../data/public-holidays';
 
 export interface Dependent {
   id?: number;
@@ -91,6 +93,8 @@ export interface LeaveType {
   carry_forward_cap: number; encashable: boolean; color: string; active: boolean;
   /** company policy: extra days per completed year of service, capped at max_days */
   increment_per_year: number; max_days: number | null;
+  /** working_days: skip rest days & holidays; weeks: whole 7-day blocks (entitlement in weeks) */
+  count_method: CountMethod; allow_single_days: boolean;
 }
 
 /** One row of the "start new leave year" preview. */
@@ -100,6 +104,15 @@ export interface LeaveYearRow {
 }
 
 function entitlementFor(lt: LeaveType, employee: Employee, deps: Dependent[], countryCode: string, year: number) {
+  const ent = entitlementInDays(lt, employee, deps, countryCode, year);
+  // Country rules speak in working days (5 per week); week-based types hold weeks.
+  if (lt.count_method === 'weeks' && ent.computed) {
+    return { ...ent, days: Math.round((ent.days / 5) * 100) / 100, statutoryMin: Math.round((ent.statutoryMin / 5) * 100) / 100 };
+  }
+  return ent;
+}
+
+function entitlementInDays(lt: LeaveType, employee: Employee, deps: Dependent[], countryCode: string, year: number) {
   return computeLeaveEntitlement({
     leaveTypeName: lt.name, countryCode,
     employee: {
@@ -134,7 +147,7 @@ export interface LeaveRequest {
   reason: string | null; status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   applied_at: string; decided_by: number | null; decided_at: string | null; decision_note: string | null;
   employees?: { full_name: string; employee_code: string };
-  leave_types?: { name: string; color: string };
+  leave_types?: { name: string; color: string; count_method?: string };
 }
 
 export const leaveService = {
@@ -165,7 +178,7 @@ export const leaveService = {
 
   async requests(companyId: number, opts: { employeeId?: number; status?: string } = {}): Promise<LeaveRequest[]> {
     let q = supabase.from('leave_requests')
-      .select('*, employees(full_name, employee_code), leave_types(name, color)')
+      .select('*, employees(full_name, employee_code), leave_types(name, color, count_method)')
       .eq('company_id', companyId).order('applied_at', { ascending: false });
     if (opts.employeeId) q = q.eq('employee_id', opts.employeeId);
     if (opts.status) q = q.eq('status', opts.status);
@@ -297,3 +310,74 @@ export function businessDays(start: string, end: string, halfDay: boolean): numb
   if (halfDay && count > 0) return count - 0.5;
   return count;
 }
+
+/** Work weeks and public holidays, used to count leave correctly. */
+export const calendarService = {
+  async companyPattern(companyId: number): Promise<WorkPattern> {
+    const { data } = await supabase.from('company_settings').select('value')
+      .eq('company_id', companyId).eq('category', 'company').eq('key', 'work_pattern').maybeSingle();
+    return data?.value ? normalisePattern(data.value as Partial<WorkPattern>) : DEFAULT_WORK_PATTERN;
+  },
+
+  async saveCompanyPattern(companyId: number, pattern: WorkPattern) {
+    const { error } = await supabase.from('company_settings').upsert(
+      { company_id: companyId, category: 'company', key: 'work_pattern', value: pattern },
+      { onConflict: 'company_id,category,key' });
+    if (error) throw new Error(error.message);
+  },
+
+  /** The employee's own work week, or null when they follow the company's. */
+  async employeePattern(employeeId: number): Promise<WorkPattern | null> {
+    const { data } = await supabase.from('employee_work_patterns').select('pattern').eq('employee_id', employeeId).maybeSingle();
+    return data?.pattern ? normalisePattern(data.pattern as Partial<WorkPattern>) : null;
+  },
+
+  async saveEmployeePattern(companyId: number, employeeId: number, pattern: WorkPattern | null) {
+    if (!pattern) {
+      const { error } = await supabase.from('employee_work_patterns').delete().eq('employee_id', employeeId);
+      if (error) throw new Error(error.message);
+      return;
+    }
+    const { error } = await supabase.from('employee_work_patterns').upsert(
+      { employee_id: employeeId, company_id: companyId, pattern, updated_at: new Date().toISOString() },
+      { onConflict: 'employee_id' });
+    if (error) throw new Error(error.message);
+  },
+
+  async effectivePattern(companyId: number, employeeId: number): Promise<WorkPattern> {
+    return (await this.employeePattern(employeeId)) ?? (await this.companyPattern(companyId));
+  },
+
+  async holidays(companyId: number, from: string, to: string) {
+    const { data, error } = await supabase.from('company_holidays').select('*')
+      .eq('company_id', companyId).gte('holiday_date', from).lte('holiday_date', to).order('holiday_date');
+    if (error) throw new Error(error.message);
+    return (data || []) as { id: number; holiday_date: string; name: string; source: 'official' | 'company' }[];
+  },
+
+  async holidaySet(companyId: number, from: string, to: string): Promise<Set<string>> {
+    return new Set((await this.holidays(companyId, from, to)).map(h => h.holiday_date));
+  },
+
+  async addHoliday(companyId: number, date: string, name: string) {
+    const { error } = await supabase.from('company_holidays').upsert(
+      { company_id: companyId, holiday_date: date, name, source: 'company' }, { onConflict: 'company_id,holiday_date' });
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteHoliday(id: number) {
+    const { error } = await supabase.from('company_holidays').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  /** Add the country's official holidays for a year (existing dates are left alone). */
+  async importOfficial(companyId: number, country: string, year: number): Promise<number> {
+    const list = officialHolidays(country, year);
+    if (!list.length) return 0;
+    const { error } = await supabase.from('company_holidays').upsert(
+      list.map(h => ({ company_id: companyId, holiday_date: h.date, name: h.name, source: 'official' })),
+      { onConflict: 'company_id,holiday_date', ignoreDuplicates: true });
+    if (error) throw new Error(error.message);
+    return list.length;
+  },
+};

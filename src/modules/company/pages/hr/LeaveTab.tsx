@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, Button, Modal, Form, Select, DatePicker, Input, Checkbox, message, Table, Tag, Empty, Row, Col, Progress, Alert } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { leaveService, businessDays, type LeaveType, type LeaveBalance, type LeaveRequest, type Employee } from '../../../../services/hr';
+import { leaveService, calendarService, type LeaveType, type LeaveBalance, type LeaveRequest, type Employee } from '../../../../services/hr';
+import { countLeave, describePattern, unitLabel, DEFAULT_WORK_PATTERN, type WorkPattern } from '../../../../utils/workdays';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { supabase } from '../../../../utils/supabase';
 
@@ -17,6 +18,8 @@ export function LeaveTab({ companyId }: { companyId: number }) {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [pattern, setPattern] = useState<WorkPattern>(DEFAULT_WORK_PATTERN);
+  const [holidays, setHolidays] = useState<Set<string>>(new Set());
   const [form] = Form.useForm();
   const watch = Form.useWatch([], form);
 
@@ -31,11 +34,13 @@ export function LeaveTab({ companyId }: { companyId: number }) {
         const { data: co } = await supabase.from('companies').select('country').eq('id', companyId).maybeSingle();
         // (re)compute entitlements from this employee's facts + dependents
         await leaveService.syncEntitlements(companyId, rec, co?.country || 'SG', YEAR);
-        const [b, r] = await Promise.all([
+        const [b, r, pat, hol] = await Promise.all([
           leaveService.balances(rec.id, YEAR),
           leaveService.requests(companyId, { employeeId: rec.id }),
+          calendarService.effectivePattern(companyId, rec.id),
+          calendarService.holidaySet(companyId, `${YEAR - 1}-01-01`, `${YEAR + 1}-12-31`),
         ]);
-        setBalances(b); setRequests(r);
+        setBalances(b); setRequests(r); setPattern(pat); setHolidays(hol);
       }
     } catch (err: any) { message.error(err.message); }
     setLoading(false);
@@ -43,20 +48,26 @@ export function LeaveTab({ companyId }: { companyId: number }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const computedDays = watch?.range && watch.range[0] && watch.range[1]
-    ? businessDays(dayjs(watch.range[0]).format('YYYY-MM-DD'), dayjs(watch.range[1]).format('YYYY-MM-DD'), !!watch.half_day)
-    : 0;
+  const countFor = (typeId: number | undefined, range: any, halfDay: boolean) => {
+    const lt = types.find(t => t.id === typeId);
+    if (!range || !range[0] || !range[1]) return null;
+    return countLeave({
+      start: dayjs(range[0]).format('YYYY-MM-DD'), end: dayjs(range[1]).format('YYYY-MM-DD'), halfDay,
+      method: lt?.count_method || 'working_days', allowSingleDays: !!lt?.allow_single_days,
+      pattern, holidays,
+    });
+  };
+  const preview = countFor(watch?.leave_type_id, watch?.range, !!watch?.half_day);
 
   const submit = async (v: any) => {
     if (!me) return;
-    const start = dayjs(v.range[0]).format('YYYY-MM-DD');
-    const end = dayjs(v.range[1]).format('YYYY-MM-DD');
-    const days = businessDays(start, end, !!v.half_day);
-    if (days <= 0) { message.error('Invalid date range'); return; }
+    const c = countFor(v.leave_type_id, v.range, !!v.half_day);
+    if (!c || c.error || c.amount <= 0) { message.error(c?.error || 'Invalid date range'); return; }
     try {
       await leaveService.apply({
         company_id: companyId, employee_id: me.id, leave_type_id: v.leave_type_id,
-        start_date: start, end_date: end, half_day: !!v.half_day, days, reason: v.reason || '',
+        start_date: dayjs(v.range[0]).format('YYYY-MM-DD'), end_date: dayjs(v.range[1]).format('YYYY-MM-DD'),
+        half_day: !!v.half_day, days: c.amount, reason: v.reason || '',
       });
       message.success('Leave applied — pending approval');
       setOpen(false); form.resetFields(); load();
@@ -93,7 +104,7 @@ export function LeaveTab({ companyId }: { companyId: number }) {
                 <div style={{ color: '#f0ede6', fontWeight: 600, marginBottom: 4 }}>{lt?.name || 'Leave'}</div>
                 <div style={{ fontSize: 26, color: '#4fc3f7', fontWeight: 700 }}>{avail}</div>
                 <div style={{ fontSize: 12, color: 'rgba(240,237,230,0.45)' }}>
-                  of {total} days · {b.taken_days} taken · {b.pending_days} pending
+                  of {total} {unitLabel(typeById(b.leave_type_id)?.count_method, total)} · {b.taken_days} taken · {b.pending_days} pending
                 </div>
                 <Progress percent={total ? Math.round((used / total) * 100) : 0} showInfo={false} size="small"
                   strokeColor={lt?.color || '#4fc3f7'} />
@@ -135,7 +146,21 @@ export function LeaveTab({ companyId }: { companyId: number }) {
           </Form.Item>
           <Form.Item name="half_day" valuePropName="checked"><Checkbox>Half day (last day)</Checkbox></Form.Item>
           <Form.Item name="reason" label="Reason"><Input.TextArea rows={2} /></Form.Item>
-          <div style={{ color: 'rgba(240,237,230,0.6)' }}>Working days requested: <b style={{ color: '#4fc3f7' }}>{computedDays}</b></div>
+          {preview && (preview.error
+            ? <Alert type="warning" showIcon message={preview.error} />
+            : (
+              <div style={{ color: 'rgba(240,237,230,0.6)' }}>
+                Counts as: <b style={{ color: '#4fc3f7' }}>{preview.amount} {unitLabel(preview.unit === 'weeks' ? 'weeks' : 'working_days', preview.amount)}</b>
+                {preview.unit === 'days' && (preview.skippedRestDays.length > 0 || preview.skippedHolidays.length > 0) && (
+                  <div style={{ fontSize: 12 }}>
+                    Not counted: {preview.skippedRestDays.length > 0 && `${preview.skippedRestDays.length} rest day(s)`}
+                    {preview.skippedRestDays.length > 0 && preview.skippedHolidays.length > 0 && ', '}
+                    {preview.skippedHolidays.length > 0 && `${preview.skippedHolidays.length} public holiday(s) (${preview.skippedHolidays.map(d => dayjs(d).format('D MMM')).join(', ')})`}
+                  </div>
+                )}
+                <div style={{ fontSize: 12 }}>Your work week: {describePattern(pattern)}</div>
+              </div>
+            ))}
         </Form>
       </Modal>
     </div>

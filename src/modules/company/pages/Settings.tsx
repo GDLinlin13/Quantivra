@@ -4,6 +4,7 @@ import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { MODULES } from '../../../types';
 import { DocumentNumbersCard } from './settings/DocumentNumbersCard';
+import { WorkWeekHolidaysCard } from './settings/WorkWeekHolidaysCard';
 
 const { Title, Text } = Typography;
 
@@ -83,6 +84,7 @@ export function CompanySettingsPage() {
         </Space>
       </Card>
 
+      {companyId && <WorkWeekHolidaysCard companyId={companyId} country={company.country || 'SG'} />}
       {companyId && <DocumentNumbersCard companyId={companyId} />}
     </div>
   );

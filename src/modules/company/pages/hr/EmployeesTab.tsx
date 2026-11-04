@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Modal, Form, Input, InputNumber, Select, DatePicker, message, Tag, Space, Popconfirm } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { hrService, type Employee } from '../../../../services/hr';
+import { hrService, calendarService, type Employee } from '../../../../services/hr';
+import { WORK_PATTERN_PRESETS, presetKeyOf, describePattern, type WorkPattern } from '../../../../utils/workdays';
 import { supabase } from '../../../../utils/supabase';
 import { residencyOptions, defaultResidency } from '../../../../data/residency-options';
 
@@ -35,19 +36,23 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
   useEffect(() => { load(); }, [load]);
 
   const [deps, setDeps] = useState<any[]>([]);
+  const [customPattern, setCustomPattern] = useState<WorkPattern | null>(null);
 
   const openNew = () => {
-    setEditing(null); setDeps([]);
+    setEditing(null); setDeps([]); setCustomPattern(null);
     form.resetFields();
-    form.setFieldsValue({ employment_type: 'full_time', status: 'active', residency_status: defaultResidency(country), marital_status: 'single', employee_code: `EMP-${String(rows.length + 1).padStart(3, '0')}` });
+    form.setFieldsValue({ work_week: 'company', employment_type: 'full_time', status: 'active', residency_status: defaultResidency(country), marital_status: 'single', employee_code: `EMP-${String(rows.length + 1).padStart(3, '0')}` });
     setOpen(true);
   };
 
   const openEdit = async (r: Employee) => {
     setEditing(r);
-    setDeps(await hrService.dependents(r.id));
+    const [d, pat] = await Promise.all([hrService.dependents(r.id), calendarService.employeePattern(r.id)]);
+    setDeps(d);
+    setCustomPattern(pat && !presetKeyOf(pat) ? pat : null);
     form.setFieldsValue({
       ...r,
+      work_week: !pat ? 'company' : (presetKeyOf(pat) ?? 'custom'),
       join_date: r.join_date ? dayjs(r.join_date) : null,
       exit_date: r.exit_date ? dayjs(r.exit_date) : null,
       date_of_birth: r.date_of_birth ? dayjs(r.date_of_birth) : null,
@@ -55,7 +60,8 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
     setOpen(true);
   };
 
-  const submit = async (v: any) => {
+  const submit = async (formValues: any) => {
+    const { work_week, ...v } = formValues;
     try {
       const id = await hrService.upsertEmployee({
         id: editing?.id ?? '',
@@ -69,6 +75,10 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
         manager_id: v.manager_id ?? '',
         department_id: v.department_id ?? '',
       });
+      if (work_week !== 'custom') {
+        await calendarService.saveEmployeePattern(companyId, id,
+          work_week && work_week !== 'company' ? WORK_PATTERN_PRESETS[work_week].pattern : null);
+      }
       await hrService.saveDependents(companyId, id, deps.map(d => ({
         ...d, date_of_birth: d.date_of_birth ? dayjs(d.date_of_birth).format('YYYY-MM-DD') : null,
       })));
@@ -164,6 +174,13 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
                 { label: 'Indian (SINDA)', value: 'indian' },
                 { label: 'Eurasian (ECF)', value: 'eurasian' },
                 { label: 'Other / none', value: 'other' },
+              ]} />
+            </Form.Item>
+            <Form.Item name="work_week" label="Work week" tooltip="Which days this person normally works. Leave counted in working days skips the others.">
+              <Select options={[
+                { value: 'company', label: 'Same as company (Settings)' },
+                ...Object.entries(WORK_PATTERN_PRESETS).map(([k, v]) => ({ value: k, label: v.label })),
+                ...(customPattern ? [{ value: 'custom', label: `Custom: ${describePattern(customPattern)}` }] : []),
               ]} />
             </Form.Item>
             <Form.Item name="marital_status" label="Marital status"
