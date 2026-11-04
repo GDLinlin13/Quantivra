@@ -5,10 +5,10 @@ const base = { countryCode: 'SG', templateDefault: 14, statutoryMin: 7, asOf: ne
 const emp = (o: any = {}) => ({ residency_status: 'SC', marital_status: 'married', join_date: '2020-01-01', employment_type: 'full_time', ...o });
 
 describe('SG leave eligibility rules', () => {
-  it('annual leave grows with service, capped at 14', () => {
-    expect(computeLeaveEntitlement({ ...base, leaveTypeName: 'Annual Leave', employee: emp({ join_date: '2026-01-01' }), dependents: [] }).days).toBe(7);
-    expect(computeLeaveEntitlement({ ...base, leaveTypeName: 'Annual Leave', employee: emp({ join_date: '2023-01-01' }), dependents: [] }).days).toBe(10);
-    expect(computeLeaveEntitlement({ ...base, leaveTypeName: 'Annual Leave', employee: emp({ join_date: '2000-01-01' }), dependents: [] }).days).toBe(14);
+  it('annual leave (statutory scale alone) grows with service, capped at 14', () => {
+    expect(computeLeaveEntitlement({ ...base, templateDefault: 0, leaveTypeName: 'Annual Leave', employee: emp({ join_date: '2026-01-01' }), dependents: [] }).days).toBe(7);
+    expect(computeLeaveEntitlement({ ...base, templateDefault: 0, leaveTypeName: 'Annual Leave', employee: emp({ join_date: '2023-01-01' }), dependents: [] }).days).toBe(10);
+    expect(computeLeaveEntitlement({ ...base, templateDefault: 0, leaveTypeName: 'Annual Leave', employee: emp({ join_date: '2000-01-01' }), dependents: [] }).days).toBe(14);
   });
 
   it('childcare: citizen child under 7 → 6 days, else 2, none → 0', () => {
@@ -59,5 +59,29 @@ describe('SG leave eligibility rules', () => {
     expect(days['Maternity Leave']).toBe(80);
     expect(days['Paternity Leave']).toBe(20);
     expect(days['Shared Parental Leave']).toBe(50);
+  });
+
+  it('company policy: grows with service, capped, never below the law', () => {
+    const al = (join: string, extra: any = {}) => computeLeaveEntitlement({
+      ...base, templateDefault: 14, leaveTypeName: 'Annual Leave', employee: emp({ join_date: join }), dependents: [], ...extra,
+    });
+    // 14 + 1 per completed year, capped at 18
+    expect(al('2026-01-01', { incrementPerYear: 1, maxDays: 18 }).days).toBe(14);
+    expect(al('2023-01-01', { incrementPerYear: 1, maxDays: 18 }).days).toBe(17);
+    expect(al('2010-01-01', { incrementPerYear: 1, maxDays: 18 }).days).toBe(18);
+    expect(al('2023-01-01', { incrementPerYear: 1, maxDays: 18 }).basis).toMatch(/Company policy/);
+    // a stingy company policy never undercuts the statutory scale (7 + years, max 14)
+    expect(al('2023-01-01', { templateDefault: 5 }).days).toBe(10);
+  });
+
+  it('company policy does not override eligibility-based leave', () => {
+    const fr = computeLeaveEntitlement({ ...base, templateDefault: 80, incrementPerYear: 1, leaveTypeName: 'Maternity Leave', employee: emp({ residency_status: 'FOREIGNER' }), dependents: [] });
+    expect(fr.days).toBe(0);
+  });
+
+  it('countries without rules use the company policy', () => {
+    const r = computeLeaveEntitlement({ countryCode: 'XX', templateDefault: 12, statutoryMin: 10, incrementPerYear: 2, maxDays: 20, asOf: new Date('2026-06-30'),
+      leaveTypeName: 'Annual Leave', employee: emp({ join_date: '2023-01-01' }), dependents: [] });
+    expect(r.days).toBe(18);
   });
 });

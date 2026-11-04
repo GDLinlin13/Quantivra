@@ -515,7 +515,12 @@ export function CountryPacksPage() {
       children: (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <Title level={5} style={{ color: '#f0ede6', margin: 0 }}>Leave Entitlements</Title>
+            <div>
+              <Title level={5} style={{ color: '#f0ede6', margin: 0 }}>Legal Leave Minimums</Title>
+              <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
+                The legal floor in working days, copied to new companies as a starting point. Each company sets its own policy under HR → Leave Types.
+              </Text>
+            </div>
             <Button icon={<EditOutlined />} size="small" onClick={() => openEdit('leave_minimums')}>Edit</Button>
           </div>
           <Table
@@ -524,7 +529,7 @@ export function CountryPacksPage() {
             pagination={false} size="small" style={{ background: 'transparent' }}
             columns={[
               { title: 'Leave Type', dataIndex: 'name', key: 'name', render: (v: string) => <Text style={{ color: '#f0ede6' }}>{v}</Text> },
-              { title: 'Min Days', dataIndex: 'min_days', key: 'min_days' },
+              { title: 'Legal minimum', dataIndex: 'min_days', key: 'min_days', render: (v: number) => (v ? `${v} days${v >= 5 && v % 5 === 0 ? ` (${v / 5} weeks)` : ''}` : '-') },
               { title: 'Carry Forward', dataIndex: 'carry_forward', key: 'carry_forward', render: (v: any) => v ? `${v} days` : '-' },
               { title: 'Encashable', dataIndex: 'encashable', key: 'encashable', render: (v: boolean) => v ? 'Yes' : 'No' },
             ]}
@@ -601,7 +606,12 @@ export function CountryPacksPage() {
       children: (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <Title level={5} style={{ color: '#f0ede6', margin: 0 }}>Default Numbering Formats</Title>
+            <div>
+              <Title level={5} style={{ color: '#f0ede6', margin: 0 }}>Suggested Numbering Formats</Title>
+              <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
+                Starting suggestions only. Each company sets its own numbers under Settings → Document numbers.
+              </Text>
+            </div>
             <Button icon={<EditOutlined />} size="small" onClick={() => openEdit('document_numbering')}>Edit</Button>
           </div>
           {selectedVersion.config?.document_numbering && selectedVersion.config.document_numbering.length > 0 ? (

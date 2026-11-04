@@ -89,6 +89,37 @@ export interface LeaveType {
   id: number; company_id: number; name: string; code: string | null;
   default_days: number; statutory_min: number; is_paid: boolean; requires_approval: boolean;
   carry_forward_cap: number; encashable: boolean; color: string; active: boolean;
+  /** company policy: extra days per completed year of service, capped at max_days */
+  increment_per_year: number; max_days: number | null;
+}
+
+/** One row of the "start new leave year" preview. */
+export interface LeaveYearRow {
+  employee: Employee; leaveType: LeaveType;
+  entitled: number; carried: number; unusedLastYear: number; basis: string;
+}
+
+function entitlementFor(lt: LeaveType, employee: Employee, deps: Dependent[], countryCode: string, year: number) {
+  return computeLeaveEntitlement({
+    leaveTypeName: lt.name, countryCode,
+    employee: {
+      residency_status: employee.residency_status, marital_status: employee.marital_status,
+      join_date: employee.join_date, employment_type: employee.employment_type,
+    },
+    dependents: deps.map(d => ({ relationship: d.relationship, date_of_birth: d.date_of_birth, citizenship: d.citizenship })),
+    templateDefault: Number(lt.default_days), statutoryMin: Number(lt.statutory_min || 0),
+    incrementPerYear: Number(lt.increment_per_year || 0),
+    maxDays: lt.max_days == null ? null : Number(lt.max_days),
+    // Service is counted as at 1 January of the leave year.
+    asOf: new Date(`${year}-01-01T00:00:00`),
+  });
+}
+
+/** Unused days from last year that may roll over, limited by the type's carry-forward cap. */
+export function carryForward(prev: Pick<LeaveBalance, 'entitled_days' | 'carried_days' | 'taken_days'> | undefined, cap: number) {
+  if (!prev) return { unused: 0, carried: 0 };
+  const unused = Math.max(0, Number(prev.entitled_days) + Number(prev.carried_days || 0) - Number(prev.taken_days || 0));
+  return { unused, carried: Math.min(unused, Math.max(0, Number(cap || 0))) };
 }
 
 export interface LeaveBalance {
@@ -161,61 +192,86 @@ export const leaveService = {
    * auto entitlements from the employee's facts + dependents. Manual overrides
    * are left alone but re-checked against the statutory minimum.
    */
-  async syncEntitlements(companyId: number, employee: Employee, countryCode: string, year: number) {
+  async syncEntitlements(companyId: number, employee: Employee, countryCode: string, year: number,
+    carriedByType?: Map<number, number>) {
     const [types, deps, existing] = await Promise.all([
       this.types(companyId),
       hrService.dependents(employee.id),
       this.balances(employee.id, year),
     ]);
     const byType = new Map(existing.map(b => [b.leave_type_id, b]));
-    const asOf = new Date(`${year}-06-30`);
 
     for (const lt of types.filter(t => t.active)) {
-      const ent = computeLeaveEntitlement({
-        leaveTypeName: lt.name, countryCode,
-        employee: {
-          residency_status: employee.residency_status, marital_status: employee.marital_status,
-          join_date: employee.join_date, employment_type: employee.employment_type,
-        },
-        dependents: deps.map(d => ({ relationship: d.relationship, date_of_birth: d.date_of_birth, citizenship: d.citizenship })),
-        templateDefault: Number(lt.default_days), statutoryMin: Number(lt.statutory_min || 0), asOf,
-      });
+      const ent = entitlementFor(lt, employee, deps, countryCode, year);
       const row = byType.get(lt.id);
+      const carried = carriedByType?.get(lt.id);
 
       if (!row) {
-        await supabase.from('leave_balances').insert({
+        const { error } = await supabase.from('leave_balances').insert({
           company_id: companyId, employee_id: employee.id, leave_type_id: lt.id, year,
-          entitled_days: ent.days, entitlement_source: 'auto',
+          entitled_days: ent.days, carried_days: carried ?? 0, entitlement_source: 'auto',
           entitlement_basis: ent.basis, below_statutory: false,
         });
+        if (error) throw new Error(error.message);
       } else if (row.entitlement_source === 'auto') {
-        await supabase.from('leave_balances').update({
+        const { error } = await supabase.from('leave_balances').update({
           entitled_days: ent.days, entitlement_basis: ent.basis, below_statutory: false,
+          ...(carried !== undefined ? { carried_days: carried } : {}),
         }).eq('id', row.id);
+        if (error) throw new Error(error.message);
       } else {
-        // manual override: only refresh the compliance flag
-        await supabase.from('leave_balances').update({
+        // manual override: keep the days, refresh the compliance flag (and carry-over)
+        const { error } = await supabase.from('leave_balances').update({
           below_statutory: Number(row.entitled_days) < ent.statutoryMin,
+          ...(carried !== undefined ? { carried_days: carried } : {}),
         }).eq('id', row.id);
+        if (error) throw new Error(error.message);
       }
     }
   },
 
   /** Explain how each leave type's entitlement is derived for one employee (for the UI). */
   explain(types: LeaveType[], employee: Employee, deps: Dependent[], countryCode: string, year: number) {
-    const asOf = new Date(`${year}-06-30`);
     return types.filter(t => t.active).map(lt => ({
       leaveType: lt,
-      ...computeLeaveEntitlement({
-        leaveTypeName: lt.name, countryCode,
-        employee: {
-          residency_status: employee.residency_status, marital_status: employee.marital_status,
-          join_date: employee.join_date, employment_type: employee.employment_type,
-        },
-        dependents: deps.map(d => ({ relationship: d.relationship, date_of_birth: d.date_of_birth, citizenship: d.citizenship })),
-        templateDefault: Number(lt.default_days), statutoryMin: Number(lt.statutory_min || 0), asOf,
-      }),
+      ...entitlementFor(lt, employee, deps, countryCode, year),
     }));
+  },
+
+  /** What starting a new leave year would do: new entitlement + carried-over days, per employee and type. */
+  async previewLeaveYear(companyId: number, countryCode: string, year: number): Promise<LeaveYearRow[]> {
+    const [emps, types, prevAll] = await Promise.all([
+      hrService.listEmployees(companyId),
+      this.types(companyId),
+      supabase.from('leave_balances').select('*').eq('company_id', companyId).eq('year', year - 1)
+        .then(({ data }) => (data || []) as LeaveBalance[]),
+    ]);
+    const rows: LeaveYearRow[] = [];
+    for (const e of emps.filter(x => x.status === 'active')) {
+      const deps = await hrService.dependents(e.id);
+      for (const lt of types.filter(t => t.active)) {
+        const ent = entitlementFor(lt, e, deps, countryCode, year);
+        const prev = prevAll.find(b => b.employee_id === e.id && b.leave_type_id === lt.id);
+        const cf = carryForward(prev, lt.carry_forward_cap);
+        rows.push({ employee: e, leaveType: lt, entitled: ent.days, carried: cf.carried, unusedLastYear: cf.unused, basis: ent.basis });
+      }
+    }
+    return rows;
+  },
+
+  /** Create (or refresh) every active employee's balances for a new leave year, carrying over unused days. */
+  async startLeaveYear(companyId: number, countryCode: string, year: number) {
+    const preview = await this.previewLeaveYear(companyId, countryCode, year);
+    const byEmployee = new Map<number, { employee: Employee; carried: Map<number, number> }>();
+    for (const r of preview) {
+      const entry = byEmployee.get(r.employee.id) ?? { employee: r.employee, carried: new Map() };
+      entry.carried.set(r.leaveType.id, r.carried);
+      byEmployee.set(r.employee.id, entry);
+    }
+    for (const { employee, carried } of byEmployee.values()) {
+      await this.syncEntitlements(companyId, employee, countryCode, year, carried);
+    }
+    return { employees: byEmployee.size };
   },
 
   async setEntitlement(balanceId: number, days: number, source: 'auto' | 'manual', statutoryMin: number) {

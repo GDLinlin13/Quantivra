@@ -3,6 +3,7 @@ import { Card, Form, Input, Select, Button, Typography, message, Divider, Space,
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { MODULES } from '../../../types';
+import { DocumentNumbersCard } from './settings/DocumentNumbersCard';
 
 const { Title, Text } = Typography;
 
@@ -81,7 +82,8 @@ export function CompanySettingsPage() {
           })}
         </Space>
       </Card>
+
+      {companyId && <DocumentNumbersCard companyId={companyId} />}
     </div>
   );
 }
-
