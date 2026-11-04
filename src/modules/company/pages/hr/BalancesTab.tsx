@@ -3,6 +3,7 @@ import { Table, Button, Tag, Tooltip, message, Modal, InputNumber, Space, Alert,
 import { ReloadOutlined, WarningOutlined, EditOutlined, CalendarOutlined } from '@ant-design/icons';
 import { hrService, leaveService, type Employee, type LeaveType, type LeaveBalance, type LeaveYearRow } from '../../../../services/hr';
 import { supabase } from '../../../../utils/supabase';
+import { unitLabel } from '../../../../utils/workdays';
 
 const THIS_YEAR = new Date().getFullYear();
 
@@ -127,7 +128,7 @@ export function BalancesTab({ companyId }: { companyId: number }) {
               const val = b ? Number(b.entitled_days) : r.computed.days;
               return (
                 <Space>
-                  <b style={{ color: '#4fc3f7' }}>{val}</b>
+                  <b style={{ color: '#4fc3f7' }}>{val}</b>{r.leaveType.count_method === 'weeks' && <span style={{ color: 'rgba(240,237,230,0.5)' }}>{unitLabel('weeks', val)}</span>}
                   {b?.entitlement_source === 'manual' && <Tag color="gold">manual</Tag>}
                   {b?.below_statutory && <Tag color="red" icon={<WarningOutlined />}>below min {r.computed.statutoryMin}</Tag>}
                 </Space>
@@ -198,7 +199,7 @@ export function BalancesTab({ companyId }: { companyId: number }) {
           columns={[
             { title: 'Employee', key: 'e', render: (_, r) => r.employee.full_name },
             { title: 'Leave type', key: 't', render: (_, r) => r.leaveType.name },
-            { title: `${newYear} days`, key: 'n', render: (_, r) => <b>{r.entitled}</b> },
+            { title: `${newYear} entitlement`, key: 'n', render: (_, r) => <b>{r.entitled} {unitLabel(r.leaveType.count_method, r.entitled)}</b> },
             { title: `Unused ${newYear ? newYear - 1 : ''}`, key: 'u', render: (_, r) => r.unusedLastYear || '–' },
             { title: 'Carried over', key: 'c', render: (_, r) => r.carried || '–' },
             { title: 'Basis', key: 'b', render: (_, r) => <span style={{ fontSize: 12, color: 'rgba(240,237,230,0.6)' }}>{r.basis}</span> },

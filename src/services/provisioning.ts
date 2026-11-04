@@ -212,7 +212,12 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
   // The country pack's statutory leave list, falling back to a generic set.
   const packLeave = COUNTRY_PACKS[input.country]?.leave?.types;
   const leaveTypes: any[] = packLeave && packLeave.length > 0
-    ? packLeave.map(t => ({ name: t.name, days: t.min_days, carry_forward: t.carry_forward, encashable: t.encashable }))
+    ? packLeave.map(t => ({
+      name: t.name, carry_forward: t.carry_forward, encashable: t.encashable,
+      // pack minimums are in working days; week-based types are held in weeks
+      count_method: t.count_method || 'working_days', allow_single_days: !!t.allow_single_days,
+      days: t.count_method === 'weeks' ? Math.round((t.min_days / 5) * 100) / 100 : t.min_days,
+    }))
     : [
       { name: 'Annual Leave', days: 14, carry_forward: 7, encashable: true },
       { name: 'Sick Leave', days: 14, carry_forward: 0, encashable: false },
@@ -307,7 +312,8 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
     if (error) throw error;
     await supabase.from('leave_types').insert(
       leaveTypes.map((lt: any) => ({
-        company_id: company.id, name: lt.name, default_days: lt.days ?? 0,
+        company_id: company.id, name: lt.name, default_days: lt.days ?? 0, statutory_min: lt.days ?? 0,
+        count_method: lt.count_method || 'working_days', allow_single_days: !!lt.allow_single_days,
         carry_forward_cap: lt.carry_forward ?? 0, encashable: !!lt.encashable,
         is_paid: true, requires_approval: true, active: true,
       }))

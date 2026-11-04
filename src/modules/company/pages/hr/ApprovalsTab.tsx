@@ -28,7 +28,7 @@ export function ApprovalsTab({ companyId }: { companyId: number }) {
       title: `${decision === 'approved' ? 'Approve' : 'Reject'} leave — ${r.employees?.full_name}`,
       content: (
         <div>
-          <div style={{ margin: '8px 0' }}>{r.leave_types?.name} · {r.start_date} → {r.end_date} · {r.days} day(s)</div>
+          <div style={{ margin: '8px 0' }}>{r.leave_types?.name} · {r.start_date} → {r.end_date} · {r.days} {r.leave_types?.count_method === 'weeks' ? 'week(s)' : 'day(s)'}</div>
           <Input.TextArea placeholder="Note (optional)" rows={2} onChange={e => { note = e.target.value; }} />
         </div>
       ),
