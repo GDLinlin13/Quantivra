@@ -115,6 +115,24 @@ function singapore(i: LeaveRuleInput): LeaveEntitlement | null {
     return { days: 2, statutoryMin: 2, computed: true, basis: 'Non-citizen child → 2 days/year', warnings: [] };
   }
 
+  if (name.includes('shared parental')) {
+    // Government-Paid Shared Parental Leave, by the youngest Singapore-citizen
+    // child's birth date: 10 weeks from 1 Apr 2026, 6 weeks from 1 Apr 2025.
+    const born = kids
+      .filter(k => isCitizen(k.citizenship) && k.date_of_birth)
+      .map(k => k.date_of_birth as string)
+      .sort()
+      .pop();
+    const weeks = !born ? 0 : born >= '2026-04-01' ? 10 : born >= '2025-04-01' ? 6 : 0;
+    return {
+      days: weeks * WK, statutoryMin: weeks * WK, computed: true,
+      basis: weeks
+        ? `Singapore-citizen child born ${born} → ${weeks} weeks Shared Parental Leave, shared between both parents`
+        : 'Shared Parental Leave needs a Singapore-citizen child born on or after 1 April 2025',
+      warnings: weeks ? ['This is the total for both parents; deduct whatever the other parent takes.'] : [],
+    };
+  }
+
   if (name.includes('paternity')) {
     if (isCitizen(res) && married) {
       return { days: 4 * WK, statutoryMin: 4 * WK, computed: true,

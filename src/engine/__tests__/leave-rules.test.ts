@@ -41,4 +41,23 @@ describe('SG leave eligibility rules', () => {
     expect(r.days).toBe(14);
     expect(r.computed).toBe(false);
   });
+
+  it('shared parental: 10 weeks for citizen children born from Apr 2026, 6 weeks from Apr 2025, else 0', () => {
+    const spl = (dob: string, citizenship = 'SC') => computeLeaveEntitlement({
+      ...base, leaveTypeName: 'Shared Parental Leave', employee: emp(),
+      dependents: [{ relationship: 'child', citizenship, date_of_birth: dob }],
+    }).days;
+    expect(spl('2026-05-01')).toBe(50);
+    expect(spl('2025-06-01')).toBe(30);
+    expect(spl('2024-06-01')).toBe(0);
+    expect(spl('2026-05-01', 'FOREIGNER')).toBe(0);
+  });
+
+  it('built-in SG pack lists maternity, paternity and shared parental leave in days, not weeks', async () => {
+    const { COUNTRY_PACKS } = await import('../../data/countries');
+    const days = Object.fromEntries((COUNTRY_PACKS.SG.leave?.types || []).map((t: any) => [t.name, t.min_days]));
+    expect(days['Maternity Leave']).toBe(80);
+    expect(days['Paternity Leave']).toBe(20);
+    expect(days['Shared Parental Leave']).toBe(50);
+  });
 });

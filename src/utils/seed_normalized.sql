@@ -162,9 +162,10 @@ BEGIN
     (v_pack_id, 'Annual Leave', 14, 7, true),
     (v_pack_id, 'Sick Leave', 14, 0, false),
     (v_pack_id, 'Hospitalization Leave', 60, 0, false),
-    (v_pack_id, 'Maternity Leave', 16, 0, false),
-    (v_pack_id, 'Paternity Leave', 2, 0, false),
-    (v_pack_id, 'Shared Parental Leave', 4, 0, false),
+    -- working days (5 per week): 16 / 4 / 10 weeks
+    (v_pack_id, 'Maternity Leave', 80, 0, false),
+    (v_pack_id, 'Paternity Leave', 20, 0, false),
+    (v_pack_id, 'Shared Parental Leave', 50, 0, false),
     (v_pack_id, 'Childcare Leave', 6, 0, false),
     (v_pack_id, 'Unpaid Leave', 0, 0, false);
 
