@@ -239,7 +239,15 @@ BEGIN
 END $$;
 ROLLBACK;
 
-\echo '10. structure: no password hashes in public tables, RLS on everywhere, no anon grants'
+\echo '9c. leftover password columns are hashed and hidden from company users'
+BEGIN; :as_a
+DO $$
+BEGIN
+  ASSERT (SELECT count(*) FROM legacy_staff) = 0, 'FAIL: company user can read a leftover password table';
+END $$;
+ROLLBACK;
+
+\echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;
 BEGIN
@@ -251,6 +259,17 @@ BEGIN
   SELECT string_agg(DISTINCT table_name, ', ') INTO v FROM information_schema.role_table_grants
   WHERE table_schema = 'public' AND grantee = 'anon';
   ASSERT v IS NULL, 'FAIL: anon still has table grants: ' || coalesce(v, '');
+  DECLARE col record; bad bigint;
+  BEGIN
+    FOR col IN SELECT table_name, column_name FROM information_schema.columns
+      WHERE table_schema = 'public' AND data_type IN ('text', 'character varying', 'character')
+        AND column_name ~* '(pass(word)?|passwd|pwd|pin_code|^pin$|secret)'
+    LOOP
+      EXECUTE format('SELECT count(*) FROM public.%I WHERE %I IS NOT NULL AND %I <> '''' AND %I !~ ''^\$2[aby]\$''',
+        col.table_name, col.column_name, col.column_name, col.column_name) INTO bad;
+      ASSERT bad = 0, format('FAIL: %s.%s holds %s readable password(s)', col.table_name, col.column_name, bad);
+    END LOOP;
+  END;
   SELECT string_agg(p.proname, ', ') INTO v FROM pg_proc p
   WHERE p.pronamespace = 'public'::regnamespace AND has_function_privilege('anon', p.oid, 'EXECUTE');
   ASSERT v IS NULL, 'FAIL: anon can execute: ' || coalesce(v, '');

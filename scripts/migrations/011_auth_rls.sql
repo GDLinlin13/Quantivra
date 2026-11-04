@@ -319,6 +319,11 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.columns
                WHERE table_schema = 'public' AND table_name = t AND column_name = 'company_id') THEN
       PERFORM public.app_apply_tenant_policy(t);
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema = 'public' AND table_name = t
+                 AND column_name ~* '(pass(word)?|passwd|pwd|pin_code|^pin$|secret)') THEN
+      -- leftover tables holding passwords are never shared (see migration 016)
+      PERFORM public.app_apply_platform_policy(t);
     ELSE
       PERFORM public.app_apply_reference_policy(t);
       reference := reference || t;
