@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Space, Descriptions, Tabs, List, InputNumber, Divider, Row, Col , Alert } from 'antd';
+import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Space, Descriptions, Tabs, List, InputNumber, Divider, Row, Col, Alert, Collapse } from 'antd';
 import { PlusOutlined, EditOutlined, CloseOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { COUNTRY_PACKS } from '../../../data/countries';
@@ -72,6 +72,13 @@ export function CountryPacksPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Open the first country so the details panel is never empty.
+  useEffect(() => {
+    if (!selectedCountry && countries.length > 0) {
+      setSelectedCountry([...countries].sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)))[0].code);
+    }
+  }, [countries, selectedCountry]);
 
   const countryVersionCounts = countries.map(c => ({
     ...c,
@@ -716,15 +723,25 @@ export function CountryPacksPage() {
         </Space>
       </div>
 
-      <Table
-        dataSource={versions}
-        columns={masterColumns}
-        loading={loading}
-        rowKey="id"
-        style={{ background: 'transparent', marginBottom: 24 }}
-        pagination={false}
-        size="small"
-        locale={{ emptyText: <span style={{ color: 'rgba(240,237,230,0.4)' }}>No country packs yet</span> }}
+      <Collapse
+        ghost
+        style={{ marginBottom: 16 }}
+        items={[{
+          key: 'all',
+          label: <Text style={{ color: 'rgba(240,237,230,0.7)' }}>All pack versions ({versions.length})</Text>,
+          children: (
+            <Table
+              dataSource={versions}
+              columns={masterColumns}
+              loading={loading}
+              rowKey="id"
+              style={{ background: 'transparent' }}
+              pagination={{ pageSize: 10, hideOnSinglePage: true }}
+              size="small"
+              locale={{ emptyText: <span style={{ color: 'rgba(240,237,230,0.4)' }}>No country packs yet</span> }}
+            />
+          ),
+        }]}
       />
 
       <div style={{ display: 'flex', gap: 0, minHeight: 480 }}>
