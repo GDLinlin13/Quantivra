@@ -243,7 +243,7 @@ ROLLBACK;
 BEGIN; :as_a
 DO $$
 BEGIN
-  ASSERT (SELECT count(*) FROM legacy_staff) = 0, 'FAIL: company user can read a leftover password table';
+  ASSERT (SELECT count(*) FROM legacy_staff) = 0, 'FAIL: company user can read a leftover password table (even of their own company)';
 END $$;
 ROLLBACK;
 

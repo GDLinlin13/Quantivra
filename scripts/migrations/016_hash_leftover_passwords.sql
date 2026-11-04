@@ -9,8 +9,8 @@
 -- PIN, this migration:
 --   1. replaces every value that is not already a bcrypt hash with a bcrypt
 --      hash (one-way: the original can never be read again), and
---   2. restricts the table to platform administrators (tables with a
---      company_id stay limited to their own company instead).
+--   2. restricts the table to platform administrators only, even when it
+--      has a company_id (hashes can still be guessed offline).
 -- It prints which tables and columns it changed. Idempotent.
 
 DO $$
@@ -34,12 +34,9 @@ BEGIN
       col.table_name, col.column_name, col.column_name, col.column_name, col.column_name, col.column_name);
     GET DIAGNOSTICS n = ROW_COUNT;
 
-    IF EXISTS (SELECT 1 FROM information_schema.columns
-               WHERE table_schema = 'public' AND table_name = col.table_name AND column_name = 'company_id') THEN
-      PERFORM public.app_apply_tenant_policy(col.table_name);
-    ELSE
-      PERFORM public.app_apply_platform_policy(col.table_name);
-    END IF;
+    -- Even hashed passwords can be guessed offline, so nobody but platform
+    -- administrators may read these tables (none are used by the app).
+    PERFORM public.app_apply_platform_policy(col.table_name);
 
     report := report || format('%s.%s: %s value(s) hashed; ', col.table_name, col.column_name, n);
   END LOOP;

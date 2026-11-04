@@ -47,5 +47,5 @@ INSERT INTO payslips (run_id, company_id, employee_id, employee_name) VALUES (1,
 INSERT INTO company_settings (company_id, category, key, value) VALUES (1, 'company', 'tz', '"SG"'), (2, 'company', 'tz', '"SG"');
 
 -- a leftover table from before the rebuild, with plain-text passwords
-CREATE TABLE public.legacy_staff (id int PRIMARY KEY, username text, password_hash text);
-INSERT INTO public.legacy_staff VALUES (1, 'old-admin', '861341');
+CREATE TABLE public.legacy_staff (id int PRIMARY KEY, company_id bigint, username text, password_hash text);
+INSERT INTO public.legacy_staff VALUES (1, 1, 'old-admin', '861341');
