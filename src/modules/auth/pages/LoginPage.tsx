@@ -3,6 +3,7 @@ import { Card, Form, Input, Button, Checkbox } from 'antd';
 import { UserOutlined, LockOutlined, BankOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
+import { isPlatformUsername } from '../../../services/auth';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -16,8 +17,8 @@ export function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      // No company code → platform administrator sign-in.
-      if (!values.company_code?.trim()) {
+      // AEGIS (or no company code) → platform administrator sign-in.
+      if (isPlatformUsername(values.username) || !values.company_code?.trim()) {
         await login(values.username, values.password, 'platform', remember);
         navigate('/platform');
       } else {
@@ -109,11 +110,10 @@ export function LoginPage() {
               style={{ background: '#0b0f12', border: '1px solid rgba(255,255,255,0.1)', color: '#f0ede6', height: 46, textTransform: 'uppercase' }}
             />
           </Form.Item>
-          <Form.Item name="username" rules={[{ required: true, type: 'email', message: 'Enter your email' }]}>
+          <Form.Item name="username" rules={[{ required: true, message: 'Enter your username or email' }]}>
             <Input
               prefix={<UserOutlined style={{ color: 'rgba(240,237,230,0.3)' }} />}
-              placeholder="EMAIL"
-              type="email"
+              placeholder="USERNAME OR EMAIL"
               autoComplete="username"
               size="large"
               style={{ background: '#0b0f12', border: '1px solid rgba(255,255,255,0.1)', color: '#f0ede6', height: 46 }}

@@ -25,12 +25,16 @@ sign anyone in.
    - The output lists the "shared reference tables" every signed-in user can
      read (country packs etc.). If anything in that list holds one company's
      private data, tell the next session.
-2. **Create your platform admin login.**
-   Supabase → Authentication → Users → **Add user** → your email and a strong
-   password → tick **Auto Confirm User**. Then in the SQL Editor run:
+2. **Create the AEGIS platform admin login.**
+   Supabase → Authentication → Users → **Add user** → email
+   `aegis@quantivra.com`, a strong password (not `123456`) → tick
+   **Auto Confirm User**. Then in the SQL Editor run:
    ```sql
-   SELECT public.grant_platform_admin('you@example.com');
+   SELECT public.grant_platform_admin('aegis@quantivra.com', 'AEGIS System');
    ```
+   On the login page, type **AEGIS** as the username with that password.
+   (Typing AEGIS signs in as `aegis@quantivra.com`. Other platform admins sign
+   in with their own email.)
 3. **Turn off public sign-ups.** Supabase → Authentication → Sign In / Providers →
    switch off **Allow new users to sign up**. Logins are only created by admins.
 4. **Give the server its key, then deploy.** Supabase → Project Settings → API Keys →
@@ -38,8 +42,8 @@ sign anyone in.
    Environment Variables → add `SUPABASE_SERVICE_ROLE_KEY` with that value
    (Production and Preview). Deploy this version of the app.
    **Never put this key in a `VITE_` variable or in the code.**
-5. **Sign in and move the older logins.** Open the app, leave **Company code**
-   empty, and sign in with the email and password from step 2. On **Companies**,
+5. **Sign in and move the older logins.** Open the app and sign in as **AEGIS**
+   with the password from step 2. On **Companies**,
    click **Upgrade N older login(s)**. Everyone keeps their password.
 
 ## Checking it worked

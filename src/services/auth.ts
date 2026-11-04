@@ -31,6 +31,21 @@ function clearSession() {
 
 const INVALID = 'Invalid credentials';
 
+// Supabase Auth signs in by email. Platform admins may type a short username
+// instead; it maps to the email of their Supabase Auth login.
+export const PLATFORM_USERNAMES: Record<string, string> = {
+  aegis: 'aegis@quantivra.com',
+};
+
+export function isPlatformUsername(identifier: string): boolean {
+  return identifier.trim().toLowerCase() in PLATFORM_USERNAMES;
+}
+
+function toEmail(identifier: string): string {
+  const id = identifier.trim().toLowerCase();
+  return PLATFORM_USERNAMES[id] ?? id;
+}
+
 async function signIn(email: string, password: string, remember: boolean): Promise<string> {
   setRememberMe(remember);
   const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
@@ -39,8 +54,8 @@ async function signIn(email: string, password: string, remember: boolean): Promi
 }
 
 export const authService = {
-  async loginPlatform(email: string, password: string, remember = false): Promise<Session> {
-    const authUserId = await signIn(email, password, remember);
+  async loginPlatform(identifier: string, password: string, remember = false): Promise<Session> {
+    const authUserId = await signIn(toEmail(identifier), password, remember);
     const { data, error } = await supabase.rpc('app_sign_in_platform');
     const row = Array.isArray(data) ? data[0] : data;
     if (error || !row) {
