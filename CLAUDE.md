@@ -4,6 +4,14 @@ HR, accounting and payroll SaaS. React 19 + Vite 8 + Ant Design, Supabase
 (Postgres + Auth), deployed on Vercel. The owner is not technical: explain
 outcomes in plain language.
 
+## Owner preference: merge pull requests yourself
+The owner has asked for every pull request to be merged for them. After
+opening one, merge it into `master` (Vercel deploys from there) once
+`npm test` and `npm run build` pass and the PR's Vercel check is green. If a
+check fails, fix it first or tell the owner; never merge a red PR. Database
+migrations still need the owner to run them in the Supabase SQL editor, so
+say clearly when one is waiting, and in which order the two have to happen.
+
 ## Commands
 - `npm test` — vitest (payroll engine + server function tests)
 - `npm run build` — `tsc && vite build`
