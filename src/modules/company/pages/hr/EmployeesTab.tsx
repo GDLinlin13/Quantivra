@@ -48,7 +48,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
   const openNew = () => {
     setEditing(null); setDeps([]); setCustomPattern(null);
     form.resetFields();
-    form.setFieldsValue({ work_week: 'company', employment_type: 'full_time', status: 'active', residency_status: defaultResidency(country), marital_status: 'single', employee_code: `EMP-${String(rows.length + 1).padStart(3, '0')}` });
+    form.setFieldsValue({ signin_mode: 'new', work_week: 'company', employment_type: 'full_time', status: 'active', residency_status: defaultResidency(country), marital_status: 'single', employee_code: `EMP-${String(rows.length + 1).padStart(3, '0')}` });
     setOpen(true);
   };
 
@@ -60,6 +60,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
     form.setFieldsValue({
       ...r,
       work_week: !pat ? 'company' : (presetKeyOf(pat) ?? 'custom'),
+      signin_mode: r.user_id ? undefined : 'none',
       join_date: r.join_date ? dayjs(r.join_date) : null,
       exit_date: r.exit_date ? dayjs(r.exit_date) : null,
       date_of_birth: r.date_of_birth ? dayjs(r.date_of_birth) : null,
@@ -68,7 +69,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
   };
 
   const submit = async (formValues: any) => {
-    const { work_week, signin_username, signin_password, signin_role_id, user_id: _ignored, ...v } = formValues;
+    const { work_week, signin_mode, signin_username, signin_password, signin_role_id, signin_existing_user, user_id: _ignored, ...v } = formValues;
     try {
       const id = await hrService.upsertEmployee({
         id: editing?.id ?? '',
@@ -80,6 +81,8 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
         pr_stage: v.residency_status === 'PR' ? (v.pr_stage || 'year_3_plus') : '',
         manager_id: v.manager_id ?? '',
         department_id: v.department_id ?? '',
+        // only sent when linking an existing sign-in; otherwise the link is left as is
+        ...(signin_mode === 'existing' && signin_existing_user ? { user_id: signin_existing_user } : {}),
       });
       if (work_week !== 'custom') {
         await calendarService.saveEmployeePattern(companyId, id,
@@ -89,7 +92,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
         ...d, date_of_birth: d.date_of_birth ? dayjs(d.date_of_birth).format('YYYY-MM-DD') : null,
       })));
       // One person, one login: create their sign-in and attach it here.
-      if (signin_username && !editing?.user_id) {
+      if (signin_mode === 'new' && signin_username && !editing?.user_id) {
         await adminUsersService.createCompanyUser({
           company_id: companyId, employee_id: id, username: signin_username, password: signin_password,
           full_name: v.full_name, email: v.email || undefined, role_id: signin_role_id,
@@ -224,7 +227,8 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
               <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setDeps(x => x.filter((_, xi) => xi !== i))} />
             </div>
           ))}
-          <SignInSection editing={editing} users={users} roles={roles} canViewPay={canViewPay} companyId={companyId} />
+          <SignInSection editing={editing} users={users} roles={roles} canViewPay={canViewPay}
+            unlinkedUsers={users.filter(u => !rows.some(r => r.user_id === u.id))} />
 
           {canViewPay && <div style={{ color: 'rgba(240,237,230,0.4)', fontSize: 12, margin: '4px 0 8px' }}>PII below is encrypted at rest.</div>}
 {canViewPay && (
@@ -243,14 +247,18 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
 
 /**
  * One person, one login: an employee's sign-in lives on their record.
- * Shows who it is, or (for people with pay access) lets you create it with a
- * username, temporary password and role.
+ * People with pay access can create one here (username, temporary password,
+ * role), link an existing one, or leave it without a sign-in.
  */
-function SignInSection({ editing, users, roles, canViewPay, companyId }: {
-  editing: Employee | null; users: any[]; roles: any[]; canViewPay: boolean; companyId: number;
+function SignInSection({ editing, users, roles, canViewPay, unlinkedUsers }: {
+  editing: Employee | null; users: any[]; roles: any[]; canViewPay: boolean; unlinkedUsers: any[];
 }) {
   const linked = editing?.user_id ? users.find(u => u.id === editing.user_id) : null;
   const [resetting, setResetting] = useState(false);
+  const requiredWhen = (mode: string, msg: string, extra?: (v: any) => boolean) => ({ getFieldValue }: any) => ({
+    validator: (_: any, v: any) => (getFieldValue('signin_mode') !== mode || (v && (!extra || extra(v)))
+      ? Promise.resolve() : Promise.reject(new Error(msg))),
+  });
 
   const resetPassword = () => {
     let pw = '';
@@ -280,24 +288,37 @@ function SignInSection({ editing, users, roles, canViewPay, companyId }: {
         <span style={{ color: 'rgba(240,237,230,0.5)' }}>No sign-in. Only HR / Director can create one.</span>
       ) : (
         <>
-          <div style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12, marginBottom: 8 }}>
-            Optional. Fill these in to let this person sign in (to see their own leave, apply, etc.). Leave empty if they don't use Quantivra.
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-            <Form.Item name="signin_username" label="Username" normalize={(v: string) => (v || '').trim().toLowerCase()}
-              rules={[{ pattern: USERNAME_PATTERN, message: USERNAME_RULE_TEXT }]}>
-              <Input autoComplete="off" />
-            </Form.Item>
-            <Form.Item name="signin_password" label="Temporary password" dependencies={['signin_username']}
-              rules={[({ getFieldValue }) => ({ validator: (_, v) => (!getFieldValue('signin_username') || (v && v.length >= MIN_PASSWORD_LENGTH)
-                ? Promise.resolve() : Promise.reject(new Error(`At least ${MIN_PASSWORD_LENGTH} characters`))) })]}>
-              <Input.Password autoComplete="new-password" />
-            </Form.Item>
-            <Form.Item name="signin_role_id" label="Role (what they can open)" dependencies={['signin_username']}
-              rules={[({ getFieldValue }) => ({ validator: (_, v) => (!getFieldValue('signin_username') || v
-                ? Promise.resolve() : Promise.reject(new Error('Choose a role'))) })]}>
-              <Select options={roles.map(r => ({ label: r.can_view_pay ? `${r.name} (sees pay)` : r.name, value: r.id }))} />
-            </Form.Item>
+          <Form.Item name="signin_mode" style={{ marginBottom: 12 }}>
+            <Select options={[
+              { value: 'new', label: 'Create a sign-in for this person' },
+              { value: 'existing', label: 'Link a sign-in that already exists', disabled: unlinkedUsers.length === 0 },
+              { value: 'none', label: "No sign-in (they don't use Quantivra)" },
+            ]} />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(a, b) => a.signin_mode !== b.signin_mode}>
+            {({ getFieldValue }) => getFieldValue('signin_mode') === 'new' ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                <Form.Item name="signin_username" label="Username" normalize={(v: string) => (v || '').trim().toLowerCase()}
+                  rules={[requiredWhen('new', 'Enter a username'), { pattern: USERNAME_PATTERN, message: USERNAME_RULE_TEXT }]}>
+                  <Input autoComplete="off" />
+                </Form.Item>
+                <Form.Item name="signin_password" label="Temporary password"
+                  rules={[requiredWhen('new', `At least ${MIN_PASSWORD_LENGTH} characters`, v => String(v).length >= MIN_PASSWORD_LENGTH)]}>
+                  <Input.Password autoComplete="new-password" />
+                </Form.Item>
+                <Form.Item name="signin_role_id" label="Role (what they can open)" rules={[requiredWhen('new', 'Choose a role')]}>
+                  <Select options={roles.map(r => ({ label: r.can_view_pay ? `${r.name} (sees pay)` : r.name, value: r.id }))} />
+                </Form.Item>
+              </div>
+            ) : getFieldValue('signin_mode') === 'existing' ? (
+              <Form.Item name="signin_existing_user" label="Sign-in" rules={[requiredWhen('existing', 'Choose a sign-in')]}>
+                <Select showSearch optionFilterProp="label"
+                  options={unlinkedUsers.map(u => ({ label: `${u.full_name} (${u.username || u.email || 'no username'})`, value: u.id }))} />
+              </Form.Item>
+            ) : null}
+          </Form.Item>
+          <div style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
+            A sign-in lets them see their own leave and apply for leave. They choose their own password the first time they sign in.
           </div>
         </>
       )}
