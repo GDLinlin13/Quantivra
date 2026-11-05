@@ -4,7 +4,7 @@ import type { CountryPackDef } from '../data/country-packs/schema';
 import type { EmployeePayrollInput, PayrollPeriod, PayrollRunResult } from '../engine/types';
 import { hrService, type Employee } from './hr';
 import dayjs from 'dayjs';
-import { toEngineItems, PAY_ITEM_BY_CODE, type PayItemRow } from '../data/payItems';
+import { toEngineItems, PAY_ITEM_BY_CODE, isOvertime, type PayItemRow } from '../data/payItems';
 
 /** Country packs authored for the payroll engine. */
 const COUNTRY_PACK_LOADERS: Record<string, () => Promise<{ default: CountryPackDef }>> = {
@@ -245,7 +245,7 @@ export const payItemService = {
     const payload = {
       company_id: row.company_id, employee_id: row.employee_id, item_code: row.item_code,
       label: row.label || null, quantity: t.unit && row.quantity != null ? row.quantity : null,
-      ...(t.code === 'OVERTIME'
+      ...(isOvertime(t.code)
         ? { rate: row.rate != null ? row.rate : null, multiplier: row.multiplier != null ? row.multiplier : null }
         : {}),
       amount: Math.max(0, Math.round((Number(row.amount) || 0) * 100) / 100),
