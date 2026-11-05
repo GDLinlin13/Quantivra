@@ -33,5 +33,5 @@ export function validateFormat(format: string): string[] {
 export const DOCUMENT_LABELS: Record<string, string> = {
   employee: 'Employee ID', invoice: 'Invoice', purchase_order: 'Purchase order', claim: 'Expense claim',
   leave: 'Leave application', journal: 'Journal entry', payslip: 'Payslip', quotation: 'Quotation',
-  credit_note: 'Credit note', receipt: 'Receipt',
+  credit_note: 'Credit note', receipt: 'Payment received', bill: 'Supplier bill', payment: 'Payment made',
 };

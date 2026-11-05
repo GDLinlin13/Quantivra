@@ -47,7 +47,10 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
   ],
   invoice: [
     ...COMPANY_FIELDS,
+    { name: 'document_title', label: 'Document title (INVOICE / QUOTATION / CREDIT NOTE)' },
     { name: 'invoice_no', label: 'Invoice number' },
+    { name: 'reference', label: 'Reference / PO number' },
+    { name: 'company_gst_no', label: 'Our GST registration no.' },
     { name: 'invoice_date', label: 'Invoice date' },
     { name: 'due_date', label: 'Due date' },
     { name: 'payment_terms', label: 'Payment terms' },
@@ -62,6 +65,10 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
     { name: 'subtotal_after_discount', label: 'Subtotal after discount' },
     { name: 'tax', label: 'Tax' },
     { name: 'total', label: 'Total' },
+    { name: 'amount_paid', label: 'Amount paid so far' },
+    { name: 'balance_due', label: 'Balance due' },
+    { name: 'notes', label: 'Notes' },
+    { name: 'terms', label: 'Terms & conditions' },
     { name: 'bank_details', label: 'Bank / payment details' },
     { name: 'payment_account', label: 'Bank account name (which bank is shown)' },
   ],
@@ -160,7 +167,7 @@ export const STARTER_LAYOUTS: Record<DocKind, () => GridTemplate> = {
     { cells: [[0, { v: '{{footer_note}}', cs: 7, fs: 10, c: GREY }]] },
   ]),
   invoice: () => build([50, 270, 70, 140, 150], [
-    { h: 28, cells: [[0, { v: '{{logo}}', rs: 3, cs: 2, va: 'middle' }], [2, { v: 'INVOICE', cs: 3, b: true, fs: 22, al: 'right' }]] },
+    { h: 28, cells: [[0, { v: '{{logo}}', rs: 3, cs: 2, va: 'middle' }], [2, { v: '{{document_title}}', cs: 3, b: true, fs: 22, al: 'right' }]] },
     { cells: [[2, { v: 'Invoice no. {{invoice_no}}', cs: 3, al: 'right' }]] },
     { cells: [[2, { v: 'Date {{invoice_date}}', cs: 3, al: 'right' }]] },
     { h: 10 },
@@ -278,7 +285,8 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
   const terms = branding?.templates?.invoice?.paymentTermsDays ?? 30;
   return {
     fields: {
-      ...base, invoice_no: 'INV-0001', invoice_date: '2026-08-01', due_date: '2026-08-31', payment_terms: `${terms} days`,
+      ...base, document_title: 'INVOICE', reference: 'PO-1234', company_gst_no: '', amount_paid: m(0), balance_due: m(2943), notes: '', terms: '',
+      invoice_no: 'INV-0001', invoice_date: '2026-08-01', due_date: '2026-08-31', payment_terms: `${terms} days`,
       customer_name: 'Acme Trading Pte Ltd', customer_address: '1 Example Road, Singapore 123456',
       customer_contact: 'Mr John Lee', customer_phone: '+65 6123 4567', customer_email: 'accounts@acme.example', customer_website: 'www.acme.example',
       subtotal: m(3000), total_discount: m(300), subtotal_after_discount: m(2700),

@@ -335,6 +335,55 @@ BEGIN; :as_a
 DELETE FROM payroll_pay_items;
 COMMIT;
 
+\echo '9g. finance and CRM data stay inside their company; numbers come from Settings'
+BEGIN; :as_a
+DO $$
+DECLARE v_c bigint; v_d bigint; v_n1 text; v_n2 text;
+BEGIN
+  INSERT INTO contacts (company_id, name) VALUES (1, 'Alpha customer') RETURNING id INTO v_c;
+  v_n1 := fin_next_number(1, 'invoice', '2026-05-01');
+  v_n2 := fin_next_number(1, 'invoice', '2026-05-02');
+  ASSERT v_n1 = 'INV-2026-0001' AND v_n2 = 'INV-2026-0002', 'FAIL: invoice numbers ' || v_n1 || ' ' || v_n2;
+  ASSERT fin_next_number(1, 'invoice', '2027-01-03') = 'INV-2027-0001', 'FAIL: yearly reset';
+  INSERT INTO fin_documents (company_id, doc_type, number, contact_id) VALUES (1, 'invoice', v_n1, v_c) RETURNING id INTO v_d;
+  INSERT INTO fin_document_lines (company_id, document_id, description, quantity, unit_price, amount) VALUES (1, v_d, 'Design', 1, 100, 100);
+  PERFORM set_config('qv.alpha_invoice', v_d::text, false);
+  BEGIN INSERT INTO contacts (company_id, name) VALUES (2, 'Planted in B'); RAISE EXCEPTION 'FAIL: A added a contact to B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM fin_next_number(2, 'invoice'); RAISE EXCEPTION 'FAIL: A took a number from B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+COMMIT;
+BEGIN; :as_b
+DO $$
+DECLARE v_c bigint;
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM contacts WHERE company_id = 1), 'FAIL: B sees A contacts';
+  ASSERT NOT EXISTS (SELECT 1 FROM fin_documents WHERE company_id = 1), 'FAIL: B sees A invoices';
+  ASSERT NOT EXISTS (SELECT 1 FROM fin_document_lines WHERE company_id = 1), 'FAIL: B sees A invoice lines';
+  -- B cannot hang a line on A's invoice (B can't see it, so the link check refuses it)
+  INSERT INTO contacts (company_id, name) VALUES (2, 'Beta customer') RETURNING id INTO v_c;
+  BEGIN INSERT INTO fin_document_lines (company_id, document_id, description)
+          VALUES (2, current_setting('qv.alpha_invoice')::bigint, 'sneaky');
+    RAISE EXCEPTION 'FAIL: B added a line to an A invoice';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_service
+DO $$
+DECLARE v_a bigint;
+BEGIN
+  SELECT id INTO v_a FROM contacts WHERE name = 'Alpha customer';
+  -- as the service key RLS is off, so the link check itself must stop a cross-company link
+  BEGIN INSERT INTO fin_documents (company_id, doc_type, number, contact_id) VALUES (2, 'invoice', 'X-3', v_a);
+    RAISE EXCEPTION 'FAIL: invoice in B linked to a customer of A';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_a
+DELETE FROM fin_documents; DELETE FROM contacts;
+COMMIT;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;

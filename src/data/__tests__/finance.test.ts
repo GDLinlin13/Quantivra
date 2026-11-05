@@ -1,0 +1,46 @@
+import { describe, it, expect } from 'vitest';
+import { lineAmount, docTotals, balanceDue, statusAfterPayment, isOverdue, addDays } from '../finance';
+
+describe('finance maths', () => {
+  it('works out line amounts with a line discount', () => {
+    expect(lineAmount({ quantity: 10, unit_price: 250, discount_pct: 0 })).toBe(2500);
+    expect(lineAmount({ quantity: 3, unit_price: 19.99, discount_pct: 10 })).toBe(53.97);
+  });
+
+  it('applies document discounts before GST', () => {
+    const lines = [
+      { description: 'Consulting', quantity: 10, unit_price: 250, discount_pct: 0, tax_rate: 9 },
+      { description: 'Travel', quantity: 1, unit_price: 500, discount_pct: 0, tax_rate: 9 },
+    ];
+    const t = docTotals(lines, [{ name: 'Loyalty', kind: 'percent', value: 10 }]);
+    expect(t).toMatchObject({ subtotal: 3000, discount_total: 300, tax_total: 243, total: 2943 });
+    const fixed = docTotals(lines, [{ name: 'Promo', kind: 'amount', value: 100 }]);
+    expect(fixed).toMatchObject({ discount_total: 100, tax_total: 261, total: 3161 });
+  });
+
+  it('without GST the total is subtotal less discounts', () => {
+    const t = docTotals([{ description: 'A', quantity: 2, unit_price: 50, discount_pct: 0, tax_rate: 0 }]);
+    expect(t).toMatchObject({ subtotal: 100, tax_total: 0, total: 100 });
+  });
+
+  it('handles prices that already include GST', () => {
+    const t = docTotals([{ description: 'A', quantity: 1, unit_price: 109, discount_pct: 0, tax_rate: 9 }], [], true);
+    expect(t).toMatchObject({ subtotal: 109, tax_total: 9, total: 109 });
+  });
+
+  it('a discount can never make the total negative', () => {
+    const t = docTotals([{ description: 'A', quantity: 1, unit_price: 50, discount_pct: 0, tax_rate: 0 }], [{ name: 'Big', kind: 'amount', value: 80 }]);
+    expect(t).toMatchObject({ discount_total: 50, total: 0 });
+  });
+
+  it('tracks payment status and overdue', () => {
+    expect(balanceDue({ total: 100, amount_paid: 30 })).toBe(70);
+    expect(statusAfterPayment({ total: 100, amount_paid: 30, status: 'sent' })).toBe('partial');
+    expect(statusAfterPayment({ total: 100, amount_paid: 100, status: 'partial' })).toBe('paid');
+    expect(statusAfterPayment({ total: 100, amount_paid: 0, status: 'paid' })).toBe('sent');
+    expect(statusAfterPayment({ total: 100, amount_paid: 0, status: 'draft' })).toBe('draft');
+    expect(isOverdue({ doc_type: 'invoice', status: 'sent', due_date: '2026-01-01' }, '2026-02-01')).toBe(true);
+    expect(isOverdue({ doc_type: 'invoice', status: 'paid', due_date: '2026-01-01' }, '2026-02-01')).toBe(false);
+    expect(addDays('2026-01-31', 30)).toBe('2026-03-02');
+  });
+});
