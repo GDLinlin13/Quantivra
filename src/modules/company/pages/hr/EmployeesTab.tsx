@@ -91,9 +91,9 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
   };
 
   const columns = [
-    { title: 'Code', dataIndex: 'employee_code', key: 'code' },
+    { title: 'Employee ID', dataIndex: 'employee_code', key: 'code' },
     { title: 'Name', dataIndex: 'full_name', key: 'name', render: (v: string) => <span style={{ color: '#f0ede6' }}>{v}</span> },
-    { title: 'Job Title', dataIndex: 'job_title', key: 'jt' },
+    { title: 'Designation', dataIndex: 'job_title', key: 'jt' },
     { title: 'Department', dataIndex: 'department_name', key: 'dept', render: (v: string) => v || '—' },
     { title: 'Manager', dataIndex: 'manager_name', key: 'mgr', render: (v: string) => v || '—' },
     { title: 'Type', dataIndex: 'employment_type', key: 'type', render: (v: string) => <Tag>{v.replace('_', ' ')}</Tag> },
@@ -131,11 +131,11 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
         onOk={() => form.submit()} width={640} okText="Save">
         <Form form={form} layout="vertical" onFinish={submit}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Form.Item name="employee_code" label="Employee Code" rules={[{ required: true }]}><Input /></Form.Item>
+            <Form.Item name="employee_code" label="Employee ID" tooltip="Your company's own number for this person, e.g. EMP-001" rules={[{ required: true }]}><Input /></Form.Item>
             <Form.Item name="full_name" label="Full Name" rules={[{ required: true }]}><Input /></Form.Item>
             <Form.Item name="email" label="Email"><Input /></Form.Item>
             <Form.Item name="phone" label="Phone"><Input /></Form.Item>
-            <Form.Item name="job_title" label="Job Title"><Input /></Form.Item>
+            <Form.Item name="job_title" label="Designation" tooltip="Job title, e.g. Senior Designer"><Input /></Form.Item>
             <Form.Item name="department_id" label="Department">
               <Select allowClear options={depts.map(d => ({ label: d.name, value: d.id }))} />
             </Form.Item>

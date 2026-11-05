@@ -7,7 +7,8 @@ import { brandingService, type Branding } from '../../../../services/branding';
 import { DocumentShell } from '../../../../components/DocumentShell';
 import { GridDocument } from '../../../../components/GridDocument';
 import { companyFields, money as fmtMoney } from '../../../../data/documentLayouts';
-import { hrService } from '../../../../services/hr';
+import { hrService, type Employee } from '../../../../services/hr';
+import { maskId } from '../../../../services/payroll';
 import type { FieldValues, ListValues } from '../../../../utils/gridTemplate';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { PayItemsCard } from './PayItemsCard';
@@ -184,21 +185,24 @@ function PayslipView({ slip, company, branding, period }: { slip: PayslipRow; co
   const bankName: string | null = res.bankName || null;
   const layout = t?.layout;
   const useLayout = !!layout?.enabled;
-  const needsFullBank = useLayout
-    ? JSON.stringify(layout?.cells || {}).includes('{{bank_account}}')
-    : !!(t?.showBankAccount && t?.bankAccountFull);
-  const [bankFull, setBankFull] = useState<string | null>(null);
-
-  // The full bank number is only kept encrypted; fetch it (pay-access users only) when the layout asks for it.
+  // The employee's current record (pay-access users only). Full bank / ID numbers are only kept
+  // encrypted, so they are looked up here rather than saved on the payslip; designation and
+  // department also come from here for payslips made before they were saved on the payslip.
+  const [emp, setEmp] = useState<Employee | null>(null);
   useEffect(() => {
     let live = true;
-    setBankFull(null);
-    if (!needsFullBank || !company?.id) return;
+    setEmp(null);
+    if (!company?.id) return;
     hrService.listEmployees(company.id)
-      .then(list => { if (live) setBankFull(list.find(e => Number(e.id) === Number(slip.employee_id))?.bank_account || null); })
+      .then(list => { if (live) setEmp(list.find(e => Number(e.id) === Number(slip.employee_id)) || null); })
       .catch(() => {});
     return () => { live = false; };
-  }, [needsFullBank, company?.id, slip.employee_id]);
+  }, [company?.id, slip.employee_id]);
+  const bankFull = emp?.bank_account || null;
+  const designation: string = res.designation ?? emp?.job_title ?? '';
+  const department: string = res.department ?? emp?.department_name ?? '';
+  const idMasked: string = res.idMasked ?? maskId(emp?.national_id) ?? '';
+  const idFull: string = emp?.national_id || idMasked;
 
   if (useLayout && layout) {
     const line = (x: { componentCode: string; amount: number; label?: string }) => ({ name: x.label || componentLabel(x.componentCode), amount: fmtMoney(x.amount, cur) });
@@ -207,6 +211,10 @@ function PayslipView({ slip, company, branding, period }: { slip: PayslipRow; co
       ...companyFields(company, branding, t?.footerNote),
       employee_name: slip.employee_name || '',
       employee_code: slip.employee_code || '',
+      employee_designation: designation,
+      employee_department: department,
+      employee_id_no: idFull,
+      employee_id_no_masked: idMasked,
       bank_name: bankName || '',
       bank_account: bankFull || bankMasked || '',
       bank_account_masked: bankMasked || '',
@@ -242,6 +250,8 @@ function PayslipView({ slip, company, branding, period }: { slip: PayslipRow; co
         <table style={{ width: '100%', fontSize: 13, color: '#111', borderCollapse: 'collapse' }}>
           <tbody>
             <tr><td style={{ color: '#666' }}>Employee</td><td style={{ textAlign: 'right' }}>{slip.employee_name}{(t?.showEmployeeId ?? true) && slip.employee_code ? ` · ${slip.employee_code}` : ''}</td></tr>
+            {(t?.showDesignation ?? true) && designation && <tr><td style={{ color: '#666' }}>Designation</td><td style={{ textAlign: 'right' }}>{designation}</td></tr>}
+            {t?.showNationalId && idMasked && <tr><td style={{ color: '#666' }}>NRIC / ID no.</td><td style={{ textAlign: 'right' }}>{t?.nationalIdFull ? idFull : idMasked}</td></tr>}
             {t?.showBankAccount && bankMasked && <tr><td style={{ color: '#666' }}>Bank account</td><td style={{ textAlign: 'right' }}>{[bankName, (t?.bankAccountFull && bankFull) || bankMasked].filter(Boolean).join(' ')}</td></tr>}
 
             <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Earnings</td></tr>

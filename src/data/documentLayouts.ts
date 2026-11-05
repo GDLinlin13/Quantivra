@@ -23,7 +23,11 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
   payslip: [
     ...COMPANY_FIELDS,
     { name: 'employee_name', label: 'Employee name' },
-    { name: 'employee_code', label: 'Employee code' },
+    { name: 'employee_code', label: 'Employee ID' },
+    { name: 'employee_designation', label: 'Designation (job title)' },
+    { name: 'employee_department', label: 'Department' },
+    { name: 'employee_id_no', label: 'NRIC / ID number (full)' },
+    { name: 'employee_id_no_masked', label: 'NRIC / ID number (masked, e.g. •••••567A)' },
     { name: 'bank_name', label: 'Bank name' },
     { name: 'bank_account', label: 'Bank account number (full)' },
     { name: 'bank_account_masked', label: 'Bank account number (masked, e.g. ••••6789)' },
@@ -92,7 +96,8 @@ export const STARTER_LAYOUTS: Record<DocKind, () => GridTemplate> = {
     { h: 10 },
     { h: 34, cells: [[0, { v: 'PAYSLIP', cs: 6, b: true, fs: 18, al: 'center', bt: true, bb: true }]] },
     { cells: [[0, label('Employee')], [1, { v: '{{employee_name}}', cs: 2 }], [3, label('Pay period')], [4, { v: '{{period}}', cs: 2 }]] },
-    { cells: [[0, label('Employee code')], [1, { v: '{{employee_code}}', cs: 2 }], [3, label('Pay date')], [4, { v: '{{pay_date}}', cs: 2 }]] },
+    { cells: [[0, label('Employee ID')], [1, { v: '{{employee_code}}', cs: 2 }], [3, label('Pay date')], [4, { v: '{{pay_date}}', cs: 2 }]] },
+    { cells: [[0, label('Designation')], [1, { v: '{{employee_designation}}', cs: 2 }], [3, label('Department')], [4, { v: '{{employee_department}}', cs: 2 }]] },
     { cells: [[0, label('Bank account')], [1, { v: '{{bank_name}} {{bank_account_masked}}', cs: 2 }], [3, label('Currency')], [4, { v: '{{currency}}', cs: 2 }]] },
     { h: 10 },
     { cells: [[0, { v: 'Earnings', cs: 4, b: true, bg: SHADE, bb: true }], [4, { v: 'Amount', cs: 2, b: true, bg: SHADE, bb: true, al: 'right' }]] },
@@ -166,7 +171,7 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
   if (kind === 'payslip') {
     return {
       fields: {
-        ...base, employee_name: 'Alice Tan', employee_code: 'EMP-001', bank_name: 'DBS', bank_account: '012-345678-9', bank_account_masked: '•••••••78-9',
+        ...base, employee_name: 'Alice Tan', employee_code: 'EMP-001', employee_designation: 'Senior Designer', employee_department: 'Creative', employee_id_no: 'S1234567A', employee_id_no_masked: '•••••567A', bank_name: 'DBS', bank_account: '012-345678-9', bank_account_masked: '•••••••78-9',
         period: 'August 2026', pay_date: '2026-08-31', gross_pay: money(9500, cur), total_deductions: money(1600, cur),
         net_pay: money(7900, cur), total_employer: money(1530, cur), paid_on_behalf: '',
       },
