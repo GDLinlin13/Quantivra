@@ -72,7 +72,7 @@ function FieldGuide({ kind, onInsert, rowRepeat, sample }: {
               <p style={{ margin: '0 0 8px' }}>
                 Some things have a different number of lines for each person — one employee has only Basic Salary, another also has Overtime and a
                 Bonus. You can't know in advance how many rows to leave, so you design <b>one</b> row with a list's fields in it, e.g.
-                <code style={code}> {'{{earnings.name}}'}</code> and <code style={code}>{'{{earnings.amount}}'}</code>. That row turns yellow ↻ and, when
+                 <code style={code} onClick={() => onInsert('earnings.name')} title="Click to put it in the selected cell">{'{{earnings.name}}'}</code> and <code style={code} onClick={() => onInsert('earnings.amount')} title="Click to put it in the selected cell">{'{{earnings.amount}}'}</code>. That row turns yellow ↻ and, when
                 printed, is copied once per item.
               </p>
               <p style={{ margin: '0 0 8px' }}>
@@ -81,21 +81,21 @@ function FieldGuide({ kind, onInsert, rowRepeat, sample }: {
               </p>
               <p style={{ margin: '0 0 8px' }}>
                 <b>Only want certain items?</b> Don't use a list — use a single field instead. For example, for a CPF section put
-                <code style={code}> {'{{cpf_employer}}'}</code>, <code style={code}>{'{{cpf_employee}}'}</code> and <code style={code}>{'{{cpf_total}}'}</code> in
-                ordinary (non-repeating) rows. SDL is a levy the company pays, not CPF; it has its own <code style={code}>{'{{sdl}}'}</code> field.
+                 <code style={code} onClick={() => onInsert('cpf_employer')} title="Click to put it in the selected cell">{'{{cpf_employer}}'}</code>, <code style={code} onClick={() => onInsert('cpf_employee')} title="Click to put it in the selected cell">{'{{cpf_employee}}'}</code> and <code style={code} onClick={() => onInsert('cpf_total')} title="Click to put it in the selected cell">{'{{cpf_total}}'}</code> in
+                ordinary (non-repeating) rows. SDL is a levy the company pays, not CPF; it has its own <code style={code} onClick={() => onInsert('sdl')} title="Click to put it in the selected cell">{'{{sdl}}'}</code> field.
               </p>
             </>
           ) : (
             <>
             <p style={{ margin: '0 0 8px' }}>
               Each invoice has a different number of lines. You can't know in advance how many rows to leave, so you design <b>one</b> row with the
-              line fields in it, e.g. <code style={code}>{'{{lines.description}}'}</code> and <code style={code}>{'{{lines.amount}}'}</code>. That row turns
+              line fields in it, e.g. <code style={code} onClick={() => onInsert('lines.description')} title="Click to put it in the selected cell">{'{{lines.description}}'}</code> and <code style={code} onClick={() => onInsert('lines.amount')} title="Click to put it in the selected cell">{'{{lines.amount}}'}</code>. That row turns
               yellow ↻ and, when printed, is copied once per invoice line.
             </p>
             <p style={{ margin: '0 0 8px' }}>
-              <b>Discounts:</b> put <code style={code}>{'{{discounts.name}}'}</code> and <code style={code}>{'{{discounts.amount}}'}</code> in a row below
+              <b>Discounts:</b> put <code style={code} onClick={() => onInsert('discounts.name')} title="Click to put it in the selected cell">{'{{discounts.name}}'}</code> and <code style={code} onClick={() => onInsert('discounts.amount')} title="Click to put it in the selected cell">{'{{discounts.amount}}'}</code> in a row below
               the subtotal — it is printed once per discount, and disappears when there is none. Or show one figure with
-              <code style={code}> {'{{total_discount}}'}</code>; a discount on a single line is <code style={code}>{'{{lines.discount}}'}</code>.
+               <code style={code} onClick={() => onInsert('total_discount')} title="Click to put it in the selected cell">{'{{total_discount}}'}</code>; a discount on a single line is <code style={code} onClick={() => onInsert('lines.discount')} title="Click to put it in the selected cell">{'{{lines.discount}}'}</code>.
             </p>
             </>
           )}
