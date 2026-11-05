@@ -119,7 +119,6 @@ async function findOrCreateLogin(
 async function createCompanyUser(admin: SupabaseClient, caller: Caller, body: Body) {
   const companyId = num(body, 'company_id')!;
   await requireUserAdmin(admin, caller, companyId);
-  const employeeId = num(body, 'employee_id', false);
   const username = normaliseUsername(str(body, 'username'));
   if (!isValidUsername(username)) throw new HttpError(400, `Username must be ${USERNAME_RULE_TEXT}`);
   const contactEmail = str(body, 'email', false).toLowerCase() || null;
@@ -138,11 +137,7 @@ async function createCompanyUser(admin: SupabaseClient, caller: Caller, body: Bo
     const role = await admin.from('company_roles').select('id').eq('id', roleId).eq('company_id', companyId).maybeSingle();
     if (!role.data) throw new HttpError(400, 'Role does not belong to this company');
   }
-  if (employeeId) {
-    const emp = await admin.from('employees').select('id, user_id').eq('id', employeeId).eq('company_id', companyId).maybeSingle();
-    if (!emp.data) throw new HttpError(400, 'Employee does not belong to this company');
-    if (emp.data.user_id) throw new HttpError(400, 'This employee already has a sign-in');
-  }
+
 
   // Sign-in is by username: the Supabase login uses a hidden internal address
   // unique to this company + username, so it never collides with anyone else.
@@ -172,8 +167,6 @@ async function createCompanyUser(admin: SupabaseClient, caller: Caller, body: Bo
       ? 'This username is already used in this company' : error.message);
   }
   if (roleId) await admin.from('company_user_roles').insert({ user_id: row.id, role_id: roleId });
-  // One person, one login: attach it to their employee record.
-  if (employeeId) await admin.from('employees').update({ user_id: row.id }).eq('id', employeeId).eq('company_id', companyId);
 
   return { user: row, existing_login: !login.created };
 }

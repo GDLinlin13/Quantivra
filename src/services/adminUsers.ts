@@ -25,8 +25,6 @@ export const adminUsersService = {
   createCompanyUser(input: {
     company_id: number; username: string; email?: string; password: string; full_name: string;
     job_title?: string; phone?: string; role_id?: number;
-    /** attach the new login to this employee record */
-    employee_id?: number;
   }) {
     return call<CreatedCompanyUser>('create_company_user', input);
   },

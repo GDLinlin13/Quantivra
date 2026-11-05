@@ -235,11 +235,4 @@ describe('admin-users server function', () => {
     expect((await call('tok-staff', { action: 'set_password', company_user_id: 12, password: 'newpassword' })).status).toBe(200);
   });
 
-  it('a new sign-in can be attached to an employee record, once', async () => {
-    const r = await call('tok-a', newUser(1, { employee_id: 500 }));
-    expect(r.status).toBe(200);
-    expect(fake.db.employees.find(e => e.id === 500)?.user_id).toBe(r.body.user.id);
-    expect((await call('tok-a', newUser(1, { username: 'second', employee_id: 500 }))).body.error).toMatch(/already has a sign-in/);
-    expect((await call('tok-a', newUser(1, { username: 'third', employee_id: 600 }))).body.error).toMatch(/does not belong/);
-  });
 });
