@@ -11,7 +11,7 @@ const { Text } = Typography;
  * Customers and suppliers with their people (person in charge, phone, email…).
  * Used by CRM (customers) and Finance (suppliers).
  */
-export function ContactsManager({ companyId, kind, currency }: { companyId: number; kind: 'customer' | 'supplier'; currency: string }) {
+export function ContactsManager({ companyId, kind, currency, onChanged }: { companyId: number; kind: 'customer' | 'supplier'; currency: string; onChanged?: () => void }) {
   const [rows, setRows] = useState<Contact[]>([]);
   const [people, setPeople] = useState<ContactPerson[]>([]);
   const [docs, setDocs] = useState<FinDocument[]>([]);
@@ -86,7 +86,7 @@ export function ContactsManager({ companyId, kind, currency }: { companyId: numb
       {editing && (
         <ContactDrawer companyId={companyId} contact={editing} word={word} currency={currency}
           docs={editing.id ? docs.filter(d => d.contact_id === editing.id) : []}
-          onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />
+          onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); onChanged?.(); }} />
       )}
     </div>
   );

@@ -30,7 +30,7 @@ export function PaymentsList({ data, direction }: { data: FinanceData; direction
       <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
         {direction === 'in'
           ? 'Payments are recorded from an invoice: open Invoices and click “Receive”.'
-          : 'Payments are recorded from a bill: open Bills and click “Pay”.'}
+          : 'Payments are recorded from a bill or expense: open Bills or Expenses and click “Pay”. Expenses paid on the spot are recorded automatically.'}
       </Text>
       <Table rowKey="id" size="small" loading={loading} dataSource={rows} pagination={{ pageSize: 50, hideOnSinglePage: true }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No payments yet" /> }}

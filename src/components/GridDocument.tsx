@@ -31,13 +31,20 @@ export function spanHeight(t: GridTemplate, r: number, rs = 1): number {
   return h;
 }
 
-/** The logo stretches to fill its (merged) cell, keeping its shape; the cell's alignment positions it. */
+/**
+ * The logo grows to fit its (merged) cell and always keeps its shape; the cell's alignment
+ * positions it. Sized with max-width / max-height rather than object-fit, because the PDF
+ * maker (html2canvas) ignores object-fit and would stretch the picture.
+ */
 export function LogoImg({ src, cell, height }: { src: string; cell: GridCell; height: number }) {
-  const x = cell.al || 'left';
-  const y = cell.va === 'middle' ? 'center' : (cell.va || 'top');
+  const justify = cell.al === 'center' ? 'center' : cell.al === 'right' ? 'flex-end' : 'flex-start';
+  const align = cell.va === 'middle' ? 'center' : cell.va === 'bottom' ? 'flex-end' : 'flex-start';
+  const h = Math.max(12, height - 8);
   return (
-    <img src={src} alt="" draggable={false}
-      style={{ display: 'block', width: '100%', height: Math.max(12, height - 8), objectFit: 'contain', objectPosition: `${x} ${y}`, pointerEvents: 'none' }} />
+    <div style={{ display: 'flex', justifyContent: justify, alignItems: align, width: '100%', height: h }}>
+      <img src={src} alt="" draggable={false}
+        style={{ display: 'block', width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: h, pointerEvents: 'none' }} />
+    </div>
   );
 }
 
