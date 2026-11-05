@@ -118,7 +118,14 @@ async function createCompanyUser(admin: SupabaseClient, caller: Caller, body: Bo
   // Sign-in is by username: the Supabase login uses a hidden internal address
   // unique to this company + username, so it never collides with anyone else.
   const login = await findOrCreateLogin(admin, loginEmailFor(company.company_code, username), { password });
-  if (!login.created) throw new HttpError(400, 'This username is already used in this company');
+  if (!login.created) {
+    // The hidden address is unique to this company + username. If nobody uses
+    // that login any more (e.g. the company was deleted and re-created), it is
+    // an orphan: reuse it with the new temporary password.
+    if (await loginInUse(admin, login.id)) throw new HttpError(400, 'This username is already used in this company');
+    const { error: resetErr } = await admin.auth.admin.updateUserById(login.id, { password, user_metadata: { must_change_password: true } });
+    if (resetErr) throw new HttpError(400, resetErr.message);
+  }
   const { data: row, error } = await admin.from('company_users').insert({
     company_id: companyId,
     username,
@@ -131,13 +138,49 @@ async function createCompanyUser(admin: SupabaseClient, caller: Caller, body: Bo
   }).select('id, company_id, username, email, full_name, job_title, phone, is_active, created_at').single();
 
   if (error) {
-    await admin.auth.admin.deleteUser(login.id);
+    if (login.created) await admin.auth.admin.deleteUser(login.id);
     throw new HttpError(400, /duplicate|unique/i.test(error.message)
       ? 'This username is already used in this company' : error.message);
   }
   if (roleId) await admin.from('company_user_roles').insert({ user_id: row.id, role_id: roleId });
 
-  return { user: row, existing_login: false };
+  return { user: row, existing_login: !login.created };
+}
+
+/** Is this Supabase login still linked to any company user or platform admin? */
+async function loginInUse(admin: SupabaseClient, authUserId: string): Promise<boolean> {
+  const [cu, pu] = await Promise.all([
+    admin.from('company_users').select('id').eq('auth_user_id', authUserId),
+    admin.from('platform_users').select('id').eq('auth_user_id', authUserId),
+  ]);
+  return (cu.data || []).length > 0 || (pu.data || []).length > 0;
+}
+
+/**
+ * Permanently delete a (deactivated) company and everything in it, then
+ * remove the Supabase logins that belonged only to that company — otherwise
+ * they linger and block re-creating the same usernames.
+ */
+async function deleteCompany(admin: SupabaseClient, caller: Caller, body: Body) {
+  requirePlatformAdmin(caller);
+  const companyId = num(body, 'company_id')!;
+  const { data: company } = await admin.from('companies').select('id, is_active').eq('id', companyId).maybeSingle();
+  if (!company) throw new HttpError(404, 'Company not found');
+  if (company.is_active) throw new HttpError(400, 'Deactivate the company before deleting it');
+
+  const { data: users } = await admin.from('company_users').select('auth_user_id').eq('company_id', companyId);
+  const authIds = Array.from(new Set((users || []).map((u: any) => u.auth_user_id).filter(Boolean))) as string[];
+
+  const del = await admin.from('companies').delete().eq('id', companyId);
+  if (del.error) throw new HttpError(400, del.error.message);
+
+  let removedLogins = 0;
+  for (const id of authIds) {
+    if (await loginInUse(admin, id)) continue;   // still used by another company or as platform admin
+    const { error } = await admin.auth.admin.deleteUser(id);
+    if (!error) removedLogins++;
+  }
+  return { ok: true, removed_logins: removedLogins };
 }
 
 async function setPassword(admin: SupabaseClient, caller: Caller, body: Body) {
@@ -222,6 +265,7 @@ export async function handleAdminUsers(request: Request, admin: SupabaseClient):
       case 'set_password':          result = await setPassword(admin, caller, body); break;
       case 'create_platform_admin': result = await createPlatformAdmin(admin, caller, body); break;
       case 'migrate_legacy_users':  result = await migrateLegacyUsers(admin, caller); break;
+      case 'delete_company':        result = await deleteCompany(admin, caller, body); break;
       default: throw new HttpError(400, 'Unknown action');
     }
     return Response.json(result);

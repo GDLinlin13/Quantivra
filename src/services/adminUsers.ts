@@ -34,6 +34,10 @@ export const adminUsersService = {
   createPlatformAdmin(input: { email: string; password: string; full_name: string }) {
     return call<{ user: any; existing_login: boolean }>('create_platform_admin', input);
   },
+  /** Delete a deactivated company, its data and the logins only it used. */
+  deleteCompany(companyId: number) {
+    return call<{ ok: true; removed_logins: number }>('delete_company', { company_id: companyId });
+  },
   migrateLegacyUsers() {
     return call<{ migrated: number; linked_to_existing_login: number; failed: { email: string; reason: string }[] }>('migrate_legacy_users');
   },

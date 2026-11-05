@@ -34,7 +34,7 @@ function makeFake() {
     let rows = () => db[table] ?? [];
     const filters: ((r: Row) => boolean)[] = [];
     let joinCompanies = false;
-    let pending: { kind: 'insert' | 'update'; values: Row } | null = null;
+    let pending: { kind: 'insert' | 'update' | 'delete'; values: Row } | null = null;
     const get = (r: Row, path: string) => {
       if (path.startsWith('companies.')) return db.companies.find(c => c.id === r.company_id)?.[path.slice(10)];
       return r[path];
@@ -51,12 +51,20 @@ function makeFake() {
       }
       const matched = rows().filter(r => filters.every(f => f(r)));
       if (pending?.kind === 'update') matched.forEach(r => Object.assign(r, pending!.values));
+      if (pending?.kind === 'delete') {
+        db[table] = db[table].filter(r => !matched.includes(r));
+        if (table === 'companies') {  // ON DELETE CASCADE
+          const ids = matched.map(r => r.id);
+          db.company_users = db.company_users.filter(u => !ids.includes(u.company_id));
+        }
+      }
       return { data: matched.map(r => joinCompanies ? { ...r, companies: db.companies.find(c => c.id === r.company_id) } : r), error: null };
     };
     const b: any = {
       select(cols?: string) { if (cols?.includes('companies!inner')) joinCompanies = true; return b; },
       insert(values: Row) { pending = { kind: 'insert', values }; return b; },
       update(values: Row) { pending = { kind: 'update', values }; return b; },
+      delete() { pending = { kind: 'delete', values: {} }; return b; },
       eq(col: string, val: any) { filters.push(r => get(r, col) === val); return b; },
       neq(col: string, val: any) { filters.push(r => get(r, col) !== val); return b; },
       ilike(col: string, val: any) { filters.push(r => String(get(r, col) ?? '').toLowerCase() === String(val).toLowerCase()); return b; },
@@ -189,5 +197,28 @@ describe('admin-users server function', () => {
     expect((await call('tok-a', { action: 'drop_tables' })).status).toBe(400);
     const res = await handleAdminUsers(new Request('http://x/api/admin-users'), fake.client);
     expect(res.status).toBe(405);
+  });
+
+  it('deleting a company removes its data and the logins only it used', async () => {
+    expect((await call('tok-a', { action: 'delete_company', company_id: 1 })).status).toBe(403);
+    expect((await call('tok-admin', { action: 'delete_company', company_id: 1 })).body.error).toMatch(/Deactivate/);
+    fake.db.companies.find(c => c.id === 1)!.is_active = false;
+    const r = await call('tok-admin', { action: 'delete_company', company_id: 1 });
+    expect(r.status).toBe(200);
+    expect(fake.db.companies.some(c => c.id === 1)).toBe(false);
+    expect(fake.authUsers['u-a']).toBeUndefined();          // only used by company 1
+    expect(fake.authUsers['u-staff']).toBeUndefined();
+    expect(fake.authUsers['u-shared']).toBeDefined();       // still used by company 2
+  });
+
+  it('re-creating a username whose old login was left behind reuses that login', async () => {
+    fake.authUsers['u-orphan'] = { email: 'alpha.ivan@users.quantivra.app', password: 'old' };
+    const r = await call('tok-admin', newUser(1, { username: 'ivan', password: 'brandnew1' }));
+    expect(r.status).toBe(200);
+    expect(fake.db.company_users.find(u => u.username === 'ivan')?.auth_user_id).toBe('u-orphan');
+    expect(fake.authUsers['u-orphan'].password).toBe('brandnew1');
+    // but a login that is still in use is never taken over
+    expect((await call('tok-admin', newUser(1, { username: 'ivan', password: 'another12' }))).status).toBe(400);
+    expect(fake.authUsers['u-orphan'].password).toBe('brandnew1');
   });
 });
