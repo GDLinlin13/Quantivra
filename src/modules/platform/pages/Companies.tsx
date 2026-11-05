@@ -355,12 +355,12 @@ export function CompaniesPage() {
                 <Col span={12}>
                   <Form.Item name="name" label={<Text style={{ color: '#f0ede6' }}>Company Name</Text>}
                     rules={[{ required: true, message: 'Required' }]}>
-                    <Input placeholder="Acme Corp" />
+                    <Input />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
                   <Form.Item name="registration_number" label={<Text style={{ color: '#f0ede6' }}>Registration Number</Text>}>
-                    <Input placeholder="202401000001" />
+                    <Input />
                   </Form.Item>
                 </Col>
               </Row>

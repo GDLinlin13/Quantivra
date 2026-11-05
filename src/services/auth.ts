@@ -140,6 +140,19 @@ export const authService = {
     return data.session?.access_token ?? null;
   },
 
+  /** Change the signed-in person's own password (current password required). */
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    if (newPassword.length < 8) throw new Error('New password must be at least 8 characters');
+    if (newPassword === currentPassword) throw new Error('New password must be different from the current one');
+    const { data: u, error: userErr } = await supabase.auth.getUser();
+    const email = u.user?.email;
+    if (userErr || !email) throw new Error('Your session has expired. Please sign in again.');
+    const check = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+    if (check.error) throw new Error('Current password is incorrect');
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw new Error(error.message);
+  },
+
   async logout() {
     clearSession();
     await supabase.auth.signOut();
