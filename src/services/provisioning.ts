@@ -149,6 +149,9 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
       name: input.name,
       company_code,
       country: input.country,
+      // Set explicitly: the live database has no default for these columns.
+      industry: 'General',
+      business_type: 'General',
       currency: input.currency,
       financial_year_start: input.financial_year_start,
       timezone: input.timezone,
