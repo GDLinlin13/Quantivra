@@ -82,6 +82,13 @@ export function LeaveTab({ companyId }: { companyId: number }) {
   );
 
   const typeById = (id: number) => types.find(t => t.id === id);
+  // Parental leave only shows once it applies (right parent + due date or newborn recorded).
+  const PARENTAL = /maternity|paternity|shared parental|childcare/i;
+  const entitledFor = (typeId: number) => {
+    const b = balances.find(x => x.leave_type_id === typeId);
+    return b ? Number(b.entitled_days) + Number(b.carried_days || 0) : 0;
+  };
+  const shownType = (t: LeaveType) => !PARENTAL.test(t.name) || entitledFor(t.id) > 0;
 
   return (
     <div>
@@ -93,7 +100,7 @@ export function LeaveTab({ companyId }: { companyId: number }) {
 
       <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
         {balances.length === 0 && <Col span={24}><Empty description="No leave types configured" /></Col>}
-        {balances.map(b => {
+        {balances.filter(b => { const t = typeById(b.leave_type_id); return !t || shownType(t); }).map(b => {
           const lt = typeById(b.leave_type_id);
           const total = Number(b.entitled_days) + Number(b.carried_days);
           const used = Number(b.taken_days) + Number(b.pending_days);
@@ -139,7 +146,7 @@ export function LeaveTab({ companyId }: { companyId: number }) {
       <Modal title="Apply for Leave" open={open} onCancel={() => setOpen(false)} onOk={() => form.submit()} okText="Submit">
         <Form form={form} layout="vertical" onFinish={submit}>
           <Form.Item name="leave_type_id" label="Leave Type" rules={[{ required: true }]}>
-            <Select options={types.filter(t => t.active).map(t => ({ label: t.name, value: t.id }))} />
+            <Select options={types.filter(t => t.active && shownType(t)).map(t => ({ label: t.name, value: t.id }))} />
           </Form.Item>
           <Form.Item name="range" label="Dates" rules={[{ required: true }]}>
             <DatePicker.RangePicker style={{ width: '100%' }} />

@@ -380,7 +380,9 @@ END $$;
 -- ------------------------------------------------------------
 -- 6. RPCs: same behaviour as before, plus a caller check first
 -- ------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.hr_list_employees(p_company_id bigint)
+-- Later migrations (019) add columns; drop first so re-running always works.
+DROP FUNCTION IF EXISTS public.hr_list_employees(bigint);
+CREATE FUNCTION public.hr_list_employees(p_company_id bigint)
 RETURNS TABLE (
   id bigint, employee_code text, full_name text, email text, phone text,
   job_title text, employment_type text, join_date date, exit_date date,

@@ -176,6 +176,9 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
                 { label: 'Other / none', value: 'other' },
               ]} />
             </Form.Item>
+            <Form.Item name="gender" label="Gender" tooltip="Decides maternity or paternity leave">
+              <Select allowClear options={[{ label: 'Female', value: 'female' }, { label: 'Male', value: 'male' }]} />
+            </Form.Item>
             <Form.Item name="work_week" label="Work week" tooltip="Which days this person normally works. Leave counted in working days skips the others.">
               <Select options={[
                 { value: 'company', label: 'Same as company (Settings)' },
@@ -190,15 +193,20 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '8px 0' }}>
-            <span style={{ color: 'rgba(240,237,230,0.6)', fontSize: 13 }}>Dependents (for childcare / maternity leave)</span>
-            <Button size="small" icon={<PlusOutlined />} onClick={() => setDeps(d => [...d, { relationship: 'child', name: '', date_of_birth: null, citizenship: 'SC' }])}>Add</Button>
+            <span style={{ color: 'rgba(240,237,230,0.6)', fontSize: 13 }}>
+              Dependents — add an expected baby with its due date to turn on maternity / paternity leave
+            </span>
+            <Space size={4}>
+              <Button size="small" icon={<PlusOutlined />} onClick={() => setDeps(d => [...d, { relationship: 'expected_child', name: '', date_of_birth: null, citizenship: 'SC' }])}>Expected baby</Button>
+              <Button size="small" icon={<PlusOutlined />} onClick={() => setDeps(d => [...d, { relationship: 'child', name: '', date_of_birth: null, citizenship: 'SC' }])}>Dependent</Button>
+            </Space>
           </div>
           {deps.map((d, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 6 }}>
               <Input size="small" placeholder="Name" value={d.name || ''} onChange={e => setDeps(x => x.map((v, vi) => vi === i ? { ...v, name: e.target.value } : v))} />
               <Select size="small" value={d.relationship} onChange={v => setDeps(x => x.map((r, ri) => ri === i ? { ...r, relationship: v } : r))}
-                options={['child', 'spouse', 'parent'].map(s => ({ label: s, value: s }))} />
-              <DatePicker size="small" value={d.date_of_birth ? dayjs(d.date_of_birth) : null} placeholder="DOB"
+                options={[{ label: 'Expected baby', value: 'expected_child' }, { label: 'Child', value: 'child' }, { label: 'Spouse', value: 'spouse' }, { label: 'Parent', value: 'parent' }]} />
+              <DatePicker size="small" value={d.date_of_birth ? dayjs(d.date_of_birth) : null} placeholder={d.relationship === 'expected_child' ? 'Due date' : 'Date of birth'}
                 onChange={v => setDeps(x => x.map((r, ri) => ri === i ? { ...r, date_of_birth: v ? v.format('YYYY-MM-DD') : null } : r))} />
               <Select size="small" value={d.citizenship} placeholder="Citizenship"
                 onChange={v => setDeps(x => x.map((r, ri) => ri === i ? { ...r, citizenship: v } : r))}
