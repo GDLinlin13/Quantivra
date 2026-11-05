@@ -84,8 +84,8 @@ export const brandingService = {
   },
 };
 
-/** Downscale + compress an image File to a data URI (<= ~180 KB), for the logo. */
-export function fileToLogoDataUri(file: File, maxDim = 480): Promise<string> {
+/** Downscale + compress an image File to a data URI (<= ~500 KB), for the logo. Big enough to stay sharp when stretched on a document. */
+export function fileToLogoDataUri(file: File, maxDim = 1000): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) return reject(new Error('Please choose an image file'));
     const reader = new FileReader();
@@ -103,7 +103,7 @@ export function fileToLogoDataUri(file: File, maxDim = 480): Promise<string> {
         ctx.drawImage(img, 0, 0, w, h);
         // PNG keeps transparency for logos; fall back to JPEG if huge.
         let uri = canvas.toDataURL('image/png');
-        if (uri.length > 240_000) uri = canvas.toDataURL('image/jpeg', 0.85);
+        if (uri.length > 700_000) uri = canvas.toDataURL('image/jpeg', 0.85);
         resolve(uri);
       };
       img.src = reader.result as string;
