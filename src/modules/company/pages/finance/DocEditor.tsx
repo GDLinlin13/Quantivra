@@ -150,7 +150,7 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
                 options={payFrom.map(a => ({ value: a.id, label: a.name }))} placeholder="Not paid yet" />
             </Form.Item>
           )}
-          <Form.Item label={docType === 'bill' ? "Supplier's invoice no." : 'Reference / PO no.'}>
+          <Form.Item label={sales ? 'Reference / PO no.' : 'Invoice no.'}>
             <Input value={doc.reference || ''} onChange={e => set({ reference: e.target.value })} />
           </Form.Item>
         </div>
