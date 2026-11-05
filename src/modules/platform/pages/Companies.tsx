@@ -380,17 +380,17 @@ export function CompaniesPage() {
               <Row gutter={16}>
                 <Col span={8}>
                   <Form.Item name="currency" label={<Text style={{ color: '#f0ede6' }}>Currency</Text>}>
-                    <Input placeholder="SGD" />
+                    <Input />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
                   <Form.Item name="financial_year_start" label={<Text style={{ color: '#f0ede6' }}>Financial Year</Text>}>
-                    <Input placeholder="01-01" />
+                    <Input />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
                   <Form.Item name="timezone" label={<Text style={{ color: '#f0ede6' }}>Timezone</Text>}>
-                    <Input placeholder="Asia/Singapore" />
+                    <Input />
                   </Form.Item>
                 </Col>
               </Row>
@@ -403,26 +403,26 @@ export function CompaniesPage() {
                 <Col span={12}>
                   <Form.Item name="owner_full_name" label={<Text style={{ color: '#f0ede6' }}>Owner Name</Text>}
                     rules={[{ required: true, message: 'Required' }]}>
-                    <Input placeholder="John Doe" />
+                    <Input />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
                   <Form.Item name="owner_email" label={<Text style={{ color: '#f0ede6' }}>Owner Email</Text>}
                     rules={[{ required: true, type: 'email', message: 'Valid email required' }]}>
-                    <Input placeholder="john@example.com" />
+                    <Input />
                   </Form.Item>
                 </Col>
               </Row>
               <Row gutter={16}>
                 <Col span={12}>
                   <Form.Item name="owner_mobile" label={<Text style={{ color: '#f0ede6' }}>Mobile</Text>}>
-                    <Input placeholder="+65 9123 4567" />
+                    <Input />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
                   <Form.Item name="owner_password" label={<Text style={{ color: '#f0ede6' }}>Temporary Password</Text>}
                     rules={[{ required: true, message: 'Required' }, { min: MIN_PASSWORD_LENGTH, message: `At least ${MIN_PASSWORD_LENGTH} characters` }]}>
-                    <Input.Password placeholder="Enter password" />
+                    <Input.Password />
                   </Form.Item>
                 </Col>
               </Row>
