@@ -8,7 +8,7 @@ import {
 } from '@ant-design/icons';
 import {
   key, colName, coveredSet, mergeAt, normRange, expandRange, mergeRange, unmergeRange, insertRow, deleteRow, insertCol, deleteCol,
-  styleRange, outlineRange, isLogoCell, listsIn, AUTO_REPEAT, moveRange, copyBlock, pasteBlock, clearArea, type Block, type GridTemplate, type GridCell, type Range,
+  styleRange, outlineRange, isLogoCell, rowUsesList, AUTO_REPEAT, moveRange, copyBlock, pasteBlock, clearArea, type Block, type GridTemplate, type GridCell, type Range,
 } from '../utils/gridTemplate';
 import { DOC_FIELDS, DOC_LISTS, STARTER_LAYOUTS, sampleData, fieldShortName, LIST_EXAMPLES, type DocKind } from '../data/documentLayouts';
 import { GridDocument, cellStyle, LogoImg, spanHeight } from './GridDocument';
@@ -157,13 +157,16 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
   const setText = (p: Pos, text: string) => {
     const cell = t.cells[key(p.r, p.c)] || {};
     if ((cell.v || '') === text) return;
-    let rows = t.rows;
-    // a list field only makes sense in a repeating row: switch the row to repeat automatically
-    if (listsIn(text).length && !t.rows[p.r]?.repeat) {
-      rows = [...t.rows];
-      rows[p.r] = { ...rows[p.r], repeat: AUTO_REPEAT };
+    const next: GridTemplate = { ...t, cells: { ...t.cells, [key(p.r, p.c)]: { ...cell, v: text } } };
+    // A row repeats exactly when it shows a list: switch it on or off to match.
+    const uses = rowUsesList(next, p.r);
+    if (uses !== !!t.rows[p.r]?.repeat) {
+      const rows = [...t.rows];
+      if (uses) rows[p.r] = { ...rows[p.r], repeat: AUTO_REPEAT };
+      else { const { repeat: _r, ...rest } = rows[p.r]; rows[p.r] = rest; }
+      next.rows = rows;
     }
-    commit({ ...t, rows, cells: { ...t.cells, [key(p.r, p.c)]: { ...cell, v: text } } });
+    commit(next);
   };
 
   const style = (patch: Partial<GridCell>) => commit(styleRange(t, range, patch));
@@ -386,7 +389,7 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
             <Tooltip title="A repeating row is printed once per item of the lists used in it (e.g. one row per earning). Rows with list fields switch to repeating automatically.">
               <Space size={4}>
                 <Text style={{ color: 'rgba(240,237,230,0.7)', fontSize: 12 }}>Row {focus.r + 1}</Text>
-                <Select size="small" style={{ width: 230 }} value={curRow.repeat || ''}
+                <Select size="small" style={{ width: 230 }} value={curRow.repeat && rowUsesList(t, focus.r) ? curRow.repeat : ''}
                   onChange={v => {
                     const rows = [...t.rows];
                     rows[focus.r] = { ...rows[focus.r], repeat: v || undefined };
@@ -452,9 +455,9 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
                   <tr key={r} style={{ height: row.h || 22 }}>
                     <th
                       onMouseDown={() => { setAnchor({ r, c: 0 }); setFocus({ r, c: t.cols.length - 1 }); }}
-                      style={{ background: row.repeat ? '#fff4d6' : (r >= range.r1 && r <= range.r2 ? '#d3e3fd' : HEADER_BG), border: '1px solid #cfd4d9', fontSize: 11, fontWeight: 500, color: '#444', position: 'sticky', left: 0, zIndex: 1, cursor: 'pointer' }}>
-                      <Tooltip title={row.repeat ? (row.repeat === AUTO_REPEAT ? 'Repeats once per item of the lists used in this row' : `Repeats once per ${lists.find(l => l.name === row.repeat)?.label.toLowerCase() || row.repeat} item`) : undefined} placement="right">
-                        <span>{r + 1}{row.repeat ? ' ↻' : ''}</span>
+                      style={{ background: row.repeat && rowUsesList(t, r) ? '#fff4d6' : (r >= range.r1 && r <= range.r2 ? '#d3e3fd' : HEADER_BG), border: '1px solid #cfd4d9', fontSize: 11, fontWeight: 500, color: '#444', position: 'sticky', left: 0, zIndex: 1, cursor: 'pointer' }}>
+                      <Tooltip title={row.repeat && rowUsesList(t, r) ? (row.repeat === AUTO_REPEAT ? 'Repeats once per item of the lists used in this row' : `Repeats once per ${lists.find(l => l.name === row.repeat)?.label.toLowerCase() || row.repeat} item`) : undefined} placement="right">
+                        <span>{r + 1}{row.repeat && rowUsesList(t, r) ? ' ↻' : ''}</span>
                       </Tooltip>
                       <div onMouseDown={e => startResize('row', r, e)} title="Drag to resize"
                         style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 7, cursor: 'row-resize', zIndex: 4 }} />
@@ -506,7 +509,7 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
                             borderRight: cs.borderRight || '1px solid #e3e6e8',
                             borderBottom: cs.borderBottom || '1px solid #e3e6e8',
                             borderLeft: cs.borderLeft || '1px solid #e3e6e8',
-                            background: sel && !isFocus ? (cell.bg ? cell.bg : '#e8f0fe') : (cell.bg || (row.repeat ? '#fffbeb' : '#fff')),
+                            background: sel && !isFocus ? (cell.bg ? cell.bg : '#e8f0fe') : (cell.bg || (row.repeat && rowUsesList(t, r) ? '#fffbeb' : '#fff')),
                             boxShadow: (() => {
                               if (!sel) return undefined;
                               const ed = edgesOf(r, c, cell);
