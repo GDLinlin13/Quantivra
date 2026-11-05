@@ -284,6 +284,19 @@ BEGIN
 END $$;
 ROLLBACK;
 
+\echo '9e. the master role (Admin / Director) always keeps full access'
+BEGIN; :as_a
+DO $$
+BEGIN
+  UPDATE company_roles SET can_view_pay = false WHERE id = 1;
+  ASSERT (SELECT can_view_pay FROM company_roles WHERE id = 1), 'FAIL: master role lost pay access';
+  BEGIN DELETE FROM company_roles WHERE id = 1; RAISE EXCEPTION 'FAIL: master role deleted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN UPDATE company_roles SET name = 'Boss' WHERE id = 1; RAISE EXCEPTION 'FAIL: master role renamed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;

@@ -89,19 +89,24 @@ export function CompanyRolesPage() {
     load();
   };
 
+  // The company's master role (Admin / Director) always has full access; the
+  // database enforces it (migration 021), so there's nothing to configure.
+  const isMaster = (r: any) => ['admin', 'director'].includes(String(r?.name || '').toLowerCase());
+
   const columns = [
     { title: 'Role Name', dataIndex: 'name', key: 'name', render: (v: string) => <span style={{ color: '#f0ede6' }}><SafetyOutlined style={{ marginRight: 8 }} />{v}</span> },
     {
       title: <Tooltip title="Sees salaries, payroll, payslips and ID / bank numbers, and can create users and change roles">Can see pay &amp; manage users</Tooltip>,
       dataIndex: 'can_view_pay', key: 'pay',
-      render: (v: boolean, r: any) => <Switch checked={!!v} onChange={on => togglePay(r, on)} />,
+      render: (v: boolean, r: any) => isMaster(r)
+        ? <Tooltip title="The master role always has full access"><Switch checked disabled /></Tooltip>
+        : <Switch checked={!!v} onChange={on => togglePay(r, on)} />,
     },
-    { title: 'System', dataIndex: 'is_system', key: 'system', render: (v: boolean) => v ? <Tag>System</Tag> : null },
     {
-      title: 'Actions', key: 'actions',
-      render: (_: any, record: any) => (
-        <Button type="link" onClick={() => openPermissions(record)}>Configure Permissions</Button>
-      ),
+      title: 'Access', key: 'actions',
+      render: (_: any, record: any) => isMaster(record)
+        ? <Tag color="gold">Master role · full access to everything</Tag>
+        : <Button type="link" onClick={() => openPermissions(record)}>Configure Permissions</Button>,
     },
   ];
 
@@ -142,10 +147,14 @@ export function CompanyRolesPage() {
           message="How permissions work"
           description={
             <div style={{ fontSize: 12 }}>
-              Tick what people with this role may do in each section. Ticks marked ✓ are already used by Quantivra; the others take effect as those features are built.
-              <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '2px 12px', marginTop: 8 }}>
-                {ALL_ACTIONS.map(a => (
-                  <Fragment key={a}><b>{a}{ACTION_GUIDE[a]?.usedNow ? ' ✓' : ''}</b><span>{ACTION_GUIDE[a]?.means} — {ACTION_GUIDE[a]?.example}</span></Fragment>
+              Quantivra is divided into sections. For each section, tick what people with this role may do
+              (hover over a tick for what it means). The sections:
+              <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '3px 12px', marginTop: 8 }}>
+                {Object.entries(MODULES).filter(([k]) => k !== 'platform').map(([k, m]) => (
+                  <Fragment key={k}>
+                    <b>{m.label}</b>
+                    <span>{MODULE_GUIDE[k]?.covers}{MODULE_GUIDE[k] && !MODULE_GUIDE[k].built ? ' (not built yet)' : ''}</span>
+                  </Fragment>
                 ))}
               </div>
               <div style={{ marginTop: 8 }}>Salaries, payroll and ID numbers are controlled by the role’s <b>Can see pay &amp; manage users</b> switch, not by these ticks.</div>
@@ -166,7 +175,7 @@ export function CompanyRolesPage() {
                 </Text>
                 <Space wrap>
                   {ALL_ACTIONS.map(action => (
-                    <Tooltip key={action} title={`${ACTION_GUIDE[action]?.means}${ACTION_GUIDE[action]?.usedNow ? '' : ' (takes effect when built)'}`}>
+                    <Tooltip key={action} title={`${ACTION_GUIDE[action]?.means} — ${ACTION_GUIDE[action]?.example}${ACTION_GUIDE[action]?.usedNow ? '' : ' (takes effect when built)'}`}>
                       <Checkbox
                         checked={permissions[modKey]?.[feat]?.includes(action) || false}
                         onChange={() => togglePerm(modKey, feat, action)}
