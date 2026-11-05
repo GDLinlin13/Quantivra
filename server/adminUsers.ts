@@ -72,6 +72,29 @@ function requireCompany(caller: Caller, companyId: number) {
   }
 }
 
+/** Platform admin, or a member of the company whose role has pay access (see migration 020). */
+async function hasPayAccess(admin: SupabaseClient, caller: Caller, companyId: number): Promise<boolean> {
+  if (caller.isPlatformAdmin) return true;
+  if (!caller.companyIds.includes(companyId)) return false;
+  const { data: me } = await admin.from('company_users').select('id')
+    .eq('auth_user_id', caller.authUserId).eq('company_id', companyId).eq('is_active', true).maybeSingle();
+  if (!me) return false;
+  const { data: links } = await admin.from('company_user_roles').select('role_id').eq('user_id', me.id);
+  const roleIds = (links || []).map((l: any) => l.role_id);
+  if (!roleIds.length) return false;
+  const { data: roles } = await admin.from('company_roles').select('id')
+    .eq('company_id', companyId).eq('can_view_pay', true).in('id', roleIds);
+  return (roles || []).length > 0;
+}
+
+/** Managing logins and roles is limited to people with pay access. */
+async function requireUserAdmin(admin: SupabaseClient, caller: Caller, companyId: number) {
+  requireCompany(caller, companyId);
+  if (!(await hasPayAccess(admin, caller, companyId))) {
+    throw new HttpError(403, 'Only people with HR / pay access can manage sign-ins');
+  }
+}
+
 /**
  * Creates a Supabase Auth login, or finds the existing one for that email.
  * An existing login keeps its own password: otherwise an admin of one company
@@ -95,7 +118,8 @@ async function findOrCreateLogin(
 
 async function createCompanyUser(admin: SupabaseClient, caller: Caller, body: Body) {
   const companyId = num(body, 'company_id')!;
-  requireCompany(caller, companyId);
+  await requireUserAdmin(admin, caller, companyId);
+  const employeeId = num(body, 'employee_id', false);
   const username = normaliseUsername(str(body, 'username'));
   if (!isValidUsername(username)) throw new HttpError(400, `Username must be ${USERNAME_RULE_TEXT}`);
   const contactEmail = str(body, 'email', false).toLowerCase() || null;
@@ -113,6 +137,11 @@ async function createCompanyUser(admin: SupabaseClient, caller: Caller, body: Bo
   if (roleId) {
     const role = await admin.from('company_roles').select('id').eq('id', roleId).eq('company_id', companyId).maybeSingle();
     if (!role.data) throw new HttpError(400, 'Role does not belong to this company');
+  }
+  if (employeeId) {
+    const emp = await admin.from('employees').select('id, user_id').eq('id', employeeId).eq('company_id', companyId).maybeSingle();
+    if (!emp.data) throw new HttpError(400, 'Employee does not belong to this company');
+    if (emp.data.user_id) throw new HttpError(400, 'This employee already has a sign-in');
   }
 
   // Sign-in is by username: the Supabase login uses a hidden internal address
@@ -143,6 +172,8 @@ async function createCompanyUser(admin: SupabaseClient, caller: Caller, body: Bo
       ? 'This username is already used in this company' : error.message);
   }
   if (roleId) await admin.from('company_user_roles').insert({ user_id: row.id, role_id: roleId });
+  // One person, one login: attach it to their employee record.
+  if (employeeId) await admin.from('employees').update({ user_id: row.id }).eq('id', employeeId).eq('company_id', companyId);
 
   return { user: row, existing_login: !login.created };
 }
@@ -192,6 +223,7 @@ async function setPassword(admin: SupabaseClient, caller: Caller, body: Body) {
     .select('id, company_id, auth_user_id').eq('id', targetId).maybeSingle();
   if (!target?.auth_user_id) throw new HttpError(404, 'User not found');
   requireCompany(caller, Number(target.company_id));
+  if (target.auth_user_id !== caller.authUserId) await requireUserAdmin(admin, caller, Number(target.company_id));
 
   if (!caller.isPlatformAdmin && target.auth_user_id !== caller.authUserId) {
     // A company admin may only reset logins that belong to their company alone.

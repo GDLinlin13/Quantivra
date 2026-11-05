@@ -97,7 +97,7 @@ export function CompanyUsersPage() {
           <Form.Item name="password" label="Temporary Password" rules={[{ required: true, min: MIN_PASSWORD_LENGTH }]}>
             <Input.Password />
           </Form.Item>
-          <Form.Item name="role_id" label="Role">
+          <Form.Item name="role_id" label="Role" rules={[{ required: true, message: 'Choose what this person can access' }]} tooltip="Decides which parts of Quantivra they can open">
             <Select allowClear options={roles.map((r: any) => ({ label: r.name, value: r.id }))} />
           </Form.Item>
           <Button type="primary" htmlType="submit" block style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>

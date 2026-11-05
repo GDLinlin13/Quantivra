@@ -3,6 +3,9 @@ import { Table, Button, Modal, Form, Input, InputNumber, Select, DatePicker, mes
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { hrService, calendarService, type Employee } from '../../../../services/hr';
+import { adminUsersService, MIN_PASSWORD_LENGTH } from '../../../../services/adminUsers';
+import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
+import { USERNAME_PATTERN, USERNAME_RULE_TEXT } from '../../../../utils/loginEmail';
 import { WORK_PATTERN_PRESETS, presetKeyOf, describePattern, type WorkPattern } from '../../../../utils/workdays';
 import { supabase } from '../../../../utils/supabase';
 import { residencyOptions, defaultResidency } from '../../../../data/residency-options';
@@ -10,6 +13,8 @@ import { residencyOptions, defaultResidency } from '../../../../data/residency-o
 const EMP_TYPES = ['full_time', 'part_time', 'contract', 'intern', 'casual'];
 
 export function EmployeesTab({ companyId }: { companyId: number }) {
+  const { canViewPay } = useCompanyAccess();
+  const [roles, setRoles] = useState<any[]>([]);
   const [rows, setRows] = useState<Employee[]>([]);
   const [depts, setDepts] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -29,6 +34,8 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
         supabase.from('companies').select('country').eq('id', companyId).maybeSingle(),
       ]);
       setRows(e); setDepts(d); setUsers(u.data || []); setCountry(co.data?.country ?? null);
+      const { data: rs } = await supabase.from('company_roles').select('id, name, can_view_pay').eq('company_id', companyId).order('name');
+      setRoles(rs || []);
     } catch (err: any) { message.error(err.message); }
     setLoading(false);
   }, [companyId]);
@@ -61,7 +68,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
   };
 
   const submit = async (formValues: any) => {
-    const { work_week, ...v } = formValues;
+    const { work_week, signin_username, signin_password, signin_role_id, user_id: _ignored, ...v } = formValues;
     try {
       const id = await hrService.upsertEmployee({
         id: editing?.id ?? '',
@@ -71,7 +78,6 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
         exit_date: v.exit_date ? dayjs(v.exit_date).format('YYYY-MM-DD') : '',
         date_of_birth: v.date_of_birth ? dayjs(v.date_of_birth).format('YYYY-MM-DD') : '',
         pr_stage: v.residency_status === 'PR' ? (v.pr_stage || 'year_3_plus') : '',
-        user_id: v.user_id ?? '',
         manager_id: v.manager_id ?? '',
         department_id: v.department_id ?? '',
       });
@@ -82,6 +88,14 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
       await hrService.saveDependents(companyId, id, deps.map(d => ({
         ...d, date_of_birth: d.date_of_birth ? dayjs(d.date_of_birth).format('YYYY-MM-DD') : null,
       })));
+      // One person, one login: create their sign-in and attach it here.
+      if (signin_username && !editing?.user_id) {
+        await adminUsersService.createCompanyUser({
+          company_id: companyId, employee_id: id, username: signin_username, password: signin_password,
+          full_name: v.full_name, email: v.email || undefined, role_id: signin_role_id,
+        });
+        message.success(`Sign-in created for ${v.full_name}. They choose their own password at first sign-in.`);
+      }
       message.success(editing ? 'Employee updated' : 'Employee added');
       setOpen(false);
       load();
@@ -141,11 +155,6 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
               <Select allowClear showSearch optionFilterProp="label"
                 options={rows.filter(r => r.id !== editing?.id).map(r => ({ label: r.full_name, value: r.id }))} />
             </Form.Item>
-            <Form.Item name="user_id" label="Login Account"
-              tooltip="Link the sign-in (created under Users) this person uses, so they can see their own leave and apply for leave. Leave empty if they don't sign in.">
-              <Select allowClear showSearch optionFilterProp="label" placeholder="Not linked"
-                options={users.map(u => ({ label: `${u.full_name} (${u.username || u.email || 'no username'})`, value: u.id }))} />
-            </Form.Item>
             <Form.Item name="employment_type" label="Employment Type">
               <Select options={EMP_TYPES.map(t => ({ label: t.replace('_', ' '), value: t }))} />
             </Form.Item>
@@ -154,7 +163,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
             </Form.Item>
             <Form.Item name="join_date" label="Join Date"><DatePicker style={{ width: '100%' }} /></Form.Item>
             <Form.Item name="exit_date" label="Exit Date"><DatePicker style={{ width: '100%' }} /></Form.Item>
-            <Form.Item name="base_salary" label="Base Salary (monthly)"><InputNumber style={{ width: '100%' }} min={0} /></Form.Item>
+            {canViewPay && <Form.Item name="base_salary" label="Base Salary (monthly)"><InputNumber style={{ width: '100%' }} min={0} /></Form.Item>}
             <Form.Item name="date_of_birth" label="Date of Birth"><DatePicker style={{ width: '100%' }} /></Form.Item>
             <Form.Item name="residency_status" label="Residency (for statutory)">
               <Select options={residencyOptions(country).map(o => ({ label: o.label, value: o.value }))} />
@@ -215,15 +224,83 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
               <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setDeps(x => x.filter((_, xi) => xi !== i))} />
             </div>
           ))}
-          <div style={{ color: 'rgba(240,237,230,0.4)', fontSize: 12, margin: '4px 0 8px' }}>PII below is encrypted at rest.</div>
+          <SignInSection editing={editing} users={users} roles={roles} canViewPay={canViewPay} companyId={companyId} />
+
+          {canViewPay && <div style={{ color: 'rgba(240,237,230,0.4)', fontSize: 12, margin: '4px 0 8px' }}>PII below is encrypted at rest.</div>}
+{canViewPay && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Form.Item name="national_id" label="National ID / NRIC"><Input /></Form.Item>
             <Form.Item name="tax_id" label="Tax ID"><Input /></Form.Item>
             <Form.Item name="bank_name" label="Bank"><Input /></Form.Item>
             <Form.Item name="bank_account" label="Bank Account No."><Input /></Form.Item>
           </div>
+          )}
         </Form>
       </Modal>
+    </div>
+  );
+}
+
+/**
+ * One person, one login: an employee's sign-in lives on their record.
+ * Shows who it is, or (for people with pay access) lets you create it with a
+ * username, temporary password and role.
+ */
+function SignInSection({ editing, users, roles, canViewPay, companyId }: {
+  editing: Employee | null; users: any[]; roles: any[]; canViewPay: boolean; companyId: number;
+}) {
+  const linked = editing?.user_id ? users.find(u => u.id === editing.user_id) : null;
+  const [resetting, setResetting] = useState(false);
+
+  const resetPassword = () => {
+    let pw = '';
+    Modal.confirm({
+      title: `New temporary password for ${linked?.full_name}`,
+      content: <Input.Password autoFocus onChange={e => { pw = e.target.value; }} placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`} />,
+      okText: 'Set temporary password',
+      onOk: async () => {
+        setResetting(true);
+        try {
+          await adminUsersService.setPassword(linked.id, pw);
+          message.success('Done. They will choose their own password at next sign-in.');
+        } catch (e: any) { message.error(e.message); throw e; } finally { setResetting(false); }
+      },
+    });
+  };
+
+  return (
+    <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: 12, margin: '12px 0' }}>
+      <div style={{ color: '#f0ede6', marginBottom: 8 }}>Sign-in</div>
+      {linked ? (
+        <Space wrap>
+          <span style={{ color: 'rgba(240,237,230,0.7)' }}>Signs in as <b>{linked.username || linked.email}</b></span>
+          {canViewPay && <Button size="small" loading={resetting} onClick={resetPassword}>Reset password</Button>}
+        </Space>
+      ) : !canViewPay ? (
+        <span style={{ color: 'rgba(240,237,230,0.5)' }}>No sign-in. Only HR / Director can create one.</span>
+      ) : (
+        <>
+          <div style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12, marginBottom: 8 }}>
+            Optional. Fill these in to let this person sign in (to see their own leave, apply, etc.). Leave empty if they don't use Quantivra.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <Form.Item name="signin_username" label="Username" normalize={(v: string) => (v || '').trim().toLowerCase()}
+              rules={[{ pattern: USERNAME_PATTERN, message: USERNAME_RULE_TEXT }]}>
+              <Input autoComplete="off" />
+            </Form.Item>
+            <Form.Item name="signin_password" label="Temporary password" dependencies={['signin_username']}
+              rules={[({ getFieldValue }) => ({ validator: (_, v) => (!getFieldValue('signin_username') || (v && v.length >= MIN_PASSWORD_LENGTH)
+                ? Promise.resolve() : Promise.reject(new Error(`At least ${MIN_PASSWORD_LENGTH} characters`))) })]}>
+              <Input.Password autoComplete="new-password" />
+            </Form.Item>
+            <Form.Item name="signin_role_id" label="Role (what they can open)" dependencies={['signin_username']}
+              rules={[({ getFieldValue }) => ({ validator: (_, v) => (!getFieldValue('signin_username') || v
+                ? Promise.resolve() : Promise.reject(new Error('Choose a role'))) })]}>
+              <Select options={roles.map(r => ({ label: r.can_view_pay ? `${r.name} (sees pay)` : r.name, value: r.id }))} />
+            </Form.Item>
+          </div>
+        </>
+      )}
     </div>
   );
 }

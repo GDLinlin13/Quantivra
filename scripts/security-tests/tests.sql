@@ -11,6 +11,7 @@
 \set as_c     'SELECT set_config(''request.jwt.claims'', ''{"sub":"cccccccc-0000-0000-0000-000000000003","role":"authenticated"}'', true); SET LOCAL ROLE authenticated;'
 \set as_admin 'SELECT set_config(''request.jwt.claims'', ''{"sub":"dddddddd-0000-0000-0000-000000000004","role":"authenticated"}'', true); SET LOCAL ROLE authenticated;'
 \set as_stranger 'SELECT set_config(''request.jwt.claims'', ''{"sub":"eeeeeeee-0000-0000-0000-000000000005","role":"authenticated"}'', true); SET LOCAL ROLE authenticated;'
+\set as_staff 'SELECT set_config(''request.jwt.claims'', ''{"sub":"ffffffff-0000-0000-0000-000000000006","role":"authenticated"}'', true); SET LOCAL ROLE authenticated;'
 \set as_anon  'SELECT set_config(''request.jwt.claims'', ''{"role":"anon"}'', true); SET LOCAL ROLE anon;'
 \set as_service 'SELECT set_config(''request.jwt.claims'', ''{"role":"service_role"}'', true); SET LOCAL ROLE service_role;'
 
@@ -43,9 +44,10 @@ DO $$
 BEGIN
   ASSERT (SELECT array_agg(company_code ORDER BY company_code) FROM companies) = ARRAY['alpha'], 'FAIL: A sees other companies';
   ASSERT (SELECT count(*) FROM employees) = 2 AND NOT EXISTS (SELECT 1 FROM employees WHERE company_id <> 1), 'FAIL: A sees other employees';
-  ASSERT (SELECT count(*) FROM company_users) = 2, 'FAIL: A sees other companies'' users';
-  ASSERT (SELECT count(*) FROM company_permissions) = 1, 'FAIL: A sees other companies'' permissions';
-  ASSERT (SELECT count(*) FROM company_user_roles) = 1, 'FAIL: A sees other companies'' role links';
+  ASSERT (SELECT count(*) FROM company_users) = 3, 'FAIL: A sees other companies'' users';
+  ASSERT NOT EXISTS (SELECT 1 FROM company_permissions p WHERE p.role_id NOT IN (SELECT id FROM company_roles WHERE company_id = 1)), 'FAIL: A sees other companies'' permissions';
+  ASSERT (SELECT count(*) FROM company_permissions) > 0, 'FAIL: A cannot see own permissions';
+  ASSERT (SELECT count(*) FROM company_user_roles) = 2, 'FAIL: A sees other companies'' role links';
   ASSERT (SELECT count(*) FROM payslips) = 1, 'FAIL: A sees other companies'' payslips';
   ASSERT (SELECT count(*) FROM platform_users) = 0, 'FAIL: A sees platform users';
   ASSERT (SELECT count(*) FROM platform_subscriptions) = 1, 'FAIL: A subscription visibility';
@@ -91,8 +93,8 @@ BEGIN; :as_a
 DO $$
 DECLARE n int;
 BEGIN
-  UPDATE employees SET full_name = 'Hacked' WHERE company_id = 2;
-  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: A updated B employees';
+  BEGIN UPDATE employees SET full_name = 'Hacked' WHERE company_id = 2; RAISE EXCEPTION 'FAIL: employees table writable directly';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   DELETE FROM payslips WHERE company_id = 2;
   GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: A deleted B payslips';
   UPDATE companies SET name = 'Hacked' WHERE id = 2;
@@ -244,6 +246,41 @@ BEGIN; :as_a
 DO $$
 BEGIN
   ASSERT (SELECT count(*) FROM legacy_staff) = 0, 'FAIL: company user can read a leftover password table (even of their own company)';
+END $$;
+ROLLBACK;
+
+\echo '9d. pay access: staff without it see no salaries, ID numbers or payroll, and cannot grant it to themselves'
+BEGIN; :as_staff
+DO $$
+DECLARE n int;
+BEGIN
+  ASSERT (SELECT count(*) FROM hr_list_employees(1)) = 2, 'FAIL: staff cannot list colleagues';
+  ASSERT NOT EXISTS (SELECT 1 FROM hr_list_employees(1) WHERE base_salary IS NOT NULL OR national_id IS NOT NULL),
+    'FAIL: staff sees salary or ID numbers';
+  ASSERT (SELECT count(*) FROM payslips) = 0 AND (SELECT count(*) FROM payroll_runs) = 0, 'FAIL: staff sees payroll';
+  BEGIN PERFORM base_salary FROM employees; RAISE EXCEPTION 'FAIL: staff read salary from the table';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO company_user_roles (user_id, role_id) VALUES (5, 1); RAISE EXCEPTION 'FAIL: staff gave themselves the Admin role';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  UPDATE company_roles SET can_view_pay = true WHERE id = 3;
+  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: staff turned on pay access for their role';
+  UPDATE company_users SET full_name = 'Renamed' WHERE id = 1;
+  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: staff edited another login';
+  -- editing an employee without pay access leaves salary and ID untouched
+  PERFORM hr_upsert_employee(jsonb_build_object('id', 1, 'employee_code', 'A1', 'full_name', 'Alpha One',
+    'base_salary', 1, 'national_id', 'X0000000X'));
+END $$;
+ROLLBACK;
+BEGIN; :as_staff
+SELECT hr_upsert_employee(jsonb_build_object('id', 1, 'employee_code', 'A1', 'full_name', 'Alpha One', 'base_salary', 1, 'national_id', 'X0000000X'));
+COMMIT;
+BEGIN; :as_a
+DO $$
+BEGIN
+  ASSERT (SELECT base_salary FROM hr_list_employees(1) WHERE employee_code = 'A1') = 5000, 'FAIL: staff edit changed the salary';
+  ASSERT (SELECT national_id FROM hr_list_employees(1) WHERE employee_code = 'A1') = 'S1234567A', 'FAIL: staff edit changed the ID number';
+  ASSERT (SELECT count(*) FROM payslips) = 1, 'FAIL: admin with pay access cannot see payslips';
+  UPDATE company_roles SET can_view_pay = true WHERE id = 3;
 END $$;
 ROLLBACK;
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Layout, Menu, Button, Avatar, Dropdown, Typography } from 'antd';
+import { Layout, Menu, Button, Avatar, Dropdown, Typography, Modal } from 'antd';
+import { ChangePasswordCard } from '../components/ChangePasswordCard';
 import {
   DashboardOutlined, TeamOutlined, UserOutlined, SafetyOutlined,
   SettingOutlined, LogoutOutlined, BankOutlined, AuditOutlined,
@@ -8,26 +9,34 @@ import {
 } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { CompanyAccessProvider, useCompanyAccess, HR_MODULES } from '../contexts/CompanyAccess';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 
 export function CompanyLayout() {
+  return <CompanyAccessProvider><CompanyLayoutInner /></CompanyAccessProvider>;
+}
+
+function CompanyLayoutInner() {
+  const access = useCompanyAccess();
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, companyId } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
+  // Sections follow the person's roles (Roles page); pay/admin pages need pay access.
   const mainMenu = [
     { key: '/company', icon: <DashboardOutlined />, label: 'Dashboard' },
-    { key: '/company/hr', icon: <TeamOutlined />, label: 'HR' },
-    { key: '/company/finance', icon: <DollarOutlined />, label: 'Finance' },
-    { key: '/company/inventory', icon: <ShopOutlined />, label: 'Inventory' },
-    { key: '/company/crm', icon: <ContactsOutlined />, label: 'CRM' },
-    { key: '/company/reports', icon: <BarChartOutlined />, label: 'Reports' },
-  ];
+    access.canAny(HR_MODULES) && { key: '/company/hr', icon: <TeamOutlined />, label: 'HR' },
+    access.can('finance') && { key: '/company/finance', icon: <DollarOutlined />, label: 'Finance' },
+    access.can('inventory') && { key: '/company/inventory', icon: <ShopOutlined />, label: 'Inventory' },
+    access.can('crm') && { key: '/company/crm', icon: <ContactsOutlined />, label: 'CRM' },
+    access.canAny(['finance', 'employees'], 'export') && { key: '/company/reports', icon: <BarChartOutlined />, label: 'Reports' },
+  ].filter(Boolean) as { key: string; icon: React.ReactNode; label: string }[];
 
-  const adminMenu = [
+  const adminMenu = !access.canViewPay ? [] : [
     { key: '/company/settings', icon: <SettingOutlined />, label: 'Settings' },
     { key: '/company/profile', icon: <BankOutlined />, label: 'Company Profile' },
     { key: '/company/users', icon: <UserOutlined />, label: 'Users' },
@@ -38,17 +47,21 @@ export function CompanyLayout() {
 
   const userMenu = {
     items: [
-      { key: 'profile', icon: <UserOutlined />, label: 'My Profile' },
+      { key: 'password', icon: <UserOutlined />, label: 'Change my password' },
       { type: 'divider' as const },
       { key: 'logout', icon: <LogoutOutlined />, label: 'Sign Out', danger: true },
     ],
     onClick: ({ key }: { key: string }) => {
       if (key === 'logout') { logout(); navigate('/login'); }
+      if (key === 'password') setPasswordOpen(true);
     },
   };
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#0b0f12' }}>
+      <Modal open={passwordOpen} onCancel={() => setPasswordOpen(false)} footer={null} width={520} destroyOnHidden>
+        <ChangePasswordCard />
+      </Modal>
       <Sider
         theme="dark"
         collapsible
@@ -68,7 +81,7 @@ export function CompanyLayout() {
           onClick={({ key }) => navigate(key)}
           style={{ background: 'transparent', borderRight: 'none', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 8 }}
         />
-        {!collapsed && <Text style={{ color: 'rgba(240,237,230,0.3)', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, padding: '8px 16px 4px', display: 'block' }}>Admin</Text>}
+        {!collapsed && adminMenu.length > 0 && <Text style={{ color: 'rgba(240,237,230,0.3)', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, padding: '8px 16px 4px', display: 'block' }}>Admin</Text>}
         <Menu
           theme="dark"
           mode="inline"

@@ -8,7 +8,8 @@ INSERT INTO auth.users (id, email) VALUES
   ('bbbbbbbb-0000-0000-0000-000000000002', 'b@beta.test'),
   ('cccccccc-0000-0000-0000-000000000003', 'c@gamma.test'),
   ('dddddddd-0000-0000-0000-000000000004', 'admin@quantivra.test'),
-  ('eeeeeeee-0000-0000-0000-000000000005', 'stranger@nowhere.test');
+  ('eeeeeeee-0000-0000-0000-000000000005', 'stranger@nowhere.test'),
+  ('ffffffff-0000-0000-0000-000000000006', 'staff@alpha.test');
 
 INSERT INTO country_profiles (code, name, currency, phone_code) VALUES ('SG', 'Singapore', 'SGD', '+65') ON CONFLICT DO NOTHING;
 
@@ -28,16 +29,18 @@ VALUES (1, 'legacy@alpha.test', extensions.crypt('old-password', extensions.gen_
 INSERT INTO platform_users (username, email, password_hash, full_name)
 VALUES ('admin', 'admin@quantivra.test', 'x', 'Admin');
 
-INSERT INTO company_roles (company_id, name) VALUES (1, 'Admin'), (2, 'Admin');
+INSERT INTO company_roles (company_id, name) VALUES (1, 'Admin'), (2, 'Admin'), (1, 'Employee');
 INSERT INTO company_permissions (role_id, module, feature, action) VALUES (1, 'hr', 'employees', 'read'), (2, 'hr', 'employees', 'read');
-INSERT INTO company_user_roles (user_id, role_id) VALUES (1, 1), (2, 2);
+-- a staff member of Alpha with no pay access (company_users id 5, role 3)
+INSERT INTO company_users (company_id, email, password_hash, full_name, is_active) VALUES (1, 'staff@alpha.test', 'x', 'Sam Staff', true);
+INSERT INTO company_user_roles (user_id, role_id) VALUES (1, 1), (2, 2), (5, 3);
 INSERT INTO platform_subscriptions (company_id) VALUES (1), (2);
 
 -- employees 1, 2 in Alpha; 3 in Beta
-INSERT INTO employees (company_id, employee_code, full_name, national_id_enc) VALUES
-  (1, 'A1', 'Alpha One', private.enc('S1234567A')),
-  (1, 'A2', 'Alpha Two', NULL),
-  (2, 'B1', 'Beta One',  private.enc('S7654321B'));
+INSERT INTO employees (company_id, employee_code, full_name, base_salary, national_id_enc) VALUES
+  (1, 'A1', 'Alpha One', 5000, private.enc('S1234567A')),
+  (1, 'A2', 'Alpha Two', 4000, NULL),
+  (2, 'B1', 'Beta One',  6000, private.enc('S7654321B'));
 INSERT INTO leave_types (company_id, name) VALUES (1, 'Annual'), (2, 'Annual');
 INSERT INTO leave_requests (company_id, employee_id, leave_type_id, start_date, end_date, days) VALUES
   (1, 1, 1, '2026-02-02', '2026-02-02', 1),

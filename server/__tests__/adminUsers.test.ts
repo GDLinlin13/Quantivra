@@ -16,10 +16,15 @@ function makeFake() {
       { id: 21, company_id: 2, email: 'shared@x.test', auth_user_id: 'u-shared', is_active: true },
       { id: 12, company_id: 1, email: 'staff@alpha.test', auth_user_id: 'u-staff', is_active: true },
     ],
-    company_roles: [{ id: 100, company_id: 1 }, { id: 200, company_id: 2 }],
-    company_user_roles: [],
+    company_roles: [
+      { id: 100, company_id: 1, can_view_pay: true }, { id: 200, company_id: 2, can_view_pay: true },
+      { id: 101, company_id: 1, can_view_pay: false },
+    ],
+    // u-a (Alpha) has pay access via role 100; u-staff (Alpha) only has the plain role 101
+    company_user_roles: [{ user_id: 10, role_id: 100 }, { user_id: 12, role_id: 101 }] as Row[],
+    employees: [{ id: 500, company_id: 1, user_id: null }, { id: 600, company_id: 2, user_id: null }] as Row[],
   };
-  const tokens: Record<string, string> = { 'tok-a': 'u-a', 'tok-b': 'u-b', 'tok-admin': 'u-admin', 'tok-nobody': 'u-nobody' };
+  const tokens: Record<string, string> = { 'tok-a': 'u-a', 'tok-b': 'u-b', 'tok-admin': 'u-admin', 'tok-nobody': 'u-nobody', 'tok-staff': 'u-staff' };
   const authUsers: Record<string, { email: string; password?: string; password_hash?: string }> = {
     'u-a': { email: 'a@alpha.test' }, 'u-b': { email: 'b@beta.test' }, 'u-admin': { email: 'admin@q.test' },
     'u-shared': { email: 'shared@x.test', password: 'orig' }, 'u-staff': { email: 'staff@alpha.test', password: 'orig' },
@@ -67,6 +72,7 @@ function makeFake() {
       delete() { pending = { kind: 'delete', values: {} }; return b; },
       eq(col: string, val: any) { filters.push(r => get(r, col) === val); return b; },
       neq(col: string, val: any) { filters.push(r => get(r, col) !== val); return b; },
+      in(col: string, vals: any[]) { filters.push(r => vals.includes(get(r, col))); return b; },
       ilike(col: string, val: any) { filters.push(r => String(get(r, col) ?? '').toLowerCase() === String(val).toLowerCase()); return b; },
       maybeSingle() { const r = run(); return Promise.resolve({ data: r.data?.[0] ?? null, error: r.error }); },
       single() { const r = run(); return Promise.resolve({ data: r.data?.[0] ?? null, error: r.error }); },
@@ -135,7 +141,7 @@ describe('admin-users server function', () => {
     const row = fake.db.company_users.find(u => u.username === 'new.person');
     expect(row).toMatchObject({ company_id: 1, email: 'new@alpha.test' });
     expect(fake.authUsers[row!.auth_user_id]).toMatchObject({ email: 'alpha.new.person@users.quantivra.app', password: 'longenough' });
-    expect(fake.db.company_user_roles).toEqual([{ id: expect.any(Number), user_id: row!.id, role_id: 100 }]);
+    expect(fake.db.company_user_roles).toContainEqual({ id: expect.any(Number), user_id: row!.id, role_id: 100 });
   });
 
   it('email is optional; usernames are checked and unique per company', async () => {
@@ -220,5 +226,20 @@ describe('admin-users server function', () => {
     // but a login that is still in use is never taken over
     expect((await call('tok-admin', newUser(1, { username: 'ivan', password: 'another12' }))).status).toBe(400);
     expect(fake.authUsers['u-orphan'].password).toBe('brandnew1');
+  });
+
+  it('only people with pay access can create sign-ins or reset other people\'s passwords', async () => {
+    expect((await call('tok-staff', newUser(1))).status).toBe(403);
+    expect((await call('tok-staff', { action: 'set_password', company_user_id: 10, password: 'newpassword' })).status).toBe(403);
+    // anyone may change their own password
+    expect((await call('tok-staff', { action: 'set_password', company_user_id: 12, password: 'newpassword' })).status).toBe(200);
+  });
+
+  it('a new sign-in can be attached to an employee record, once', async () => {
+    const r = await call('tok-a', newUser(1, { employee_id: 500 }));
+    expect(r.status).toBe(200);
+    expect(fake.db.employees.find(e => e.id === 500)?.user_id).toBe(r.body.user.id);
+    expect((await call('tok-a', newUser(1, { username: 'second', employee_id: 500 }))).body.error).toMatch(/already has a sign-in/);
+    expect((await call('tok-a', newUser(1, { username: 'third', employee_id: 600 }))).body.error).toMatch(/does not belong/);
   });
 });

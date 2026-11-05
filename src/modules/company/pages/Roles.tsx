@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, Table, Button, Modal, Form, Input, Select, message, Typography, Checkbox, Space, Tag, Divider } from 'antd';
+import { Card, Table, Button, Modal, Form, Input, Select, message, Typography, Checkbox, Space, Tag, Divider, Switch, Tooltip, Alert } from 'antd';
 import { PlusOutlined, SafetyOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -29,7 +29,8 @@ export function CompanyRolesPage() {
   useEffect(() => { load(); }, [companyId]);
 
   const handleCreate = async (values: any) => {
-    await supabase.from('company_roles').insert({ company_id: companyId, name: values.name, is_system: false });
+    const { error } = await supabase.from('company_roles').insert({ company_id: companyId, name: values.name, is_system: false, can_view_pay: !!values.can_view_pay });
+    if (error) { message.error(error.message); return; }
     message.success('Role created');
     setModalOpen(false);
     form.resetFields();
@@ -80,8 +81,20 @@ export function CompanyRolesPage() {
     setPermModalOpen(false);
   };
 
+  const togglePay = async (role: any, on: boolean) => {
+    const { error } = await supabase.from('company_roles').update({ can_view_pay: on }).eq('id', role.id);
+    if (error) { message.error(error.message); return; }
+    message.success(on ? `${role.name} can now see pay and manage users` : `${role.name} can no longer see pay or manage users`);
+    load();
+  };
+
   const columns = [
     { title: 'Role Name', dataIndex: 'name', key: 'name', render: (v: string) => <span style={{ color: '#f0ede6' }}><SafetyOutlined style={{ marginRight: 8 }} />{v}</span> },
+    {
+      title: <Tooltip title="Sees salaries, payroll, payslips and ID / bank numbers, and can create users and change roles">Can see pay &amp; manage users</Tooltip>,
+      dataIndex: 'can_view_pay', key: 'pay',
+      render: (v: boolean, r: any) => <Switch checked={!!v} onChange={on => togglePay(r, on)} />,
+    },
     { title: 'System', dataIndex: 'is_system', key: 'system', render: (v: boolean) => v ? <Tag>System</Tag> : null },
     {
       title: 'Actions', key: 'actions',
@@ -100,6 +113,8 @@ export function CompanyRolesPage() {
           Create Role
         </Button>
       </div>
+      <Alert type="info" showIcon style={{ marginBottom: 16 }}
+        message="Each person's role decides what they can open. Only roles with “Can see pay & manage users” see salaries and payroll, and can add users or change roles." />
       <Table dataSource={roles} columns={columns} loading={loading} rowKey="id"
         style={{ background: 'transparent' }} pagination={false} />
 
@@ -108,6 +123,9 @@ export function CompanyRolesPage() {
         <Form form={form} layout="vertical" onFinish={handleCreate}>
           <Form.Item name="name" label="Role Name" rules={[{ required: true }]}>
             <Input placeholder="e.g. Manager" />
+          </Form.Item>
+          <Form.Item name="can_view_pay" valuePropName="checked" label="Can see pay & manage users">
+            <Switch />
           </Form.Item>
           <Button type="primary" htmlType="submit" block style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
             Create
