@@ -199,7 +199,8 @@ export function CompaniesPage() {
     setProvisionSteps(getProvisionSteps());
     provisionStarted.current = true;
 
-    const values = form.getFieldsValue();
+    // getFieldsValue(true): every step's values, not just the fields on screen now.
+    const values = form.getFieldsValue(true);
     const mappedModules = (values.modules || []).map((m: string) => {
       const entry = Object.entries(MODULES).find(([, v]) => v.label === m);
       return entry ? entry[0] : m.toLowerCase();
