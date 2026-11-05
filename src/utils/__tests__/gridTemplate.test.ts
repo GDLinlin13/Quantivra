@@ -128,3 +128,16 @@ describe('lists side by side', () => {
     expect(out[0].cells.map(c => c.text)).toEqual(['Basic', '1']);
   });
 });
+
+describe('rows marked repeating without a list', () => {
+  it('print once, whatever list they were set to', async () => {
+    const { AUTO_REPEAT } = await import('../gridTemplate');
+    let t = blankTemplate(2, 2);
+    t = {
+      ...t, rows: [{ repeat: AUTO_REPEAT }, { repeat: 'employer' }],
+      cells: { [key(0, 0)]: { v: 'Employer CPF :' }, [key(0, 1)]: { v: '{{cpf_employer}}' }, [key(1, 0)]: { v: 'Employee CPF :' }, [key(1, 1)]: { v: '{{cpf_employee}}' } },
+    };
+    const out = expandTemplate(t, { cpf_employer: '1,360', cpf_employee: '1,600' }, { employer: [{ name: 'CPF' }, { name: 'SDL' }] });
+    expect(out.map(r => r.cells.map(c => c.text))).toEqual([['Employer CPF :', '1,360'], ['Employee CPF :', '1,600']]);
+  });
+});
