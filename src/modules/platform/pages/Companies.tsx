@@ -640,7 +640,7 @@ export function CompaniesPage() {
           message="This cannot be undone"
           description="Users, employees, leave records, payroll runs, payslips, branding and all settings for this company are removed." />
         <p style={{ color: '#f0ede6' }}>Type <b>{deleteTarget?.name}</b> to confirm:</p>
-        <Input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} autoFocus />
+        <Input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder={deleteTarget?.name} autoFocus />
       </Modal>
     </div>
   );
