@@ -8,7 +8,6 @@ export interface ProvisionInput {
   country: string;
   business_type: string;
   business_pack: string;
-  company_size?: string;
   currency: string;
   financial_year_start: string;
   timezone: string;
@@ -151,7 +150,7 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
       financial_year_start: input.financial_year_start,
       timezone: input.timezone,
       modules: input.modules,
-      metadata: { business_type: input.business_type, registration_number: input.registration_number, company_size: input.company_size },
+      metadata: { business_type: input.business_type, registration_number: input.registration_number },
     }).select().single();
     if (error) throw error;
     return data;

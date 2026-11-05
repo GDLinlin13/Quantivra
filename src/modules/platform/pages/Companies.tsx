@@ -163,7 +163,7 @@ export function CompaniesPage() {
   useEffect(() => { load(); }, []);
 
   const stepFields = [
-    ['name', 'registration_number', 'country', 'business_type', 'business_pack', 'company_size', 'currency', 'financial_year_start', 'timezone'],
+    ['name', 'registration_number', 'country', 'business_type', 'business_pack', 'currency', 'financial_year_start', 'timezone'],
     ['owner_full_name', 'owner_email', 'owner_mobile', 'owner_password'],
     ['modules'],
     [],
@@ -210,7 +210,6 @@ export function CompaniesPage() {
         country: values.country,
         business_type: values.business_type || 'General',
         business_pack: values.business_pack || '',
-        company_size: values.company_size,
         currency: values.currency,
         financial_year_start: values.financial_year_start,
         timezone: values.timezone,
@@ -346,7 +345,7 @@ export function CompaniesPage() {
           layout="vertical"
           initialValues={{
             currency: 'SGD', financial_year_start: '01-01', timezone: 'Asia/Singapore',
-            modules: ALL_FEATURES_MODULES, business_pack: 'enterprise', company_size: '1-50',
+            modules: ALL_FEATURES_MODULES, business_pack: 'enterprise',
           }}
         >
           {currentStep === 0 && (
@@ -380,20 +379,10 @@ export function CompaniesPage() {
                 </Col>
               </Row>
               <Row gutter={16}>
-                <Col span={12}>
+                <Col span={24}>
                   <Form.Item name="business_pack" label={<Text style={{ color: '#f0ede6' }}>Business Pack</Text>}>
                     <Select placeholder="Select a business pack" allowClear onChange={handleBusinessPackChange}
                       options={Object.entries(BUSINESS_PACK_PRESETS).map(([k, v]) => ({ label: `${v.label} — ${v.desc}`, value: k }))} />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item name="company_size" label={<Text style={{ color: '#f0ede6' }}>Company Size</Text>}>
-                    <Select options={[
-                      { label: '1-50', value: '1-50' },
-                      { label: '51-200', value: '51-200' },
-                      { label: '201-1000', value: '201-1000' },
-                      { label: '1000+', value: '1000+' },
-                    ]} />
                   </Form.Item>
                 </Col>
               </Row>
@@ -474,7 +463,6 @@ export function CompaniesPage() {
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Business Type</Text><br /><Text>{form.getFieldValue('business_type') || 'General'}</Text></Col>
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Business Pack</Text><br /><Text>{BUSINESS_PACK_PRESETS[form.getFieldValue('business_pack') as string]?.label || 'None'}</Text></Col>
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Currency</Text><br /><Text>{form.getFieldValue('currency')}</Text></Col>
-                  <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Company Size</Text><br /><Text>{form.getFieldValue('company_size') || '-'}</Text></Col>
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Timezone</Text><br /><Text>{form.getFieldValue('timezone')}</Text></Col>
                 </Row>
               </Card>
