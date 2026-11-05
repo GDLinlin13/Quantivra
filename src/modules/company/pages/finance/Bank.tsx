@@ -14,6 +14,7 @@ import { TeachPdf } from './TeachPdf';
 
 type ImportLine = BankLine & { sure: boolean };
 import { money } from '../../../../data/documentLayouts';
+import { currencyOptions } from '../../../../utils/currencies';
 import type { FinanceData } from './DocList';
 
 const { Text } = Typography;
@@ -38,6 +39,9 @@ export function Bank({ data }: { data: FinanceData }) {
   const [adding, setAdding] = useState(false);
   const [matching, setMatching] = useState<BankTxn | null>(null);
   const account = accounts.find(a => a.id === accountId);
+  // a bank account can be in another currency; the books stay in the company's currency
+  const accCur = account?.currency || currency;
+  const foreign = accCur !== currency;
 
   const load = useCallback(async () => {
     if (!accountId) { setLoading(false); return; }
@@ -55,7 +59,7 @@ export function Bank({ data }: { data: FinanceData }) {
   }, [companyId, accountId]);
   useEffect(() => { load(); }, [load, data.docs]);
 
-  const statementBalance = useMemo(() => Math.round(((Number(account?.opening_balance) || 0) + txns.reduce((s, t) => s + Number(t.amount), 0)) * 100) / 100, [txns, account]);
+  const statementBalance = useMemo(() => Math.round(((Number(foreign ? account?.opening_foreign : account?.opening_balance) || 0) + txns.reduce((s, t) => s + Number(t.amount), 0)) * 100) / 100, [txns, account, foreign]);
   const shown = txns.filter(t => filter === 'all' || t.status === filter);
   const unmatched = txns.filter(t => t.status === 'unmatched').length;
 
@@ -115,25 +119,25 @@ export function Bank({ data }: { data: FinanceData }) {
     <div>
       <Space wrap style={{ marginBottom: 12 }}>
         <Select style={{ width: 280 }} value={accountId ?? undefined} onChange={setAccountId}
-          options={banks.map(b => ({ value: b.id, label: `${b.name}${b.bank_account_no ? ` (${b.bank_account_no})` : ''}` }))} />
+          options={banks.map(b => ({ value: b.id, label: `${b.name}${b.bank_account_no ? ` (${b.bank_account_no})` : ''}${b.currency && b.currency !== currency ? ` · ${b.currency}` : ''}` }))} />
         <Button icon={<EditOutlined />} onClick={() => account && setBankEdit(account)} title="Edit this bank account" />
         <Button icon={<PlusOutlined />} onClick={() => setBankEdit({})}>Bank account</Button>
         <Upload accept=".csv,text/csv,.pdf,application/pdf" showUploadList={false} beforeUpload={onFile}><Button icon={<UploadOutlined />}>Import statement (PDF or CSV)</Button></Upload>
         <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>Add a line</Button>
       </Space>
       <Space size={16} wrap style={{ marginBottom: 12 }}>
-        <Card size="small" style={{ minWidth: 200 }}><Statistic title="Balance per statement" value={money(statementBalance, currency)} /></Card>
-        <Card size="small" style={{ minWidth: 200 }}><Statistic title="Balance in Quantivra" value={money(booksBalance, currency)} /></Card>
+        <Card size="small" style={{ minWidth: 200 }}><Statistic title="Balance per statement" value={money(statementBalance, accCur)} /></Card>
+        <Card size="small" style={{ minWidth: 200 }}><Statistic title={foreign ? `System Balance (in ${currency})` : 'System Balance'} value={money(booksBalance, currency)} /></Card>
         <Card size="small" style={{ minWidth: 200 }}><Statistic title="Lines to match" value={unmatched} styles={{ content: { color: unmatched ? '#faad14' : undefined } }} /></Card>
       </Space>
       {booksBalance < 0 && !Number(account?.opening_balance) && (
         <Alert type="info" showIcon style={{ marginBottom: 12 }}
-          title="The balance in Quantivra is negative because this account has no opening balance yet."
+          title="The System Balance is negative because this account has no opening balance yet."
           description={<>Payroll net pay, payments and other money out are taken from this account, but the money that was in it when you started isn't recorded. Click <EditOutlined /> next to the account and enter the opening balance and its date (e.g. your bank balance on the day before your first payroll in Quantivra).</>} />
       )}
-      {Math.abs(statementBalance - booksBalance) >= 0.01 && unmatched === 0 && txns.length > 0 && (
+      {!foreign && Math.abs(statementBalance - booksBalance) >= 0.01 && unmatched === 0 && txns.length > 0 && (
         <Alert type="warning" showIcon style={{ marginBottom: 12 }}
-          title={`The statement and Quantivra differ by ${money(Math.abs(statementBalance - booksBalance), currency)}. Check for payments recorded in Quantivra that aren't on the statement yet, or the account's opening balance.`} />
+          title={`The statement and the System Balance differ by ${money(Math.abs(statementBalance - booksBalance), currency)}. Check for payments recorded in Quantivra that aren't on the statement yet, or the account's opening balance.`} />
       )}
       <Segmented value={filter} onChange={v => setFilter(String(v))} style={{ marginBottom: 12 }}
         options={[{ value: 'unmatched', label: `To match (${unmatched})` }, { value: 'matched', label: 'Matched' }, { value: 'ignored', label: 'Ignored' }, { value: 'all', label: 'All' }]} />
@@ -142,8 +146,8 @@ export function Bank({ data }: { data: FinanceData }) {
         columns={[
           { title: 'Date', dataIndex: 'txn_date', width: 110 },
           { title: 'Description', dataIndex: 'description' },
-          { title: 'Money in', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, currency)}</span> : '' },
-          { title: 'Money out', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{money(-t.amount, currency)}</span> : '' },
+          { title: 'Money in', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
+          { title: 'Money out', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{money(-t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
           { title: 'Matched to', key: 'm', render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : describe(t) },
           {
             title: '', key: 'a', width: 170, render: (_, t) => (
@@ -190,7 +194,7 @@ export function Bank({ data }: { data: FinanceData }) {
             columns={[
               { title: 'Date', dataIndex: 'txn_date', width: 110 },
               { title: 'Description', dataIndex: 'description' },
-              { title: 'Amount', key: 'a', align: 'right' as const, width: 140, render: (_: any, l: ImportLine) => <span style={{ color: l.amount > 0 ? '#73d13d' : '#ff7875' }}>{money(l.amount, currency)}</span> },
+              { title: 'Amount', key: 'a', align: 'right' as const, width: 140, render: (_: any, l: ImportLine) => <span style={{ color: l.amount > 0 ? '#73d13d' : '#ff7875' }}>{money(l.amount, accCur)}</span> },
               {
                 title: 'In / out', key: 'f', width: 190, render: (_: any, l: ImportLine) => (
                   <Space size={4}>
@@ -204,7 +208,7 @@ export function Bank({ data }: { data: FinanceData }) {
             ]} />
         </Modal>
       )}
-      {adding && <AddLine onClose={() => setAdding(false)} currency={currency}
+      {adding && <AddLine onClose={() => setAdding(false)} currency={accCur}
         onAdd={async l => { await bankService.add(companyId, accountId!, [l]); setAdding(false); load(); }} />}
       {bankModal}
       {teaching && pdfRows && (
@@ -216,7 +220,7 @@ export function Bank({ data }: { data: FinanceData }) {
             showImport(lines);
           }} />
       )}
-      {matching && <MatchModal data={data} txn={matching} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
+      {matching && <MatchModal data={data} txn={matching} accCur={accCur} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
         onClose={() => setMatching(null)} onDone={() => { setMatching(null); load(); data.reload(); }} />}
     </div>
   );
@@ -242,18 +246,24 @@ function AddLine({ onClose, onAdd, currency }: { onClose: () => void; onAdd: (l:
 }
 
 /** Decide what a statement line is: a payment already recorded, an invoice / bill being paid, or money for an account. */
-function MatchModal({ data, txn, payments, usedPayments, onClose, onDone }: {
-  data: FinanceData; txn: BankTxn; payments: Payment[]; usedPayments: Set<number>; onClose: () => void; onDone: () => void;
+function MatchModal({ data, txn, accCur, payments, usedPayments, onClose, onDone }: {
+  data: FinanceData; txn: BankTxn; accCur: string; payments: Payment[]; usedPayments: Set<number>; onClose: () => void; onDone: () => void;
 }) {
   const inbound = txn.amount > 0;
-  const amt = Math.abs(Number(txn.amount));
+  const foreign = accCur !== data.currency;
+  const lineAmt = Math.abs(Number(txn.amount));                 // in the bank account's currency
+  const [base, setBase] = useState<number | null>(null);        // the same in the company's currency
+  const amt = foreign ? (base ?? 0) : lineAmt;                  // what goes into the books
+  const ready = !foreign || (base != null && base > 0);
+  const signedBase = foreign ? Math.sign(Number(txn.amount)) * amt : undefined;
+  const fx = (n: number) => Math.round(n * 1e6) / 1e6;
   const [busy, setBusy] = useState(false);
   const [docId, setDocId] = useState<number | null>(null);
   const [accountId, setAccountId] = useState<number | null>(null);
   const [memo, setMemo] = useState(txn.description || '');
   const near = (d: string) => Math.abs(dayjs(d).diff(dayjs(txn.txn_date), 'day')) <= 14;
 
-  const suggestions = payments.filter(p => p.direction === (inbound ? 'in' : 'out') && !usedPayments.has(p.id)
+  const suggestions = !ready ? [] : payments.filter(p => p.direction === (inbound ? 'in' : 'out') && !usedPayments.has(p.id)
     && Math.abs(Number(p.amount) - amt) < 0.005 && near(p.payment_date) && (!p.account_id || p.account_id === txn.account_id));
   const openDocs: FinDocument[] = data.docs.filter(d => (inbound ? d.doc_type === 'invoice' : ['bill', 'expense'].includes(d.doc_type))
     && !['draft', 'void', 'paid'].includes(d.status) && balanceDue(d) > 0)
@@ -268,13 +278,27 @@ function MatchModal({ data, txn, payments, usedPayments, onClose, onDone }: {
     const pid = await paymentService.record(data.companyId, {
       direction: inbound ? 'in' : 'out', amount: amt, contact_id: d.contact_id, payment_date: txn.txn_date,
       method: 'Bank transfer', reference: txn.description || undefined, account_id: txn.account_id,
+      ...(foreign ? { currency: accCur, foreign_amount: lineAmt } : {}),
     }, [{ document_id: d.id, amount: portion }]);
-    await bankService.matchPayment(txn.id, pid);
+    await bankService.matchPayment(txn.id, pid, signedBase);
   });
 
   return (
     <Modal open width={780} onCancel={onClose} footer={null}
-      title={<span>{inbound ? 'Money in' : 'Money out'} {money(amt, data.currency)} on {txn.txn_date}<div style={{ fontSize: 12, fontWeight: 400, color: '#999' }}>{txn.description}</div></span>}>
+      title={<span>{inbound ? 'Money in' : 'Money out'} {money(lineAmt, accCur)} on {txn.txn_date}<div style={{ fontSize: 12, fontWeight: 400, color: '#999' }}>{txn.description}</div></span>}>
+      {foreign && (
+        <div style={{ marginBottom: 12, padding: 10, border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}>
+          <Text>In {data.currency}:</Text>{' '}
+          <Space wrap>
+            <InputNumber min={0} precision={6} style={{ width: 170 }} prefix={`1 ${accCur} =`} suffix={data.currency}
+              value={base != null && lineAmt ? fx(base / lineAmt) : undefined}
+              onChange={r => setBase(r ? Math.round(Number(r) * lineAmt * 100) / 100 : null)} />
+            <Text type="secondary">or</Text>
+            <InputNumber min={0} precision={2} style={{ width: 170 }} prefix={data.currency} value={base ?? undefined} onChange={v => setBase(v == null ? null : Number(v))} />
+          </Space>
+          {!ready && <div style={{ marginTop: 6 }}><Tag color="gold">Enter the exchange rate or the {data.currency} amount first</Tag></div>}
+        </div>
+      )}
       <Tabs defaultActiveKey={suggestions.length ? 'existing' : openDocs.length ? 'doc' : 'account'} items={[
         {
           key: 'doc', label: inbound ? 'Payment for an invoice' : 'Payment of a bill / expense',
@@ -289,7 +313,7 @@ function MatchModal({ data, txn, payments, usedPayments, onClose, onDone }: {
                     { title: 'Still owed', key: 'b', align: 'right' as const, render: (_, d) => <span style={{ fontWeight: Math.abs(balanceDue(d) - amt) < 0.005 ? 700 : 400 }}>{money(balanceDue(d), data.currency)}</span> },
                   ]} />
               )}
-              <Button type="primary" disabled={!docId} loading={busy} onClick={payDoc} style={{ marginTop: 8 }}>Record payment and match</Button>
+              <Button type="primary" disabled={!docId || !ready} loading={busy} onClick={payDoc} style={{ marginTop: 8 }}>Record payment and match</Button>
             </div>
           ),
         },
@@ -301,7 +325,7 @@ function MatchModal({ data, txn, payments, usedPayments, onClose, onDone }: {
                 { title: 'Date', dataIndex: 'payment_date' }, { title: 'Number', dataIndex: 'number' },
                 { title: inbound ? 'From' : 'To', key: 'c', render: (_, p) => contact(p.contact_id) },
                 { title: 'Amount', key: 'a', align: 'right' as const, render: (_, p) => money(p.amount, data.currency) },
-                { title: '', key: 'x', render: (_, p) => <Button size="small" type="primary" loading={busy} onClick={() => run(() => bankService.matchPayment(txn.id, p.id))}>Match</Button> },
+                { title: '', key: 'x', render: (_, p) => <Button size="small" type="primary" loading={busy} onClick={() => run(() => bankService.matchPayment(txn.id, p.id, signedBase))}>Match</Button> },
               ]} />
           ),
         },
@@ -317,7 +341,7 @@ function MatchModal({ data, txn, payments, usedPayments, onClose, onDone }: {
                 </Form.Item>
                 <Form.Item label="Details"><Input value={memo} onChange={e => setMemo(e.target.value)} /></Form.Item>
               </Form>
-              <Button type="primary" disabled={!accountId} loading={busy} onClick={() => run(() => bankService.categorise(data.companyId, txn, accountId!, memo))}>Book and match</Button>
+              <Button type="primary" disabled={!accountId || !ready} loading={busy} onClick={() => run(() => bankService.categorise(data.companyId, txn, accountId!, memo, foreign ? amt : undefined))}>Book and match</Button>
             </div>
           ),
         },
@@ -330,6 +354,8 @@ function MatchModal({ data, txn, payments, usedPayments, onClose, onDone }: {
 function BankAccountModal({ data, account, onClose, onSaved }: { data: FinanceData; account: Partial<Account>; onClose: () => void; onSaved: (id: number) => void }) {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const cur = Form.useWatch('currency', form) || data.currency;
+  const foreign = cur !== data.currency;
   const nextCode = () => {
     const used = new Set(data.accounts.map(a => a.code));
     for (let c = 1001; c < 1100; c++) if (!used.has(String(c))) return String(c);
@@ -342,6 +368,7 @@ function BankAccountModal({ data, account, onClose, onSaved }: { data: FinanceDa
       const id = await accountService.save(data.companyId, {
         ...account, code: account.code || nextCode(), name: v.name, type: 'asset', subtype: account.subtype || 'bank',
         bank_name: v.bank_name, bank_account_no: v.bank_account_no, opening_balance: v.opening_balance || 0,
+        currency: v.currency && v.currency !== data.currency ? v.currency : null, opening_foreign: v.opening_foreign ?? null,
         opening_date: v.opening_date ? v.opening_date.format('YYYY-MM-DD') : null, description: account.description,
       });
       message.success('Saved'); onSaved(id);
@@ -350,12 +377,20 @@ function BankAccountModal({ data, account, onClose, onSaved }: { data: FinanceDa
   };
   return (
     <Modal open onCancel={onClose} onOk={submit} confirmLoading={saving} title={account.id ? `Edit ${account.name}` : 'New bank account'}>
-      <Form form={form} layout="vertical" initialValues={{ ...account, opening_date: account.opening_date ? dayjs(account.opening_date) : null }}>
+      <Form form={form} layout="vertical" initialValues={{ ...account, currency: account.currency || data.currency, opening_date: account.opening_date ? dayjs(account.opening_date) : null }}>
         <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Form.Item name="bank_name" label="Bank"><Input /></Form.Item>
           <Form.Item name="bank_account_no" label="Account no."><Input /></Form.Item>
-          <Form.Item name="opening_balance" label="Opening balance">
+          <Form.Item name="currency" label="Currency" style={{ gridColumn: '1 / -1' }}>
+            <Select showSearch optionFilterProp="label" options={currencyOptions()} />
+          </Form.Item>
+          {foreign && (
+            <Form.Item name="opening_foreign" label={`Opening balance (${cur})`}>
+              <InputNumber precision={2} style={{ width: '100%' }} prefix={cur} />
+            </Form.Item>
+          )}
+          <Form.Item name="opening_balance" label={foreign ? `Opening balance in ${data.currency}` : 'Opening balance'}>
             <InputNumber precision={2} style={{ width: '100%' }} prefix={data.currency} />
           </Form.Item>
           <Form.Item name="opening_date" label="As at"><DatePicker style={{ width: '100%' }} /></Form.Item>
