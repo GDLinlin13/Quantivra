@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Space } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Space, Popconfirm } from 'antd';
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { adminUsersService, MIN_PASSWORD_LENGTH } from '../../../services/adminUsers';
 import { USERNAME_PATTERN, USERNAME_RULE_TEXT } from '../../../utils/loginEmail';
@@ -56,6 +56,18 @@ export function PlatformUsersPage() {
     { title: 'Company', key: 'company', render: (_: any, r: any) => r.companies?.name || r.company_id },
     { title: 'Status', dataIndex: 'is_active', key: 'status', render: (v: boolean) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Inactive'}</Tag> },
     { title: 'Created', dataIndex: 'created_at', key: 'created', render: (v: string) => new Date(v).toLocaleDateString() },
+    {
+      title: '', key: 'del', render: (_: any, r: any) => (
+        <Popconfirm title={`Delete ${r.full_name}'s sign-in?`}
+          description="They won't be able to sign in. A linked employee record is kept."
+          okText="Delete" okButtonProps={{ danger: true }}
+          onConfirm={() => adminUsersService.deleteCompanyUser(r.id)
+            .then(() => { message.success('User deleted'); load(); })
+            .catch((e: any) => message.error(e.message))}>
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      ),
+    },
   ];
 
   return (

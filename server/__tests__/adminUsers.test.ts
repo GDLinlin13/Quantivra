@@ -235,4 +235,14 @@ describe('admin-users server function', () => {
     expect((await call('tok-staff', { action: 'set_password', company_user_id: 12, password: 'newpassword' })).status).toBe(200);
   });
 
+
+  it('deleting a user: pay access needed, not yourself, never the last person who can manage the company', async () => {
+    expect((await call('tok-staff', { action: 'delete_company_user', company_user_id: 10 })).status).toBe(403);
+    expect((await call('tok-a', { action: 'delete_company_user', company_user_id: 10 })).body.error).toMatch(/your own/);
+    expect((await call('tok-admin', { action: 'delete_company_user', company_user_id: 10 })).body.error).toMatch(/only person/);
+    const r = await call('tok-a', { action: 'delete_company_user', company_user_id: 12 });
+    expect(r.status).toBe(200);
+    expect(fake.db.company_users.some(u => u.id === 12)).toBe(false);
+    expect(fake.authUsers['u-staff']).toBeUndefined();
+  });
 });

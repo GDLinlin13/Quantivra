@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Row, Col, Card, Statistic, Typography } from 'antd';
-import { TeamOutlined, UserSwitchOutlined, FileOutlined, SettingOutlined } from '@ant-design/icons';
+import { TeamOutlined, UserSwitchOutlined, FileOutlined, CalendarOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 
@@ -9,6 +9,7 @@ const { Title, Text } = Typography;
 export function CompanyDashboard() {
   const { companyId } = useAuth();
   const [stats, setStats] = useState({ users: 0, roles: 0, documents: 0 });
+  const [onLeave, setOnLeave] = useState<string[]>([]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -19,13 +20,18 @@ export function CompanyDashboard() {
     ]).then(([u, r, d]) => {
       setStats({ users: u.count || 0, roles: r.count || 0, documents: d.count || 0 });
     });
+    // Approved leave covering today (local date).
+    const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    supabase.from('leave_requests').select('employees(full_name)')
+      .eq('company_id', companyId).eq('status', 'approved').lte('start_date', today).gte('end_date', today)
+      .then(({ data }) => setOnLeave(Array.from(new Set((data || []).map((x: any) => x.employees?.full_name).filter(Boolean)))));
   }, [companyId]);
 
   const cards = [
     { title: 'Users', value: stats.users, icon: <TeamOutlined />, color: '#4fc3f7' },
     { title: 'Roles', value: stats.roles, icon: <UserSwitchOutlined />, color: '#81c784' },
     { title: 'Documents', value: stats.documents, icon: <FileOutlined />, color: '#ffb74d' },
-    { title: 'Settings', value: '—', icon: <SettingOutlined />, color: '#e57373' },
+    { title: 'On leave today', value: onLeave.length, icon: <CalendarOutlined />, color: '#e57373', note: onLeave.length ? onLeave.join(', ') : 'Everyone is in' },
   ];
 
   return (
@@ -41,6 +47,7 @@ export function CompanyDashboard() {
                 prefix={<span style={{ color: card.color, marginRight: 8 }}>{card.icon}</span>}
                 valueStyle={{ color: '#f0ede6', fontSize: 28 }}
               />
+              {'note' in card && card.note && <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>{card.note}</Text>}
             </Card>
           </Col>
         ))}

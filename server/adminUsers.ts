@@ -207,6 +207,40 @@ async function deleteCompany(admin: SupabaseClient, caller: Caller, body: Body) 
   return { ok: true, removed_logins: removedLogins };
 }
 
+/**
+ * Remove a company user's sign-in. Their employee record (if linked) stays,
+ * just unlinked. The Supabase login is deleted unless used elsewhere.
+ * Refuses to delete yourself or the company's last user with pay access.
+ */
+async function deleteCompanyUser(admin: SupabaseClient, caller: Caller, body: Body) {
+  const targetId = num(body, 'company_user_id')!;
+  const { data: target } = await admin.from('company_users').select('id, company_id, auth_user_id').eq('id', targetId).maybeSingle();
+  if (!target) throw new HttpError(404, 'User not found');
+  const companyId = Number(target.company_id);
+  await requireUserAdmin(admin, caller, companyId);
+  if (target.auth_user_id && target.auth_user_id === caller.authUserId) throw new HttpError(400, "You can't delete your own sign-in");
+
+  // Keep at least one person who can manage the company.
+  const { data: payRoles } = await admin.from('company_roles').select('id').eq('company_id', companyId).eq('can_view_pay', true);
+  const payRoleIds = (payRoles || []).map((r: any) => r.id);
+  if (payRoleIds.length) {
+    const { data: links } = await admin.from('company_user_roles').select('user_id').in('role_id', payRoleIds);
+    const payUsers = new Set((links || []).map((l: any) => l.user_id));
+    if (payUsers.has(targetId) && payUsers.size <= 1) {
+      throw new HttpError(400, 'This is the only person who can see pay and manage users. Give someone else that role first.');
+    }
+  }
+
+  const del = await admin.from('company_users').delete().eq('id', targetId);
+  if (del.error) throw new HttpError(400, del.error.message);
+  let loginRemoved = false;
+  if (target.auth_user_id && !(await loginInUse(admin, target.auth_user_id))) {
+    const { error } = await admin.auth.admin.deleteUser(target.auth_user_id);
+    loginRemoved = !error;
+  }
+  return { ok: true, login_removed: loginRemoved };
+}
+
 async function setPassword(admin: SupabaseClient, caller: Caller, body: Body) {
   const targetId = num(body, 'company_user_id')!;
   const password = str(body, 'password');
@@ -291,6 +325,7 @@ export async function handleAdminUsers(request: Request, admin: SupabaseClient):
       case 'create_platform_admin': result = await createPlatformAdmin(admin, caller, body); break;
       case 'migrate_legacy_users':  result = await migrateLegacyUsers(admin, caller); break;
       case 'delete_company':        result = await deleteCompany(admin, caller, body); break;
+      case 'delete_company_user':   result = await deleteCompanyUser(admin, caller, body); break;
       default: throw new HttpError(400, 'Unknown action');
     }
     return Response.json(result);

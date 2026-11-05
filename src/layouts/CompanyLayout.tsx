@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../utils/supabase';
+import { RainbowTitle } from '../components/RainbowTitle';
 import { Layout, Menu, Button, Avatar, Dropdown, Typography, Modal } from 'antd';
 import { ChangePasswordCard } from '../components/ChangePasswordCard';
 import {
@@ -24,6 +26,12 @@ function CompanyLayoutInner() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, companyId } = useAuth();
+  const [companyName, setCompanyName] = useState<string>('');
+  useEffect(() => {
+    if (!companyId) return;
+    supabase.from('companies').select('name').eq('id', companyId).maybeSingle()
+      .then(({ data }) => setCompanyName(data?.name || ''));
+  }, [companyId]);
   const [collapsed, setCollapsed] = useState(false);
 
   // Sections follow the person's roles (Roles page); pay/admin pages need pay access.
@@ -69,9 +77,10 @@ function CompanyLayoutInner() {
         onCollapse={setCollapsed}
         style={{ background: '#111518', borderRight: '1px solid rgba(255,255,255,0.06)' }}
       >
-        <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <BankOutlined style={{ fontSize: 24, color: '#4fc3f7' }} />
-          {!collapsed && <Text style={{ color: '#f0ede6', fontSize: 16, fontWeight: 600 }}>Portal</Text>}
+        <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px' }}>
+          {collapsed
+            ? <RainbowTitle text={(companyName || 'Q').charAt(0)} maxWidth={40} maxFontSize={20} />
+            : <RainbowTitle text={companyName || ''} maxWidth={188} />}
         </div>
         <Menu
           theme="dark"
