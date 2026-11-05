@@ -109,7 +109,23 @@ export const authService = {
   async restoreSession(): Promise<Session | null> {
     const stored = readSession();
     const { data } = await supabase.auth.getSession();
-    const authUserId = data.session?.user?.id;
+    let authUserId = data.session?.user?.id;
+    if (authUserId) {
+      // The stored sign-in may have expired (e.g. overnight). Ask Supabase to
+      // confirm it; if it can't, sign out so the login page shows instead of
+      // pages that silently load nothing.
+      const { data: live, error } = await supabase.auth.getUser();
+      // Only a rejected sign-in logs out; a network hiccup keeps the session.
+      const rejected = error
+        ? (error.status === 401 || error.status === 403 || error.name === 'AuthSessionMissingError')
+        : !live.user;
+      if (rejected) {
+        clearSession();
+        await supabase.auth.signOut().catch(() => {});
+        return null;
+      }
+      if (live.user) authUserId = live.user.id;
+    }
     if (!stored || !authUserId || stored.authUserId !== authUserId) {
       clearSession();
       if (authUserId && !stored) await supabase.auth.signOut();

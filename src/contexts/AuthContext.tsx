@@ -39,7 +39,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') { authService.clearLocal(); apply(null); }
     });
-    return () => { active = false; sub.subscription.unsubscribe(); };
+
+    // When someone comes back to a tab left open (e.g. overnight), re-check
+    // the sign-in so an expired one leads to the login page.
+    const recheck = () => {
+      if (document.visibilityState !== 'visible') return;
+      authService.restoreSession().then(s => { if (active && !s) apply(null); }).catch(() => {});
+    };
+    document.addEventListener('visibilitychange', recheck);
+    return () => { active = false; sub.subscription.unsubscribe(); document.removeEventListener('visibilitychange', recheck); };
   }, []);
 
   const login = async (username: string, password: string, loginType: 'platform' | 'company', remember = false, companyCode?: string) => {
