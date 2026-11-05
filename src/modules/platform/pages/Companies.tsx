@@ -40,7 +40,6 @@ const DEFAULT_COUNTRIES = [
 
 const ALL_FEATURES_MODULES = ['Dashboard', 'HR', 'Payroll', 'Leave', 'Attendance', 'Claims', 'Finance', 'Accounting', 'Inventory', 'Purchasing', 'Sales', 'CRM', 'Projects', 'Assets', 'Reports', 'AI'];
 
-const BUSINESS_TYPES = ['General', 'Retail', 'Restaurant', 'Construction', 'Manufacturing', 'Clinic', 'Software', 'Accounting Firm', 'School', 'Hotel', 'Logistics', 'Others'];
 
 const GLOBAL_CHART_OF_ACCOUNTS = [
   { code: '1000', name: 'Assets' },
@@ -163,7 +162,7 @@ export function CompaniesPage() {
   useEffect(() => { load(); }, []);
 
   const stepFields = [
-    ['name', 'registration_number', 'country', 'business_type', 'business_pack', 'currency', 'financial_year_start', 'timezone'],
+    ['name', 'registration_number', 'country', 'business_pack', 'currency', 'financial_year_start', 'timezone'],
     ['owner_full_name', 'owner_email', 'owner_mobile', 'owner_password'],
     ['modules'],
     [],
@@ -208,7 +207,6 @@ export function CompaniesPage() {
         name: values.name,
         registration_number: values.registration_number,
         country: values.country,
-        business_type: values.business_type || 'General',
         business_pack: values.business_pack || '',
         currency: values.currency,
         financial_year_start: values.financial_year_start,
@@ -373,15 +371,6 @@ export function CompaniesPage() {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="business_type" label={<Text style={{ color: '#f0ede6' }}>Business Type</Text>}
-                    rules={[{ required: true, message: 'Required' }]}>
-                    <Select placeholder="Select business type" showSearch
-                      options={BUSINESS_TYPES.map(t => ({ label: t, value: t }))} />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Row gutter={16}>
-                <Col span={24}>
                   <Form.Item name="business_pack" label={<Text style={{ color: '#f0ede6' }}>Business Pack</Text>}>
                     <Select placeholder="Select a business pack" allowClear onChange={handleBusinessPackChange}
                       options={Object.entries(BUSINESS_PACK_PRESETS).map(([k, v]) => ({ label: `${v.label} — ${v.desc}`, value: k }))} />
@@ -462,7 +451,6 @@ export function CompaniesPage() {
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Company</Text><br /><Text>{form.getFieldValue('name')}</Text></Col>
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Registration</Text><br /><Text>{form.getFieldValue('registration_number') || '-'}</Text></Col>
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Country</Text><br /><Text>{getCountryName(form.getFieldValue('country'))}</Text></Col>
-                  <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Business Type</Text><br /><Text>{form.getFieldValue('business_type') || 'General'}</Text></Col>
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Business Pack</Text><br /><Text>{BUSINESS_PACK_PRESETS[form.getFieldValue('business_pack') as string]?.label || 'None'}</Text></Col>
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Currency</Text><br /><Text>{form.getFieldValue('currency')}</Text></Col>
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Timezone</Text><br /><Text>{form.getFieldValue('timezone')}</Text></Col>

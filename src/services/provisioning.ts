@@ -6,7 +6,6 @@ export interface ProvisionInput {
   name: string;
   registration_number?: string;
   country: string;
-  business_type: string;
   business_pack: string;
   currency: string;
   financial_year_start: string;
@@ -145,12 +144,11 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
       name: input.name,
       company_code,
       country: input.country,
-      business_type: input.business_type,
       currency: input.currency,
       financial_year_start: input.financial_year_start,
       timezone: input.timezone,
       modules: input.modules,
-      metadata: { business_type: input.business_type, registration_number: input.registration_number },
+      metadata: { registration_number: input.registration_number },
     }).select().single();
     if (error) throw error;
     return data;
@@ -192,7 +190,7 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
   await run(4, async () => {
     const { error } = await supabase.from('company_settings').upsert({
       company_id: company.id, category: 'company', key: 'country_config',
-      value: { country_code: input.country, currency: input.currency, timezone: input.timezone, business_type: input.business_type },
+      value: { country_code: input.country, currency: input.currency, timezone: input.timezone },
     });
     if (error) throw error;
   });
@@ -478,7 +476,7 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
       entity_type: 'company',
       entity_id: String(company.id),
       new_value: {
-        name: company.name, company_code, country: input.country, business_type: input.business_type,
+        name: company.name, company_code, country: input.country,
         modules: input.modules, departments: departments.length, positions: positions.length,
         workflows: savedWorkflows.length, roles: roleNames.length,
       },
