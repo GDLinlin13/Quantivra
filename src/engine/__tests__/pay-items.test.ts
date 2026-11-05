@@ -33,6 +33,13 @@ describe('overtime and unpaid leave maths', () => {
     expect(workingDaysInMonth(2026, 8, DEFAULT_WORK_PATTERN)).toBe(21); // Aug 2026: 21 weekdays
     expect(unpaidLeaveAmount(4000, 2, 21)).toBe(380.95);
   });
+  it('overtime can use its own hourly rate and multiplier', () => {
+    expect(overtimeAmount(4000, 10, 2)).toBe(419.58);          // MOM rate × 2
+    expect(overtimeAmount(4000, 10, null, 25)).toBe(375);       // own rate × 1.5
+    expect(overtimeAmount(4000, 0.5, 1, 30)).toBe(15);          // own rate × 1
+    expect(toEngineItems([item('OVERTIME', 419.58, { quantity: 10, multiplier: 2 })]).salaryComponents[0].label).toBe('Overtime (10 hrs @ 2×)');
+    expect(toEngineItems([item('OVERTIME', 300, { quantity: 10, multiplier: 1.5 })]).salaryComponents[0].label).toBe('Overtime (10 hrs)');
+  });
 });
 
 describe('pay items in a payroll run', () => {

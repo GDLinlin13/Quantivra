@@ -245,6 +245,9 @@ export const payItemService = {
     const payload = {
       company_id: row.company_id, employee_id: row.employee_id, item_code: row.item_code,
       label: row.label || null, quantity: t.unit && row.quantity != null ? row.quantity : null,
+      ...(t.code === 'OVERTIME'
+        ? { rate: row.rate != null ? row.rate : null, multiplier: row.multiplier != null ? row.multiplier : null }
+        : {}),
       amount: Math.max(0, Math.round((Number(row.amount) || 0) * 100) / 100),
       note: row.note?.trim() || null, recurring: !!row.recurring,
       period_year: row.recurring ? null : row.period_year, period_month: row.recurring ? null : row.period_month,

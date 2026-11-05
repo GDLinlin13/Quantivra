@@ -21,7 +21,7 @@ export interface PayItemType {
 
 export const PAY_ITEM_TYPES: PayItemType[] = [
   { code: 'OVERTIME', label: 'Overtime', kind: 'earning', unit: 'hours', canRecur: false,
-    help: 'Enter the hours; the amount is worked out at 1.5× the hourly rate (Singapore MOM formula) and can be adjusted.' },
+    help: 'Enter the hours. The hourly rate is worked out from the basic salary (Singapore MOM formula) and the rate multiplier is 1.5× — change either if you pay differently (e.g. 2× on rest days). The amount can be adjusted too.' },
   { code: 'ALLOWANCE_TRANSPORT', label: 'Transport allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
   { code: 'ALLOWANCE_HOUSING', label: 'Housing allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
   { code: 'ALLOWANCE_MEAL', label: 'Meal allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
@@ -50,8 +50,13 @@ export function hourlyRate(monthlyBasic: number): number {
   return (12 * (Number(monthlyBasic) || 0)) / (52 * 44);
 }
 
-export function overtimeAmount(monthlyBasic: number, hours: number, multiplier = 1.5): number {
-  return round2(hourlyRate(monthlyBasic) * multiplier * (Number(hours) || 0));
+export const DEFAULT_OT_MULTIPLIER = 1.5;
+
+/** hours × hourly rate × multiplier; the rate defaults to the MOM hourly rate of the basic salary. */
+export function overtimeAmount(monthlyBasic: number, hours: number, multiplier: number | null = DEFAULT_OT_MULTIPLIER, rate?: number | null): number {
+  const r = rate != null && rate >= 0 ? Number(rate) : hourlyRate(monthlyBasic);
+  const m = multiplier != null && multiplier >= 0 ? Number(multiplier) : DEFAULT_OT_MULTIPLIER;
+  return round2(r * m * (Number(hours) || 0));
 }
 
 /** Days the person is meant to work in the month (half days count ½). */
@@ -72,10 +77,11 @@ export function unpaidLeaveAmount(monthlyBasic: number, days: number, workingDay
 }
 
 /** "Overtime (10 hrs)", "Other allowance – Laptop", … */
-export function payItemLabel(item: { item_code: string; label?: string | null; quantity?: number | null; note?: string | null }): string {
+export function payItemLabel(item: { item_code: string; label?: string | null; quantity?: number | null; note?: string | null; multiplier?: number | null }): string {
   const t = PAY_ITEM_BY_CODE[item.item_code];
   let s = item.label || t?.label || item.item_code;
-  if (item.quantity != null && t?.unit) s += ` (${Number(item.quantity)} ${t.unit === 'hours' ? 'hrs' : Number(item.quantity) === 1 ? 'day' : 'days'})`;
+  const m = item.multiplier != null && Number(item.multiplier) !== DEFAULT_OT_MULTIPLIER ? ` @ ${Number(item.multiplier)}×` : '';
+  if (item.quantity != null && t?.unit) s += ` (${Number(item.quantity)} ${t.unit === 'hours' ? 'hrs' : Number(item.quantity) === 1 ? 'day' : 'days'}${t.unit === 'hours' ? m : ''})`;
   if (item.note && (item.item_code.endsWith('_OTHER') || item.item_code === 'REIMBURSEMENT')) s += ` – ${item.note}`;
   return s;
 }
@@ -87,6 +93,9 @@ export interface PayItemRow {
   item_code: string;
   label?: string | null;
   quantity?: number | null;
+  /** Overtime: hourly rate (empty = from basic salary) and multiplier (empty = 1.5). */
+  rate?: number | null;
+  multiplier?: number | null;
   amount: number;
   note?: string | null;
   recurring: boolean;
