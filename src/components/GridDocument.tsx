@@ -24,6 +24,23 @@ export function cellStyle(cell: GridCell): CSSProperties {
   };
 }
 
+/** Height (px) of the rows a cell covers, so a logo can fill the whole cell. */
+export function spanHeight(t: GridTemplate, r: number, rs = 1): number {
+  let h = 0;
+  for (let i = r; i < Math.min(r + rs, t.rows.length); i++) h += t.rows[i].h || 22;
+  return h;
+}
+
+/** The logo stretches to fill its (merged) cell, keeping its shape; the cell's alignment positions it. */
+export function LogoImg({ src, cell, height }: { src: string; cell: GridCell; height: number }) {
+  const x = cell.al || 'left';
+  const y = cell.va === 'middle' ? 'center' : (cell.va || 'top');
+  return (
+    <img src={src} alt="" draggable={false}
+      style={{ display: 'block', width: '100%', height: Math.max(12, height - 8), objectFit: 'contain', objectPosition: `${x} ${y}`, pointerEvents: 'none' }} />
+  );
+}
+
 /**
  * Prints a spreadsheet-style layout with real data filled in. Inline styles
  * only, so it survives being copied into the print / save-as-PDF window.
@@ -42,7 +59,7 @@ export function GridDocument({ template, fields, lists, logo }: {
             {row.cells.map(oc => (
               <td key={oc.c} rowSpan={oc.rowSpan} colSpan={oc.colSpan} style={cellStyle(oc.cell)}>
                 {isLogoCell(oc.cell.v)
-                  ? (logo ? <img src={logo} alt="" style={{ maxWidth: '100%', maxHeight: Math.max(40, (row.h || 22) * oc.rowSpan), objectFit: 'contain' }} /> : null)
+                  ? (logo ? <LogoImg src={logo} cell={oc.cell} height={spanHeight(template, oc.r, oc.cell.rs || 1)} /> : null)
                   : oc.text}
               </td>
             ))}

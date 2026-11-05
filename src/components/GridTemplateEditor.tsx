@@ -8,10 +8,10 @@ import {
 } from '@ant-design/icons';
 import {
   key, colName, coveredSet, mergeAt, normRange, expandRange, mergeRange, unmergeRange, insertRow, deleteRow, insertCol, deleteCol,
-  styleRange, outlineRange, isLogoCell, type GridTemplate, type GridCell, type Range,
+  styleRange, outlineRange, isLogoCell, moveRange, copyBlock, pasteBlock, clearArea, type Block, type GridTemplate, type GridCell, type Range,
 } from '../utils/gridTemplate';
 import { DOC_FIELDS, DOC_LISTS, STARTER_LAYOUTS, sampleData, type DocKind } from '../data/documentLayouts';
-import { GridDocument, cellStyle } from './GridDocument';
+import { GridDocument, cellStyle, LogoImg, spanHeight } from './GridDocument';
 
 const { Text } = Typography;
 const FIELD_SPLIT = /(\{\{\s*[a-z0-9_.]+\s*\}\})/gi;
@@ -50,6 +50,12 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
   const gridRef = useRef<HTMLDivElement>(null);
   const resizing = useRef<{ kind: 'col' | 'row'; idx: number; start: number; orig: number } | null>(null);
   const [, force] = useState(0);
+  // dragging a selection by its border moves it; grab = where in the selection it was picked up
+  const moving = useRef<{ src: Range; grabR: number; grabC: number } | null>(null);
+  const [moveTo, setMoveToState] = useState<Pos | null>(null);
+  const moveToRef = useRef<Pos | null>(null);
+  const setMoveTo = (p: Pos | null) => { moveToRef.current = p; setMoveToState(p); };
+  const clip = useRef<Block | null>(null);
 
   const t = value;
   const covered = coveredSet(t);
@@ -121,6 +127,17 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
     if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); return toggle('b'); }
     if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); return toggle('i'); }
     if (mod && e.key.toLowerCase() === 'u') { e.preventDefault(); return toggle('u'); }
+    if (mod && e.key.toLowerCase() === 'c') { e.preventDefault(); clip.current = copyBlock(t, range); return; }
+    if (mod && e.key.toLowerCase() === 'x') { e.preventDefault(); clip.current = copyBlock(t, range); return commit(clearArea(t, range)); }
+    if (mod && e.key.toLowerCase() === 'v') {
+      e.preventDefault();
+      const b = clip.current;
+      if (!b) return;
+      const at = { r: range.r1, c: range.c1 };
+      commit(pasteBlock(t, b, at));
+      setAnchor(at); setFocus({ r: at.r + b.h - 1, c: at.c + b.w - 1 });
+      return;
+    }
     switch (e.key) {
       case 'ArrowUp': e.preventDefault(); return move(-1, 0, e.shiftKey);
       case 'ArrowDown': e.preventDefault(); return move(1, 0, e.shiftKey);
@@ -149,11 +166,25 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
         onChange({ ...t, rows });
       }
     };
-    const onUp = () => { dragging.current = false; if (resizing.current) { resizing.current = null; force(x => x + 1); } };
+    const onUp = () => {
+      dragging.current = false;
+      if (resizing.current) { resizing.current = null; force(x => x + 1); }
+      const mv = moving.current;
+      if (mv) {
+        moving.current = null;
+        const dest = moveToRef.current;
+        setMoveTo(null);
+        if (dest && (dest.r !== mv.src.r1 || dest.c !== mv.src.c1)) {
+          commit(moveRange(t, mv.src, dest));
+          setAnchor(dest);
+          setFocus({ r: dest.r + (mv.src.r2 - mv.src.r1), c: dest.c + (mv.src.c2 - mv.src.c1) });
+        }
+      }
+    };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-  }, [t, onChange]);
+  }, [t, onChange, commit]);
 
   const startResize = (kind: 'col' | 'row', idx: number, e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
@@ -162,6 +193,26 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
   };
 
   const inRange = (r: number, c: number) => r >= range.r1 && r <= range.r2 && c >= range.c1 && c <= range.c2;
+
+  /** Which edges of this cell sit on the outside of the selection. */
+  const edgesOf = (r: number, c: number, cell: GridCell) => ({
+    top: r === range.r1, left: c === range.c1,
+    bottom: r + (cell.rs || 1) - 1 === range.r2, right: c + (cell.cs || 1) - 1 === range.c2,
+  });
+  /** True when the mouse is on the selection's blue border (the place you grab to move it). */
+  const onBorder = (e: React.MouseEvent<HTMLTableCellElement>, r: number, c: number, cell: GridCell) => {
+    if (!inRange(r, c) || editing) return false;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ed = edgesOf(r, c, cell);
+    const z = 6;
+    return (ed.top && e.clientY - rect.top < z) || (ed.bottom && rect.bottom - e.clientY < z)
+      || (ed.left && e.clientX - rect.left < z) || (ed.right && rect.right - e.clientX < z);
+  };
+  const inMoveTarget = (r: number, c: number) => {
+    if (!moveTo) return false;
+    const h = range.r2 - range.r1, w = range.c2 - range.c1;
+    return r >= moveTo.r && r <= moveTo.r + h && c >= moveTo.c && c <= moveTo.c + w;
+  };
 
   const lists = DOC_LISTS[kind];
   const repeatList = lists.find(l => l.name === curRow.repeat);
@@ -301,11 +352,9 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
                     <th key={c}
                       onMouseDown={() => { setAnchor({ r: 0, c }); setFocus({ r: t.rows.length - 1, c }); }}
                       style={{ background: c >= range.c1 && c <= range.c2 ? '#d3e3fd' : HEADER_BG, border: '1px solid #cfd4d9', fontSize: 11, fontWeight: 500, color: '#444', position: 'sticky', top: 0, zIndex: 2, cursor: 'pointer' }}>
-                      <div style={{ position: 'relative' }}>
-                        {colName(c)}
-                        <div onMouseDown={e => startResize('col', c, e)} title="Drag to resize"
-                          style={{ position: 'absolute', right: -4, top: -4, bottom: -4, width: 8, cursor: 'col-resize', zIndex: 4 }} />
-                      </div>
+                      {colName(c)}
+                      <div onMouseDown={e => startResize('col', c, e)} title="Drag to resize"
+                        style={{ position: 'absolute', right: -1, top: 0, bottom: 0, width: 7, cursor: 'col-resize', zIndex: 4 }} />
                     </th>
                   ))}
                 </tr>
@@ -317,12 +366,10 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
                       onMouseDown={() => { setAnchor({ r, c: 0 }); setFocus({ r, c: t.cols.length - 1 }); }}
                       style={{ background: row.repeat ? '#fff4d6' : (r >= range.r1 && r <= range.r2 ? '#d3e3fd' : HEADER_BG), border: '1px solid #cfd4d9', fontSize: 11, fontWeight: 500, color: '#444', position: 'sticky', left: 0, zIndex: 1, cursor: 'pointer' }}>
                       <Tooltip title={row.repeat ? `Repeats once per ${lists.find(l => l.name === row.repeat)?.label.toLowerCase() || row.repeat} item` : undefined} placement="right">
-                        <div style={{ position: 'relative', height: '100%' }}>
-                          {r + 1}{row.repeat ? ' ↻' : ''}
-                          <div onMouseDown={e => startResize('row', r, e)} title="Drag to resize"
-                            style={{ position: 'absolute', left: 0, right: 0, bottom: -6, height: 8, cursor: 'row-resize' }} />
-                        </div>
+                        <span>{r + 1}{row.repeat ? ' ↻' : ''}</span>
                       </Tooltip>
+                      <div onMouseDown={e => startResize('row', r, e)} title="Drag to resize"
+                        style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 7, cursor: 'row-resize', zIndex: 4 }} />
                     </th>
                     {t.cols.map((_, c) => {
                       const k = key(r, c);
@@ -335,12 +382,35 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
                       return (
                         <td key={c} rowSpan={cell.rs || 1} colSpan={cell.cs || 1}
                           onMouseDown={e => {
+                            if (e.button !== 0) return;
+                            e.preventDefault(); // no text selection / native drag while picking cells
+                            if (onBorder(e, r, c, cell)) {
+                              moving.current = { src: range, grabR: r - range.r1, grabC: c - range.c1 };
+                              setMoveTo({ r: range.r1, c: range.c1 });
+                              gridRef.current?.focus();
+                              return;
+                            }
                             if (editing) finishEdit(true);
                             dragging.current = true;
                             if (e.shiftKey) setFocus({ r, c }); else { setAnchor({ r, c }); setFocus({ r, c }); }
                             gridRef.current?.focus();
                           }}
-                          onMouseEnter={() => { if (dragging.current) setFocus({ r, c }); }}
+                          onMouseMove={e => {
+                            if (moving.current || dragging.current) return;
+                            e.currentTarget.style.cursor = onBorder(e, r, c, cell) ? 'move' : 'cell';
+                          }}
+                          onMouseEnter={() => {
+                            const mv = moving.current;
+                            if (mv) {
+                              const h = mv.src.r2 - mv.src.r1, w = mv.src.c2 - mv.src.c1;
+                              setMoveTo({
+                                r: Math.max(0, Math.min(t.rows.length - 1 - h, r - mv.grabR)),
+                                c: Math.max(0, Math.min(t.cols.length - 1 - w, c - mv.grabC)),
+                              });
+                              return;
+                            }
+                            if (dragging.current) setFocus({ r, c });
+                          }}
                           onDoubleClick={() => { setAnchor({ r, c }); setFocus({ r, c }); setEditing({ pos: { r, c }, text: cell.v || '' }); }}
                           style={{
                             ...cs,
@@ -349,11 +419,23 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
                             borderBottom: cs.borderBottom || '1px solid #e3e6e8',
                             borderLeft: cs.borderLeft || '1px solid #e3e6e8',
                             background: sel && !isFocus ? (cell.bg ? cell.bg : '#e8f0fe') : (cell.bg || (row.repeat ? '#fffbeb' : '#fff')),
-                            boxShadow: isFocus ? `inset 0 0 0 2px ${SELECT_BLUE}` : undefined,
+                            boxShadow: (() => {
+                              if (!sel) return undefined;
+                              const ed = edgesOf(r, c, cell);
+                              const sh = [
+                                ed.top && `inset 0 2px 0 ${SELECT_BLUE}`, ed.bottom && `inset 0 -2px 0 ${SELECT_BLUE}`,
+                                ed.left && `inset 2px 0 0 ${SELECT_BLUE}`, ed.right && `inset -2px 0 0 ${SELECT_BLUE}`,
+                              ].filter(Boolean);
+                              return sh.length ? sh.join(', ') : undefined;
+                            })(),
+                            outline: inMoveTarget(r, c) ? `2px dashed ${SELECT_BLUE}` : undefined,
+                            outlineOffset: -3,
                             position: 'relative', overflow: 'hidden', cursor: 'cell',
                           }}>
                           {isEditing ? (
                             <textarea autoFocus value={editing!.text}
+                              onMouseDown={e => e.stopPropagation()}
+                              onDoubleClick={e => e.stopPropagation()}
                               onChange={e => setEditing({ ...editing!, text: e.target.value })}
                               onBlur={() => finishEdit(true)}
                               onKeyDown={e => {
@@ -366,7 +448,7 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
                               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', minHeight: 22, border: `2px solid ${SELECT_BLUE}`, outline: 'none', resize: 'none', font: 'inherit', fontSize: cs.fontSize, padding: '2px 5px', zIndex: 5, background: '#fff', color: '#111' }} />
                           ) : isLogoCell(cell.v) ? (
                             branding?.logo_data_uri
-                              ? <img src={branding.logo_data_uri} alt="logo" style={{ maxWidth: '100%', maxHeight: Math.max(40, (row.h || 22) * (cell.rs || 1)), objectFit: 'contain', pointerEvents: 'none' }} />
+                              ? <LogoImg src={branding.logo_data_uri} cell={cell} height={spanHeight(t, r, cell.rs || 1)} />
                               : <CellText v={cell.v || ''} />
                           ) : <CellText v={cell.v || ''} />}
                         </td>
@@ -378,8 +460,10 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
             </table>
           </div>
           <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12, display: 'block', marginTop: 6 }}>
-            Works like Excel: click a cell and type, double-click to edit, drag or Shift-click to select several cells, drag the
-            column letters / row numbers' edges to resize. Alt+Enter adds a new line inside a cell. Blue {'{{fields}}'} are filled in
+            Works like Excel: click a cell and type, double-click to edit, drag or Shift-click to select several cells. To move
+            cells, point at the blue border of the selection (the pointer becomes a cross of arrows) and drag it to the new place.
+            Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste. Drag the edges of the column letters / row numbers to resize — a logo
+            grows to fill its cell. Alt+Enter adds a new line inside a cell. Blue {'{{fields}}'} are filled in
             with real data when the document is printed. Yellow rows (↻) repeat once per item.
           </Text>
         </>

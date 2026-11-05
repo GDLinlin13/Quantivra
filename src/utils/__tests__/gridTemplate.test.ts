@@ -78,3 +78,29 @@ describe('grid layouts', () => {
       .toEqual({ enabled: true, cols: [20, 100], rows: [{ h: 30, repeat: 'lines' }], cells: {} });
   });
 });
+
+describe('moving and pasting cells', () => {
+  it('moves text, formatting and merges to a new place', async () => {
+    const { moveRange, copyBlock, pasteBlock } = await import('../gridTemplate');
+    let t = blankTemplate(6, 6);
+    t = { ...t, cells: { [key(0, 0)]: { v: '{{logo}}', rs: 2, cs: 2 }, [key(0, 2)]: { v: 'Name', b: true }, [key(3, 3)]: { v: 'old' } } };
+    // dragging a single cell
+    let m = moveRange(t, { r1: 0, c1: 2, r2: 0, c2: 2 }, { r: 3, c: 3 });
+    expect(m.cells[key(0, 2)]).toBeUndefined();
+    expect(m.cells[key(3, 3)]).toEqual({ v: 'Name', b: true });
+    // dragging a merged block keeps the merge
+    m = moveRange(t, { r1: 1, c1: 1, r2: 1, c2: 1 }, { r: 2, c: 3 });
+    expect(m.cells[key(0, 0)]).toBeUndefined();
+    expect(m.cells[key(2, 3)]).toEqual({ v: '{{logo}}', rs: 2, cs: 2 });
+    expect(m.cells[key(3, 3)]).toBeUndefined(); // now hidden under the merge
+    // overlapping move
+    m = moveRange(t, { r1: 0, c1: 0, r2: 1, c2: 1 }, { r: 1, c: 1 });
+    expect(m.cells[key(1, 1)]).toEqual({ v: '{{logo}}', rs: 2, cs: 2 });
+    expect(m.cells[key(0, 0)]).toBeUndefined();
+    // pasting off the edge grows the sheet
+    const p = pasteBlock(t, copyBlock(t, { r1: 0, c1: 0, r2: 1, c2: 2 }), { r: 5, c: 5 });
+    expect(p.rows.length).toBe(7);
+    expect(p.cols.length).toBe(8);
+    expect(p.cells[key(5, 7)]).toEqual({ v: 'Name', b: true });
+  });
+});

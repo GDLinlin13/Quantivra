@@ -278,3 +278,48 @@ export function expandTemplate(t: GridTemplate, fields: FieldValues, lists: List
   });
   return out;
 }
+
+// ---- copy / paste / move -----------------------------------------------------
+
+export interface Block { h: number; w: number; cells: Record<string, GridCell> } // keys "dr:dc"
+
+export function copyBlock(t: GridTemplate, rg: Range): Block {
+  const r = expandRange(t, rg);
+  const cells: Record<string, GridCell> = {};
+  for (let i = r.r1; i <= r.r2; i++) for (let j = r.c1; j <= r.c2; j++) {
+    const cell = t.cells[key(i, j)];
+    if (cell) cells[key(i - r.r1, j - r.c1)] = { ...cell };
+  }
+  return { h: r.r2 - r.r1 + 1, w: r.c2 - r.c1 + 1, cells };
+}
+
+/** Empty an area: its cells are removed and any merge poking into it is undone. */
+export function clearArea(t: GridTemplate, rg: Range): GridTemplate {
+  let next = unmergeRange(t, rg);
+  const cells = { ...next.cells };
+  for (let i = rg.r1; i <= rg.r2; i++) for (let j = rg.c1; j <= rg.c2; j++) delete cells[key(i, j)];
+  next = { ...next, cells };
+  return next;
+}
+
+/** Put a copied block with its top-left at (r,c), adding rows/columns if it runs off the sheet. */
+export function pasteBlock(t: GridTemplate, b: Block, at: { r: number; c: number }): GridTemplate {
+  let next = t;
+  while (next.rows.length < at.r + b.h) next = { ...next, rows: [...next.rows, {}] };
+  while (next.cols.length < at.c + b.w) next = { ...next, cols: [...next.cols, 100] };
+  next = clearArea(next, { r1: at.r, c1: at.c, r2: at.r + b.h - 1, c2: at.c + b.w - 1 });
+  const cells = { ...next.cells };
+  for (const [k, cell] of Object.entries(b.cells)) {
+    const [dr, dc] = k.split(':').map(Number);
+    cells[key(at.r + dr, at.c + dc)] = { ...cell };
+  }
+  return { ...next, cells };
+}
+
+/** Drag-and-drop: move a range of cells (text, formatting and merges) to a new top-left position. */
+export function moveRange(t: GridTemplate, rg: Range, to: { r: number; c: number }): GridTemplate {
+  const r = expandRange(t, rg);
+  if (r.r1 === to.r && r.c1 === to.c) return t;
+  const b = copyBlock(t, r);
+  return pasteBlock(clearArea(t, r), b, to);
+}
