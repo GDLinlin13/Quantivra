@@ -51,7 +51,9 @@ export function uniqueNames(names: string[]): string[] {
 
 /** Turn rendered payslips (one element each) into a PDF with one A4 page per payslip. */
 export async function elementsToPdf(elements: HTMLElement[]): Promise<Blob> {
-  const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import('jspdf'), import('html2canvas')]);
+  const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import('jspdf'), import('html2canvas')]).catch(() => {
+    throw new Error('Quantivra was just updated. Refresh the page (F5) and try again.');
+  });
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
   const pageW = 210, pageH = 297, margin = 10;
   for (let i = 0; i < elements.length; i++) {

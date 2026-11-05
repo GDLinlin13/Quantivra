@@ -11,7 +11,7 @@ const { Text } = Typography;
  * Customers and suppliers with their people (person in charge, phone, email…).
  * Used by CRM (customers) and Finance (suppliers).
  */
-export function ContactsManager({ companyId, kind, currency, onChanged }: { companyId: number; kind: 'customer' | 'supplier'; currency: string; onChanged?: () => void }) {
+export function ContactsManager({ companyId, kind, currency, onChanged }: { companyId: number; kind: 'customer' | 'supplier' | 'all'; currency: string; onChanged?: () => void }) {
   const [rows, setRows] = useState<Contact[]>([]);
   const [people, setPeople] = useState<ContactPerson[]>([]);
   const [docs, setDocs] = useState<FinDocument[]>([]);
@@ -20,13 +20,13 @@ export function ContactsManager({ companyId, kind, currency, onChanged }: { comp
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<Partial<Contact> | null>(null);
 
-  const word = kind === 'customer' ? 'customer' : 'supplier';
+  const word = kind === 'all' ? 'contact' : kind;
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [c, p, d] = await Promise.all([
         contactService.list(companyId), contactService.peopleOf(companyId),
-        docService.list(companyId, kind === 'customer' ? ['invoice'] : ['bill']),
+        docService.list(companyId, kind === 'customer' ? ['invoice'] : kind === 'supplier' ? ['bill', 'expense'] : ['invoice', 'bill', 'expense']),
       ]);
       setRows(c); setPeople(p); setDocs(d);
     } catch (e: any) {
@@ -36,10 +36,12 @@ export function ContactsManager({ companyId, kind, currency, onChanged }: { comp
   }, [companyId, kind]);
   useEffect(() => { load(); }, [load]);
 
-  const owed = (id: number) => docs.filter(d => d.contact_id === id && !['void', 'draft'].includes(d.status)).reduce((s, d) => s + balanceDue(d), 0);
+  const owedBy = (id: number, types: string[]) => docs.filter(d => d.contact_id === id && types.includes(d.doc_type) && !['void', 'draft'].includes(d.status)).reduce((s, d) => s + balanceDue(d), 0);
+  const owesUs = (id: number) => owedBy(id, ['invoice']);
+  const weOwe = (id: number) => owedBy(id, ['bill', 'expense']);
   const q = search.trim().toLowerCase();
   const list = rows
-    .filter(c => (kind === 'customer' ? c.is_customer : c.is_supplier))
+    .filter(c => (kind === 'customer' ? c.is_customer : kind === 'supplier' ? c.is_supplier : c.is_customer || c.is_supplier))
     .filter(c => showArchived || !c.archived)
     .filter(c => !q || [c.name, c.email, c.phone, ...people.filter(p => p.contact_id === c.id).map(p => p.name)].some(v => (v || '').toLowerCase().includes(q)));
 
@@ -50,7 +52,7 @@ export function ContactsManager({ companyId, kind, currency, onChanged }: { comp
           <Input allowClear prefix={<SearchOutlined />} placeholder={`Search ${word}s or people`} style={{ width: 260 }} value={search} onChange={e => setSearch(e.target.value)} />
           <Space size={6}><Switch size="small" checked={showArchived} onChange={setShowArchived} /><Text style={{ color: 'rgba(240,237,230,0.7)' }}>Show archived</Text></Space>
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ is_customer: kind === 'customer', is_supplier: kind === 'supplier' })}>Add {word}</Button>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ is_customer: kind !== 'supplier', is_supplier: kind === 'supplier' })}>{kind === 'all' ? 'Contact' : `Add ${word}`}</Button>
       </div>
       <Table rowKey="id" size="small" loading={loading} dataSource={list} pagination={{ pageSize: 50, hideOnSinglePage: true }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`No ${word}s yet`} /> }}
@@ -65,12 +67,19 @@ export function ContactsManager({ companyId, kind, currency, onChanged }: { comp
           },
           { title: 'Email', dataIndex: 'email', render: (v: string) => v ? <a href={`mailto:${v}`}>{v}</a> : '—' },
           { title: 'Phone', dataIndex: 'phone', render: (v: string) => v || '—' },
-          {
-            title: kind === 'customer' ? 'Owes us' : 'We owe', key: 'o', align: 'right' as const,
-            render: (_, c) => { const v = owed(c.id); return v > 0 ? <b>{money(v, currency)}</b> : <Text type="secondary">—</Text>; },
-            sorter: (a, b) => owed(a.id) - owed(b.id),
-          },
-          { title: '', key: 't', render: (_, c) => <Space size={4}>{c.is_customer && c.is_supplier && <Tag>{kind === 'customer' ? 'also supplier' : 'also customer'}</Tag>}{c.archived && <Tag>archived</Tag>}</Space> },
+          ...(kind === 'all' ? [{
+            title: 'Type', key: 'type', render: (_: any, c: Contact) => <Space size={4}>{c.is_customer && <Tag color="blue">Customer</Tag>}{c.is_supplier && <Tag color="purple">Supplier</Tag>}{c.archived && <Tag>archived</Tag>}</Space>,
+            filters: [{ value: 'c', text: 'Customers' }, { value: 's', text: 'Suppliers' }], onFilter: (v: any, c: Contact) => (v === 'c' ? c.is_customer : c.is_supplier),
+          }] : []),
+          ...(kind !== 'supplier' ? [{
+            title: 'Owes us', key: 'o', align: 'right' as const, sorter: (a: Contact, b: Contact) => owesUs(a.id) - owesUs(b.id),
+            render: (_: any, c: Contact) => { const v = owesUs(c.id); return v > 0 ? <b>{money(v, currency)}</b> : <Text type="secondary">—</Text>; },
+          }] : []),
+          ...(kind !== 'customer' ? [{
+            title: 'We owe', key: 'w', align: 'right' as const, sorter: (a: Contact, b: Contact) => weOwe(a.id) - weOwe(b.id),
+            render: (_: any, c: Contact) => { const v = weOwe(c.id); return v > 0 ? <b>{money(v, currency)}</b> : <Text type="secondary">—</Text>; },
+          }] : []),
+          ...(kind !== 'all' ? [{ title: '', key: 't', render: (_: any, c: Contact) => <Space size={4}>{c.is_customer && c.is_supplier && <Tag>{kind === 'customer' ? 'also supplier' : 'also customer'}</Tag>}{c.archived && <Tag>archived</Tag>}</Space> }] : []),
           {
             title: '', key: 'a', width: 90, render: (_, c) => (
               <Space>
@@ -158,7 +167,7 @@ function ContactDrawer({ companyId, contact, word, currency, docs, onClose, onSa
 
       {contact.id && (
         <>
-          <Divider titlePlacement="start">{word === 'customer' ? 'Invoices' : 'Bills'}</Divider>
+          <Divider titlePlacement="start">{word === 'customer' ? 'Invoices' : word === 'supplier' ? 'Bills' : 'Invoices and bills'}</Divider>
           {docs.length === 0 ? <Text type="secondary">None yet</Text> : (
             <>
               <Text>Outstanding: <b>{money(outstanding, currency)}</b></Text>

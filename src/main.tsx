@@ -20,4 +20,17 @@ if ('serviceWorker' in navigator) {
   }).catch(() => {});
 }
 
+// After a new version is deployed, a tab that was already open still points at the old
+// code files, which no longer exist; loading one of them fails. Reload once to pick up the
+// new version (guarded so a real outage can't cause a reload loop).
+window.addEventListener('vite:preloadError', (event) => {
+  try {
+    const last = Number(sessionStorage.getItem('qv-reloaded-at') || 0);
+    if (Date.now() - last < 60_000) return;
+    sessionStorage.setItem('qv-reloaded-at', String(Date.now()));
+  } catch { /* storage blocked: still reload */ }
+  event.preventDefault();
+  location.reload();
+});
+
 createRoot(document.getElementById('root')!).render(<App />);
