@@ -25,7 +25,7 @@ export const PAY_ITEM_TYPES: PayItemType[] = [
   { code: 'OVERTIME', label: 'Overtime', kind: 'earning', unit: 'hours', canRecur: false,
     help: 'Enter the hours. The hourly rate is worked out from the basic salary (Singapore MOM formula) and the rate multiplier is 1.5× — change either if you pay differently (e.g. 2× on rest days). The amount can be adjusted too.' },
   { code: 'OVERTIME_DAYS', label: 'Overtime', kind: 'earning', unit: 'days', canRecur: false, variantOf: 'OVERTIME', classifyAs: 'OVERTIME',
-    help: 'Enter the days. The daily rate is worked out from the basic salary (Singapore MOM formula: 12 × salary ÷ (52 × working days a week)) and the rate multiplier is 1.5× — change either if you pay differently (e.g. 2× on rest days). The amount can be adjusted too.' },
+    help: 'Enter the days. The daily rate is the basic salary ÷ the working days in that month (the same as for unpaid leave) and the rate multiplier is 1.5× — change either if you pay differently (e.g. 2× on rest days). The amount can be adjusted too.' },
   { code: 'ALLOWANCE_TRANSPORT', label: 'Transport allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
   { code: 'ALLOWANCE_HOUSING', label: 'Housing allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
   { code: 'ALLOWANCE_MEAL', label: 'Meal allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
@@ -57,14 +57,14 @@ export function hourlyRate(monthlyBasic: number): number {
 export const DEFAULT_OT_MULTIPLIER = 1.5;
 
 /** hours × hourly rate × multiplier; the rate defaults to the MOM hourly rate of the basic salary. */
-/** Daily basic rate, Singapore Employment Act: (12 × monthly basic) ÷ (52 × working days a week). */
-export function dailyRate(monthlyBasic: number, daysPerWeek = 5): number {
-  return daysPerWeek > 0 ? (12 * (Number(monthlyBasic) || 0)) / (52 * daysPerWeek) : 0;
+/** Daily rate: monthly basic ÷ working days in that month (e.g. 4,000 ÷ 22 = 181.82). */
+export function dailyRate(monthlyBasic: number, workingDays: number): number {
+  return workingDays > 0 ? (Number(monthlyBasic) || 0) / workingDays : 0;
 }
 
 /** Overtime counted in days: days × daily rate × multiplier. */
-export function overtimeDaysAmount(monthlyBasic: number, days: number, multiplier: number | null = DEFAULT_OT_MULTIPLIER, rate?: number | null, daysPerWeek = 5): number {
-  const r = rate != null && rate >= 0 ? Number(rate) : dailyRate(monthlyBasic, daysPerWeek);
+export function overtimeDaysAmount(monthlyBasic: number, days: number, multiplier: number | null = DEFAULT_OT_MULTIPLIER, rate?: number | null, workingDays = 22): number {
+  const r = rate != null && rate >= 0 ? Number(rate) : dailyRate(monthlyBasic, workingDays);
   const m = multiplier != null && multiplier >= 0 ? Number(multiplier) : DEFAULT_OT_MULTIPLIER;
   return round2(r * m * (Number(days) || 0));
 }

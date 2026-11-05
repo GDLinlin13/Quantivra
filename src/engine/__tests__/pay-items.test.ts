@@ -41,8 +41,9 @@ describe('overtime and unpaid leave maths', () => {
     expect(toEngineItems([item('OVERTIME', 300, { quantity: 10, multiplier: 1.5 })]).salaryComponents[0].label).toBe('Overtime (10 hrs)');
   });
   it('overtime can be counted in days', () => {
-    expect(dailyRate(4000, 5)).toBeCloseTo(184.615, 2);           // 12 × 4000 ÷ (52 × 5)
-    expect(overtimeDaysAmount(4000, 2, null, null, 5)).toBe(553.85); // 2 days × 184.62 × 1.5
+    expect(dailyRate(4000, 22)).toBeCloseTo(181.818, 2);            // 4000 ÷ 22 working days
+    expect(overtimeDaysAmount(4000, 1, 1, null, 22)).toBe(181.82);
+    expect(overtimeDaysAmount(4000, 2, null, null, 22)).toBe(545.45); // 2 days × 181.82 × 1.5
     expect(overtimeDaysAmount(4000, 1, 2, 200)).toBe(400);
     expect(toEngineItems([item('OVERTIME_DAYS', 400, { quantity: 1, multiplier: 2 })]).salaryComponents[0])
       .toMatchObject({ componentCode: 'OVERTIME_DAYS', label: 'Overtime (1 day @ 2×)', classifyAs: 'OVERTIME', prorate: false });

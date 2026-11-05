@@ -100,13 +100,15 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
       .then(p => { setWorkDays(workingDaysInMonth(year, month, p)); setDaysPerWeek(workDaysPerWeek(p) || 5); })
       .catch(() => setWorkDays(null));
   }, [companyId, employee.id, year, month]);
-  const dayRate = dailyRate(basic, daysPerWeek);
+  // working days this month; if the work week couldn't be read, an average month of that week
+  const monthDays = workDays || Math.round((daysPerWeek * 52) / 12);
+  const dayRate = dailyRate(basic, monthDays);
 
   const autoAmount = (code: string, qty?: number | null, mult?: number | null, rate?: number | null) => {
     const t = PAY_ITEM_BY_CODE[code];
     if (!t?.unit || qty == null) return null;
     if (t.code === 'OVERTIME') return overtimeAmount(basic, qty, mult, rate);
-    if (t.code === 'OVERTIME_DAYS') return overtimeDaysAmount(basic, qty, mult, rate, daysPerWeek);
+    if (t.code === 'OVERTIME_DAYS') return overtimeDaysAmount(basic, qty, mult, rate, monthDays);
     if (t.code === 'UNPAID_LEAVE' && workDays) return unpaidLeaveAmount(basic, qty, workDays);
     return null;
   };
@@ -160,7 +162,7 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
             ? (t.code === 'OVERTIME'
               ? `${r.quantity} hrs × ${money(r.rate ?? hourlyRate(basic), currency)}/hr × ${r.multiplier ?? DEFAULT_OT_MULTIPLIER} = ${money(overtimeAmount(basic, r.quantity, r.multiplier, r.rate), currency)}`
               : t.code === 'OVERTIME_DAYS'
-              ? `${r.quantity} days × ${money(r.rate ?? dayRate, currency)}/day × ${r.multiplier ?? DEFAULT_OT_MULTIPLIER} = ${money(overtimeDaysAmount(basic, r.quantity, r.multiplier, r.rate, daysPerWeek), currency)}`
+              ? `${r.quantity} days × ${money(r.rate ?? dayRate, currency)}/day × ${r.multiplier ?? DEFAULT_OT_MULTIPLIER} = ${money(overtimeDaysAmount(basic, r.quantity, r.multiplier, r.rate, monthDays), currency)}`
               : workDays ? `${money(basic, currency)} × ${r.quantity} ÷ ${workDays} working days = ${money(unpaidLeaveAmount(basic, r.quantity, workDays), currency)}` : null)
             : null;
           return (
@@ -180,7 +182,7 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
                 {t && isOvertime(t.code) && (
                   <>
                     <Tooltip title={t.code === 'OVERTIME_DAYS'
-                      ? `Daily rate. Leave empty to use ${money(dayRate, currency)} (from the basic salary and a ${daysPerWeek}-day work week, MOM formula).`
+                      ? `Daily rate. Leave empty to use ${money(dayRate, currency)} (basic salary ÷ ${monthDays} working days in ${period}).`
                       : `Hourly rate. Leave empty to use ${money(hourlyRate(basic), currency)} (from the basic salary, MOM formula).`}>
                       <InputNumber style={{ width: 160 }} min={0} precision={2} value={r.rate ?? undefined} prefix={currency}
                         suffix={t.code === 'OVERTIME_DAYS' ? '/day' : '/hr'}
@@ -230,7 +232,7 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
         Basic salary {money(basic, currency)} · hourly rate {money(hourlyRate(basic), currency)}
         <Tooltip title="Singapore Employment Act formula: (12 × monthly basic salary) ÷ (52 weeks × 44 hours)."><InfoCircleOutlined style={{ marginLeft: 6 }} /></Tooltip>
         {' '}· daily rate {money(dayRate, currency)}
-        <Tooltip title={`Singapore Employment Act formula: (12 × monthly basic salary) ÷ (52 weeks × ${daysPerWeek} working days a week).`}><InfoCircleOutlined style={{ marginLeft: 6 }} /></Tooltip>
+        <Tooltip title={`Basic salary ÷ ${monthDays} working days in ${period} (from this person's work week). Used for overtime by day and unpaid leave.`}><InfoCircleOutlined style={{ marginLeft: 6 }} /></Tooltip>
         {workDays != null && <> · {workDays} working days in {period}</>}
       </div>
       <Divider titlePlacement="start" style={{ margin: '8px 0 12px' }}>Every month (fixed)</Divider>
