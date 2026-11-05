@@ -7,7 +7,6 @@ import { contactService, docService, accountService, financeSettingsService } fr
 import { DEFAULT_FINANCE_SETTINGS, type FinanceSettings } from '../../../data/finance';
 import { DocList, type FinanceData } from './finance/DocList';
 import { hrService } from '../../../services/hr';
-import { ContactsManager } from './finance/ContactsManager';
 import { PaymentsList } from './finance/PaymentsList';
 import { FinanceSettingsTab } from './finance/FinanceSettingsTab';
 import { Accounting } from './finance/Accounting';
@@ -21,7 +20,7 @@ export function CompanyFinancePage() {
   const [error, setError] = useState<string | null>(null);
   const remembered = (k: string, dflt: string) => { try { return localStorage.getItem(k) || dflt; } catch { return dflt; } };
   const [area, setArea] = useState(() => remembered('qv-finance-area', 'sales'));
-  const [tab, setTab] = useState<Record<string, string>>(() => ({ sales: remembered('qv-finance-sales', 'invoices'), purchases: remembered('qv-finance-purchases', 'bills') }));
+  const [tab, setTab] = useState<Record<string, string>>(() => ({ sales: remembered('qv-finance-sales', 'invoices'), purchases: ((v: string) => (v === 'suppliers' ? 'bills' : v))(remembered('qv-finance-purchases', 'bills')) }));
 
   const load = useCallback(async () => {
     if (!companyId) return;
@@ -66,7 +65,6 @@ export function CompanyFinancePage() {
           { key: 'bills', label: 'Bills', children: <DocList data={d} docType="bill" /> },
           { key: 'expenses', label: 'Expenses', children: <DocList data={d} docType="expense" /> },
           { key: 'paid', label: 'Payments made', children: <PaymentsList data={d} direction="out" /> },
-          { key: 'suppliers', label: 'Suppliers', children: <ContactsManager companyId={data.companyId} kind="supplier" currency={data.currency} onChanged={load} /> },
         ]} />
       )}
       {area === 'bank' && <Bank data={d} />}
