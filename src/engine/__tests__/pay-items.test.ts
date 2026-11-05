@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { calculatePayroll } from '../payroll';
 import sgPack from '../../data/country-packs/SG';
 import type { PayrollPeriod, EmployeePayrollInput } from '../types';
-import { toEngineItems, overtimeAmount, unpaidLeaveAmount, workingDaysInMonth, hourlyRate, type PayItemRow } from '../../data/payItems';
+import { toEngineItems, overtimeAmount, overtimeDaysAmount, dailyRate, unpaidLeaveAmount, workingDaysInMonth, hourlyRate, type PayItemRow } from '../../data/payItems';
 import { DEFAULT_WORK_PATTERN } from '../../utils/workdays';
 
 const aug2026: PayrollPeriod = {
@@ -39,6 +39,13 @@ describe('overtime and unpaid leave maths', () => {
     expect(overtimeAmount(4000, 0.5, 1, 30)).toBe(15);          // own rate × 1
     expect(toEngineItems([item('OVERTIME', 419.58, { quantity: 10, multiplier: 2 })]).salaryComponents[0].label).toBe('Overtime (10 hrs @ 2×)');
     expect(toEngineItems([item('OVERTIME', 300, { quantity: 10, multiplier: 1.5 })]).salaryComponents[0].label).toBe('Overtime (10 hrs)');
+  });
+  it('overtime can be counted in days', () => {
+    expect(dailyRate(4000, 5)).toBeCloseTo(184.615, 2);           // 12 × 4000 ÷ (52 × 5)
+    expect(overtimeDaysAmount(4000, 2, null, null, 5)).toBe(553.85); // 2 days × 184.62 × 1.5
+    expect(overtimeDaysAmount(4000, 1, 2, 200)).toBe(400);
+    expect(toEngineItems([item('OVERTIME_DAYS', 400, { quantity: 1, multiplier: 2 })]).salaryComponents[0])
+      .toMatchObject({ componentCode: 'OVERTIME_DAYS', label: 'Overtime (1 day @ 2×)', classifyAs: 'OVERTIME', prorate: false });
   });
 });
 

@@ -17,11 +17,15 @@ export interface PayItemType {
   /** Unpaid leave: reduces pay (and so CPF) rather than being taken off afterwards. */
   reducesPay?: boolean;
   canRecur: boolean;               // sensible as a fixed monthly item
+  /** Same item entered another way (overtime by day); not listed separately in the picker. */
+  variantOf?: string;
 }
 
 export const PAY_ITEM_TYPES: PayItemType[] = [
   { code: 'OVERTIME', label: 'Overtime', kind: 'earning', unit: 'hours', canRecur: false,
     help: 'Enter the hours. The hourly rate is worked out from the basic salary (Singapore MOM formula) and the rate multiplier is 1.5× — change either if you pay differently (e.g. 2× on rest days). The amount can be adjusted too.' },
+  { code: 'OVERTIME_DAYS', label: 'Overtime', kind: 'earning', unit: 'days', canRecur: false, variantOf: 'OVERTIME', classifyAs: 'OVERTIME',
+    help: 'Enter the days. The daily rate is worked out from the basic salary (Singapore MOM formula: 12 × salary ÷ (52 × working days a week)) and the rate multiplier is 1.5× — change either if you pay differently (e.g. 2× on rest days). The amount can be adjusted too.' },
   { code: 'ALLOWANCE_TRANSPORT', label: 'Transport allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
   { code: 'ALLOWANCE_HOUSING', label: 'Housing allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
   { code: 'ALLOWANCE_MEAL', label: 'Meal allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
@@ -53,6 +57,20 @@ export function hourlyRate(monthlyBasic: number): number {
 export const DEFAULT_OT_MULTIPLIER = 1.5;
 
 /** hours × hourly rate × multiplier; the rate defaults to the MOM hourly rate of the basic salary. */
+/** Daily basic rate, Singapore Employment Act: (12 × monthly basic) ÷ (52 × working days a week). */
+export function dailyRate(monthlyBasic: number, daysPerWeek = 5): number {
+  return daysPerWeek > 0 ? (12 * (Number(monthlyBasic) || 0)) / (52 * daysPerWeek) : 0;
+}
+
+/** Overtime counted in days: days × daily rate × multiplier. */
+export function overtimeDaysAmount(monthlyBasic: number, days: number, multiplier: number | null = DEFAULT_OT_MULTIPLIER, rate?: number | null, daysPerWeek = 5): number {
+  const r = rate != null && rate >= 0 ? Number(rate) : dailyRate(monthlyBasic, daysPerWeek);
+  const m = multiplier != null && multiplier >= 0 ? Number(multiplier) : DEFAULT_OT_MULTIPLIER;
+  return round2(r * m * (Number(days) || 0));
+}
+
+export const isOvertime = (code: string) => code === 'OVERTIME' || code === 'OVERTIME_DAYS';
+
 export function overtimeAmount(monthlyBasic: number, hours: number, multiplier: number | null = DEFAULT_OT_MULTIPLIER, rate?: number | null): number {
   const r = rate != null && rate >= 0 ? Number(rate) : hourlyRate(monthlyBasic);
   const m = multiplier != null && multiplier >= 0 ? Number(multiplier) : DEFAULT_OT_MULTIPLIER;
@@ -81,7 +99,7 @@ export function payItemLabel(item: { item_code: string; label?: string | null; q
   const t = PAY_ITEM_BY_CODE[item.item_code];
   let s = item.label || t?.label || item.item_code;
   const m = item.multiplier != null && Number(item.multiplier) !== DEFAULT_OT_MULTIPLIER ? ` @ ${Number(item.multiplier)}×` : '';
-  if (item.quantity != null && t?.unit) s += ` (${Number(item.quantity)} ${t.unit === 'hours' ? 'hrs' : Number(item.quantity) === 1 ? 'day' : 'days'}${t.unit === 'hours' ? m : ''})`;
+  if (item.quantity != null && t?.unit) s += ` (${Number(item.quantity)} ${t.unit === 'hours' ? 'hrs' : Number(item.quantity) === 1 ? 'day' : 'days'}${isOvertime(item.item_code) ? m : ''})`;
   if (item.note && (item.item_code.endsWith('_OTHER') || item.item_code === 'REIMBURSEMENT')) s += ` – ${item.note}`;
   return s;
 }

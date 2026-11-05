@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Table, Button, Drawer, Select, InputNumber, Input, Space, Tag, Tooltip, message, Popconfirm, Empty, Typography, Divider } from 'antd';
+import { Card, Table, Button, Drawer, Select, InputNumber, Input, Space, Tag, Tooltip, message, Popconfirm, Empty, Typography, Divider, Segmented } from 'antd';
 import { EditOutlined, PlusOutlined, DeleteOutlined, InfoCircleOutlined, SaveOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { hrService, calendarService, type Employee } from '../../../../services/hr';
+import { workDaysPerWeek } from '../../../../utils/workdays';
 import { payItemService } from '../../../../services/payroll';
 import {
-  PAY_ITEM_TYPES, PAY_ITEM_BY_CODE, hourlyRate, DEFAULT_OT_MULTIPLIER, overtimeAmount, unpaidLeaveAmount, workingDaysInMonth, payItemLabel, type PayItemRow,
+  PAY_ITEM_TYPES, PAY_ITEM_BY_CODE, hourlyRate, DEFAULT_OT_MULTIPLIER, dailyRate, overtimeDaysAmount, isOvertime, overtimeAmount, unpaidLeaveAmount, workingDaysInMonth, payItemLabel, type PayItemRow,
 } from '../../../../data/payItems';
 
 const { Text } = Typography;
@@ -93,16 +94,19 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
   const basic = Number(employee.base_salary) || 0;
   const period = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).format('MMMM YYYY');
 
+  const [daysPerWeek, setDaysPerWeek] = useState(5);
   useEffect(() => {
     calendarService.effectivePattern(companyId, employee.id)
-      .then(p => setWorkDays(workingDaysInMonth(year, month, p)))
+      .then(p => { setWorkDays(workingDaysInMonth(year, month, p)); setDaysPerWeek(workDaysPerWeek(p) || 5); })
       .catch(() => setWorkDays(null));
   }, [companyId, employee.id, year, month]);
+  const dayRate = dailyRate(basic, daysPerWeek);
 
   const autoAmount = (code: string, qty?: number | null, mult?: number | null, rate?: number | null) => {
     const t = PAY_ITEM_BY_CODE[code];
     if (!t?.unit || qty == null) return null;
     if (t.code === 'OVERTIME') return overtimeAmount(basic, qty, mult, rate);
+    if (t.code === 'OVERTIME_DAYS') return overtimeDaysAmount(basic, qty, mult, rate, daysPerWeek);
     if (t.code === 'UNPAID_LEAVE' && workDays) return unpaidLeaveAmount(basic, qty, workDays);
     return null;
   };
@@ -142,7 +146,7 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
 
   const typeOptions = (recurring: boolean) => ['earning', 'deduction'].map(kind => ({
     label: kind === 'earning' ? 'Adds to pay' : 'Takes off pay',
-    options: PAY_ITEM_TYPES.filter(t => t.kind === kind && (!recurring || t.canRecur)).map(t => ({ value: t.code, label: t.label })),
+    options: PAY_ITEM_TYPES.filter(t => t.kind === kind && !t.variantOf && (!recurring || t.canRecur)).map(t => ({ value: t.code, label: t.label })),
   }));
 
   const section = (recurring: boolean) => {
@@ -155,22 +159,33 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
           const calc = t?.unit && r.quantity != null
             ? (t.code === 'OVERTIME'
               ? `${r.quantity} hrs × ${money(r.rate ?? hourlyRate(basic), currency)}/hr × ${r.multiplier ?? DEFAULT_OT_MULTIPLIER} = ${money(overtimeAmount(basic, r.quantity, r.multiplier, r.rate), currency)}`
+              : t.code === 'OVERTIME_DAYS'
+              ? `${r.quantity} days × ${money(r.rate ?? dayRate, currency)}/day × ${r.multiplier ?? DEFAULT_OT_MULTIPLIER} = ${money(overtimeDaysAmount(basic, r.quantity, r.multiplier, r.rate, daysPerWeek), currency)}`
               : workDays ? `${money(basic, currency)} × ${r.quantity} ÷ ${workDays} working days = ${money(unpaidLeaveAmount(basic, r.quantity, workDays), currency)}` : null)
             : null;
           return (
             <div key={r.key} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: 10, marginBottom: 8, background: 'rgba(255,255,255,0.02)' }}>
               <Space wrap align="start" style={{ width: '100%' }}>
-                <Select style={{ width: 210 }} showSearch optionFilterProp="label" value={r.item_code} options={typeOptions(recurring)} onChange={v => update(r.key, { item_code: v })} />
+                <Select style={{ width: 210 }} showSearch optionFilterProp="label" value={t?.variantOf || r.item_code} options={typeOptions(recurring)} onChange={v => update(r.key, { item_code: v, rate: null })} />
+                {t && isOvertime(t.code) && (
+                  <Segmented value={t.code === 'OVERTIME_DAYS' ? 'days' : 'hours'}
+                    onChange={v => update(r.key, { item_code: v === 'days' ? 'OVERTIME_DAYS' : 'OVERTIME', rate: null })}
+                    options={[{ value: 'hours', label: 'By hour' }, { value: 'days', label: 'By day' }]} />
+                )}
                 {t?.unit && (
                   <InputNumber style={{ width: 110 }} min={0} step={t.unit === 'hours' ? 0.5 : 0.5} value={r.quantity ?? undefined}
                     suffix={t.unit === 'hours' ? 'hrs' : 'days'} placeholder={t.unit}
                     onChange={v => update(r.key, { quantity: v == null ? null : Number(v) })} />
                 )}
-                {t?.code === 'OVERTIME' && (
+                {t && isOvertime(t.code) && (
                   <>
-                    <Tooltip title={`Hourly rate. Leave empty to use ${money(hourlyRate(basic), currency)} (from the basic salary, MOM formula).`}>
-                      <InputNumber style={{ width: 150 }} min={0} precision={2} value={r.rate ?? undefined} prefix={currency} suffix="/hr"
-                        placeholder={hourlyRate(basic).toFixed(2)} onChange={v => update(r.key, { rate: v == null ? null : Number(v) })} />
+                    <Tooltip title={t.code === 'OVERTIME_DAYS'
+                      ? `Daily rate. Leave empty to use ${money(dayRate, currency)} (from the basic salary and a ${daysPerWeek}-day work week, MOM formula).`
+                      : `Hourly rate. Leave empty to use ${money(hourlyRate(basic), currency)} (from the basic salary, MOM formula).`}>
+                      <InputNumber style={{ width: 160 }} min={0} precision={2} value={r.rate ?? undefined} prefix={currency}
+                        suffix={t.code === 'OVERTIME_DAYS' ? '/day' : '/hr'}
+                        placeholder={(t.code === 'OVERTIME_DAYS' ? dayRate : hourlyRate(basic)).toFixed(2)}
+                        onChange={v => update(r.key, { rate: v == null ? null : Number(v) })} />
                     </Tooltip>
                     <Tooltip title="Rate multiplier: 1.5× normal overtime, 2× rest day / public holiday. Leave empty for 1.5×.">
                       <Select style={{ width: 92 }} value={r.multiplier ?? DEFAULT_OT_MULTIPLIER}
@@ -214,6 +229,8 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
       <div style={{ marginBottom: 12, color: 'rgba(240,237,230,0.6)', fontSize: 13 }}>
         Basic salary {money(basic, currency)} · hourly rate {money(hourlyRate(basic), currency)}
         <Tooltip title="Singapore Employment Act formula: (12 × monthly basic salary) ÷ (52 weeks × 44 hours)."><InfoCircleOutlined style={{ marginLeft: 6 }} /></Tooltip>
+        {' '}· daily rate {money(dayRate, currency)}
+        <Tooltip title={`Singapore Employment Act formula: (12 × monthly basic salary) ÷ (52 weeks × ${daysPerWeek} working days a week).`}><InfoCircleOutlined style={{ marginLeft: 6 }} /></Tooltip>
         {workDays != null && <> · {workDays} working days in {period}</>}
       </div>
       <Divider titlePlacement="start" style={{ margin: '8px 0 12px' }}>Every month (fixed)</Divider>
