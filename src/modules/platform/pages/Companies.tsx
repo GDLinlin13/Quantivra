@@ -243,11 +243,15 @@ export function CompaniesPage() {
     }
   };
 
-  const handleOpenCompany = () => {
-    if (provisionResult) {
-      window.open(`/login?company=${provisionResult.company_code}`, '_blank');
-    }
-  };
+  // Ready to paste into a chat message or email for the new company's owner.
+  const loginDetailsText = () => provisionResult ? [
+    `Your Quantivra login for ${provisionResult.company?.name ?? ''}`.trim(),
+    `Login page: ${window.location.origin}/login`,
+    `Company code: ${provisionResult.company_code}`,
+    `Username: ${provisionResult.owner?.username ?? ''}`,
+    `Temporary password: ${form.getFieldValue('owner_password') ?? ''}`,
+    'Please change your password after signing in (Settings → Change my password).',
+  ].join('\n') : '';
 
   const handleProvisionDone = () => {
     setModalOpen(false);
@@ -260,7 +264,7 @@ export function CompaniesPage() {
   };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => message.success('Copied'));
+    navigator.clipboard.writeText(text).then(() => message.success('Copied — paste it into a message'), () => message.error('Could not copy; select the text and copy it instead'));
   };
 
   const columns = [
@@ -551,17 +555,16 @@ export function CompaniesPage() {
                 icon={<CheckCircleOutlined style={{ color: '#52c41a', fontSize: 48 }} />}
               />
               <Card title={<Text style={{ color: '#f0ede6' }}>Login Credentials</Text>}
+                extra={<Button size="small" icon={<CopyOutlined />} onClick={() => copyToClipboard(loginDetailsText())}>Copy login details</Button>}
                 style={{ background: '#0b0f12', borderColor: 'rgba(255,255,255,0.08)', marginBottom: 16 }}>
                 <Row gutter={[16, 12]}>
                   <Col span={12}>
-                    <Text style={{ color: 'rgba(240,237,230,0.5)', display: 'block', fontSize: 12 }}>Portal URL</Text>
-                    <Text style={{ color: '#f0ede6' }}>{window.location.origin}/login?company={provisionResult.company_code}</Text>
-                    <Button type="link" size="small" icon={<CopyOutlined />} onClick={() => copyToClipboard(`${window.location.origin}/login?company=${provisionResult.company_code}`)} />
+                    <Text style={{ color: 'rgba(240,237,230,0.5)', display: 'block', fontSize: 12 }}>Login page</Text>
+                    <Text style={{ color: '#f0ede6' }}>{window.location.origin}/login</Text>
                   </Col>
                   <Col span={12}>
                     <Text style={{ color: 'rgba(240,237,230,0.5)', display: 'block', fontSize: 12 }}>Company Code</Text>
                     <Text style={{ color: '#f0ede6' }}>{provisionResult.company_code}</Text>
-                    <Button type="link" size="small" icon={<CopyOutlined />} onClick={() => copyToClipboard(provisionResult.company_code)} />
                   </Col>
                   <Col span={12}>
                     <Text style={{ color: 'rgba(240,237,230,0.5)', display: 'block', fontSize: 12 }}>Owner Username</Text>
@@ -606,12 +609,6 @@ export function CompaniesPage() {
               <Button type="primary" loading={submitting} onClick={handleCreateCompany}
                 style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
                 Create Company
-              </Button>
-            )}
-            {currentStep === 5 && (
-              <Button type="primary" icon={<BankOutlined />} onClick={handleOpenCompany}
-                style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
-                Open Company Portal
               </Button>
             )}
           </div>
