@@ -67,21 +67,38 @@ function FieldGuide({ kind, onInsert, rowRepeat, sample }: {
         </div>
         <div>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Lists — several lines per {kind}</div>
-          <p style={{ margin: '0 0 8px' }}>
-            Some things have a different number of lines for each person — one employee has only Basic Salary, another also has Overtime and a
-            Bonus. You can't know in advance how many rows to leave, so you design <b>one</b> row with a list's fields in it, e.g.
-            <code style={code}> {'{{earnings.name}}'}</code> and <code style={code}>{'{{earnings.amount}}'}</code>. That row turns yellow ↻ and, when
-            printed, is copied once per item.
-          </p>
-          <p style={{ margin: '0 0 8px' }}>
-            <b>Side by side:</b> one repeating row can hold two lists — earnings on the left, deductions on the right. It is printed as many times as
-            the longer list needs; where one list has run out, its cells are left blank.
-          </p>
-          <p style={{ margin: '0 0 8px' }}>
-            <b>Only want certain items?</b> Don't use a list — use a single field instead. For example, for a CPF section put
-            <code style={code}> {'{{cpf_employer}}'}</code>, <code style={code}>{'{{cpf_employee}}'}</code> and <code style={code}>{'{{cpf_total}}'}</code> in
-            ordinary (non-repeating) rows. SDL is a levy the company pays, not CPF; it has its own <code style={code}>{'{{sdl}}'}</code> field.
-          </p>
+          {kind === 'payslip' ? (
+            <>
+              <p style={{ margin: '0 0 8px' }}>
+                Some things have a different number of lines for each person — one employee has only Basic Salary, another also has Overtime and a
+                Bonus. You can't know in advance how many rows to leave, so you design <b>one</b> row with a list's fields in it, e.g.
+                <code style={code}> {'{{earnings.name}}'}</code> and <code style={code}>{'{{earnings.amount}}'}</code>. That row turns yellow ↻ and, when
+                printed, is copied once per item.
+              </p>
+              <p style={{ margin: '0 0 8px' }}>
+                <b>Side by side:</b> one repeating row can hold two lists — earnings on the left, deductions on the right. It is printed as many times as
+                the longer list needs; where one list has run out, its cells are left blank.
+              </p>
+              <p style={{ margin: '0 0 8px' }}>
+                <b>Only want certain items?</b> Don't use a list — use a single field instead. For example, for a CPF section put
+                <code style={code}> {'{{cpf_employer}}'}</code>, <code style={code}>{'{{cpf_employee}}'}</code> and <code style={code}>{'{{cpf_total}}'}</code> in
+                ordinary (non-repeating) rows. SDL is a levy the company pays, not CPF; it has its own <code style={code}>{'{{sdl}}'}</code> field.
+              </p>
+            </>
+          ) : (
+            <>
+            <p style={{ margin: '0 0 8px' }}>
+              Each invoice has a different number of lines. You can't know in advance how many rows to leave, so you design <b>one</b> row with the
+              line fields in it, e.g. <code style={code}>{'{{lines.description}}'}</code> and <code style={code}>{'{{lines.amount}}'}</code>. That row turns
+              yellow ↻ and, when printed, is copied once per invoice line.
+            </p>
+            <p style={{ margin: '0 0 8px' }}>
+              <b>Discounts:</b> put <code style={code}>{'{{discounts.name}}'}</code> and <code style={code}>{'{{discounts.amount}}'}</code> in a row below
+              the subtotal — it is printed once per discount, and disappears when there is none. Or show one figure with
+              <code style={code}> {'{{total_discount}}'}</code>; a discount on a single line is <code style={code}>{'{{lines.discount}}'}</code>.
+            </p>
+            </>
+          )}
           {lists.map(l => (
             <div key={l.name} style={{ marginBottom: 8 }}>
               <b>{l.label}</b> <span style={{ color: 'rgba(240,237,230,0.5)' }}>— items look like: {LIST_EXAMPLES[l.name]}</span>
