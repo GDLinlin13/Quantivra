@@ -28,7 +28,7 @@ export function Accounting({ data }: { data: FinanceData }) {
   if (!input) return <Spin />;
   return (
     <Tabs activeKey={tab} onChange={setTab} items={[
-      { key: 'reports', label: 'Reports', children: <Reports data={data} input={input} entries={entries} /> },
+      { key: 'reports', label: 'Reports', children: <Reports data={data} input={input} entries={entries} reload={load} /> },
       { key: 'accounts', label: 'Chart of accounts', children: <ChartOfAccounts data={data} accounts={input.accounts} entries={entries} reload={load} /> },
       { key: 'journals', label: 'Journal entries', children: <Journals data={data} accounts={input.accounts} journals={input.journals} reload={load} /> },
     ]} />
@@ -82,7 +82,8 @@ function Sheet({ id, title, subtitle, company, children }: { id: string; title: 
 
 // ---- reports ---------------------------------------------------------------------------------
 
-function Reports({ data, input, entries }: { data: FinanceData; input: Loaded; entries: LedgerEntry[] }) {
+function Reports({ data, input, entries, reload }: { data: FinanceData; input: Loaded; entries: LedgerEntry[]; reload: () => void }) {
+  const [paying, setPaying] = useState<{ account: Account; amount: number } | null>(null);
   const [report, setReport] = useState('pl');
   const [range, setRange] = useState<[Dayjs, Dayjs]>(PRESETS['This year']());
   const cur = data.currency;
@@ -155,8 +156,14 @@ function Reports({ data, input, entries }: { data: FinanceData; input: Loaded; e
     const a = aged(data.docs, report === 'ar' ? 'receivable' : 'payable', to);
     const cols = ['current', 'd1_30', 'd31_60', 'd61_90', 'd90'] as const;
     const heads = ['Not yet due', '1–30 days', '31–60 days', '61–90 days', 'Over 90 days'];
+    // Besides suppliers, the company also owes CPF, GST, salaries and staff claims.
+    const other = report === 'ap'
+      ? balances(input.accounts, entries, undefined, to).filter(b => b.account.type === 'liability' && b.account.subtype !== 'payable' && Math.abs(b.balance) >= 0.005)
+      : [];
     body = (
-      <Sheet id={`rep-${report}`} title={report === 'ar' ? 'Customers owe us (aged)' : 'We owe suppliers (aged)'} subtitle={asAt} company={company}>
+      <>
+      <Sheet id={`rep-${report}`} title={report === 'ar' ? 'Customers owe us (aged)' : 'We owe'} subtitle={asAt} company={company}>
+        {report === 'ap' && <div style={{ fontWeight: 700, margin: '4px 0' }}>Suppliers and expenses</div>}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th style={th}>{report === 'ar' ? 'Customer' : 'Supplier'}</th>{heads.map(h => <th key={h} style={{ ...th, textAlign: 'right' }}>{h}</th>)}<th style={{ ...th, textAlign: 'right' }}>Total</th></tr></thead>
           <tbody>
@@ -166,7 +173,24 @@ function Reports({ data, input, entries }: { data: FinanceData; input: Loaded; e
               <td style={{ ...num, fontWeight: 700 }}>{M(cols.reduce((s, c) => s + a.totals[c], 0))}</td></tr>
           </tbody>
         </table>
+        {report === 'ap' && (
+          <>
+            <div style={{ fontWeight: 700, margin: '16px 0 4px' }}>CPF, GST, salaries and other amounts owed</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>
+              {other.map(b => <tr key={b.account.id}><td style={td}>{b.account.code} {b.account.name}</td><td style={num}>{M(b.balance)}</td></tr>)}
+              {other.length === 0 && <tr><td style={{ ...td, color: '#999' }}>Nothing owed</td><td style={num} /></tr>}
+            </tbody></table>
+          </>
+        )}
       </Sheet>
+      {other.filter(b => b.balance > 0).length > 0 && (
+        <Space wrap style={{ marginTop: 8 }}>
+          {other.filter(b => b.balance > 0).map(b => (
+            <Button key={b.account.id} onClick={() => setPaying({ account: b.account, amount: b.balance })}>Record payment: {b.account.name}</Button>
+          ))}
+        </Space>
+      )}
+      </>
     );
   } else if (report === 'tb') {
     const b = balances(input.accounts, entries, undefined, to).filter(x => x.debit || x.credit);
@@ -196,7 +220,14 @@ function Reports({ data, input, entries }: { data: FinanceData; input: Loaded; e
         <PeriodPicker value={range} onChange={setRange} single={pointInTime} />
       </Space>
       {body}
-      {input.payroll.length === 0 && <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>Payroll isn't included: there are no finalised payroll runs, or you don't have pay access.</Text>}
+      {paying && <PayLiability data={data} accounts={input.accounts} account={paying.account} amount={paying.amount}
+        onClose={() => setPaying(null)} onDone={() => { setPaying(null); reload(); }} />}
+      {input.payroll.some(r => r.status === 'draft') && (
+        <Alert type="warning" showIcon style={{ marginTop: 12 }}
+          title={`Payroll still in draft isn't in the books: ${input.payroll.filter(r => r.status === 'draft').map(r => dayjs(`${r.period_year}-${String(r.period_month).padStart(2, '0')}-01`).format('MMM YYYY')).join(', ')}.`}
+          description="Open HR → Payroll, view the run and click “Finalise Run”. Wages, employer CPF and the CPF owed (account 2210) then appear here." />
+      )}
+      {input.payroll.length === 0 && <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>Payroll isn't included: there are no payroll runs, or you don't have pay access.</Text>}
     </div>
   );
 }
@@ -388,6 +419,41 @@ function JournalModal({ data, accounts, journal, onClose, onSaved }: { data: Fin
         Debits {money(dr, data.currency)} · Credits {money(cr, data.currency)}
         {Math.round(dr * 100) !== Math.round(cr * 100) && <Text type="danger"> — they must be equal (difference {money(Math.abs(dr - cr), data.currency)})</Text>}
       </div>
+    </Modal>
+  );
+}
+
+/** Pay something the company owes that isn't a supplier bill (CPF, GST, salaries…): a journal from the bank. */
+function PayLiability({ data, accounts, account, amount, onClose, onDone }: {
+  data: FinanceData; accounts: Account[]; account: Account; amount: number; onClose: () => void; onDone: () => void;
+}) {
+  const banks = accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash'));
+  const [form] = Form.useForm();
+  const [saving, setSaving] = useState(false);
+  const submit = async () => {
+    const v = await form.validateFields();
+    setSaving(true);
+    try {
+      await journalService.save(data.companyId, { journal_date: v.date.format('YYYY-MM-DD'), memo: v.memo || `Paid ${account.name}` }, [
+        { account_id: account.id, debit: v.amount, credit: 0, description: v.memo },
+        { account_id: v.bank, debit: 0, credit: v.amount, description: v.memo },
+      ]);
+      message.success('Payment recorded'); onDone();
+    } catch (e: any) { message.error(e.message); }
+    setSaving(false);
+  };
+  return (
+    <Modal open onCancel={onClose} onOk={submit} confirmLoading={saving} okText="Record payment" title={`Pay ${account.name}`}>
+      <Text type="secondary">Owed: {money(amount, data.currency)}. If you match bank statement lines in Bank instead, don't record it here as well.</Text>
+      <Form form={form} layout="vertical" style={{ marginTop: 12 }}
+        initialValues={{ amount, date: dayjs(), bank: banks.find(b => b.subtype === 'bank')?.id, memo: `Paid ${account.name}` }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <Form.Item name="amount" label="Amount" rules={[{ required: true }]}><InputNumber min={0.01} precision={2} style={{ width: '100%' }} prefix={data.currency} /></Form.Item>
+          <Form.Item name="date" label="Paid on" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} allowClear={false} /></Form.Item>
+          <Form.Item name="bank" label="From" rules={[{ required: true }]}><Select options={banks.map(b => ({ value: b.id, label: b.name }))} /></Form.Item>
+          <Form.Item name="memo" label="Details"><Input /></Form.Item>
+        </div>
+      </Form>
     </Modal>
   );
 }
