@@ -5,6 +5,9 @@ import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { brandingService, fileToLogoDataUri, DEFAULT_TEMPLATES, type Branding } from '../../../services/branding';
 import { DocumentShell } from '../../../components/DocumentShell';
+import { GridTemplateEditor } from '../../../components/GridTemplateEditor';
+import { STARTER_LAYOUTS, type DocKind } from '../../../data/documentLayouts';
+import type { GridTemplate } from '../../../utils/gridTemplate';
 
 const { Title, Text } = Typography;
 
@@ -54,6 +57,38 @@ export function CompanyProfilePage() {
       message.success('Logo ready — click Save to keep it');
     } catch (e: any) { message.error(e.message); }
     return false;
+  };
+
+  // Saves only the templates, so the layout tabs don't depend on the letterhead form.
+  const saveTemplates = async () => {
+    setSaving(true);
+    try {
+      await brandingService.save(companyId!, { templates: tpl });
+      message.success('Layout saved');
+    } catch (e: any) { message.error(e.message); }
+    setSaving(false);
+  };
+
+  const layoutTab = (kind: DocKind, what: string, note?: string) => {
+    const layout: GridTemplate = tpl[kind].layout || STARTER_LAYOUTS[kind]();
+    const setLayout = (next: GridTemplate) => setTpl(p => ({ ...p, [kind]: { ...p[kind], layout: next } }));
+    return (
+      <div>
+        <Card size="small" style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <Space>
+              <Switch checked={layout.enabled} onChange={v => setLayout({ ...layout, enabled: v })} />
+              <Text style={{ color: '#f0ede6' }}>
+                {layout.enabled ? `${what} use this layout` : `Off — ${what.toLowerCase()} use the standard design`}
+              </Text>
+            </Space>
+            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={saveTemplates}>Save layout</Button>
+          </div>
+          {note && <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12, display: 'block', marginTop: 8 }}>{note}</Text>}
+        </Card>
+        <GridTemplateEditor kind={kind} value={layout} onChange={setLayout} company={company} branding={previewBranding} />
+      </div>
+    );
   };
 
   const setTplField = (doc: keyof typeof tpl, key: string, val: any) =>
@@ -172,6 +207,11 @@ export function CompanyProfilePage() {
                 <Divider />
               </div>
             ),
+          },
+          { key: 'payslip-layout', label: 'Payslip layout', children: layoutTab('payslip', 'Payslips') },
+          {
+            key: 'invoice-layout', label: 'Invoice layout',
+            children: layoutTab('invoice', 'Invoices', 'The Invoices screen isn’t built yet. You can design the layout now and it will be used once invoicing is added.'),
           },
         ]}
       />

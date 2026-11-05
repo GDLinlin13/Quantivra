@@ -1,4 +1,6 @@
 import { supabase } from '../utils/supabase';
+import { normalizeTemplate, type GridTemplate } from '../utils/gridTemplate';
+import { STARTER_LAYOUTS } from '../data/documentLayouts';
 
 export interface PayslipTemplate {
   showLogo: boolean;
@@ -6,6 +8,8 @@ export interface PayslipTemplate {
   showEmployeeId: boolean;
   showBankAccount: boolean;
   footerNote: string;
+  /** Spreadsheet-style layout; used instead of the standard payslip when enabled. */
+  layout?: GridTemplate;
 }
 export interface InvoiceTemplate {
   showLogo: boolean;
@@ -13,6 +17,7 @@ export interface InvoiceTemplate {
   paymentTermsDays: number;
   bankDetails: string;
   footerNote: string;
+  layout?: GridTemplate;
 }
 export interface DocumentTemplate {
   showLogo: boolean;
@@ -59,8 +64,8 @@ function withDefaults(row: any, companyId: number): Branding {
     accent_color: row?.accent_color ?? '#1677ff',
     footer_note: row?.footer_note ?? null,
     templates: {
-      payslip: { ...DEFAULT_TEMPLATES.payslip, ...(t.payslip || {}) },
-      invoice: { ...DEFAULT_TEMPLATES.invoice, ...(t.invoice || {}) },
+      payslip: { ...DEFAULT_TEMPLATES.payslip, ...(t.payslip || {}), layout: normalizeTemplate(t.payslip?.layout, STARTER_LAYOUTS.payslip()) },
+      invoice: { ...DEFAULT_TEMPLATES.invoice, ...(t.invoice || {}), layout: normalizeTemplate(t.invoice?.layout, STARTER_LAYOUTS.invoice()) },
       document: { ...DEFAULT_TEMPLATES.document, ...(t.document || {}) },
     },
   };
