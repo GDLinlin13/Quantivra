@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
-import { Card, Descriptions, Typography, Spin, Tabs, Form, Input, InputNumber, Button, Upload, message, Switch, Space, ColorPicker, Segmented, Alert, Tag, Tooltip } from 'antd';
+import { Card, Descriptions, Typography, Spin, Tabs, Form, Input, InputNumber, Button, Upload, message, Switch, Space, ColorPicker, Segmented, Alert, Tag, Tooltip, Select } from 'antd';
 import { UploadOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { brandingService, fileToLogoDataUri, DEFAULT_TEMPLATES, type Branding } from '../../../services/branding';
 import { DocumentShell } from '../../../components/DocumentShell';
 import { GridTemplateEditor } from '../../../components/GridTemplateEditor';
-import { STARTER_LAYOUTS, money, type DocKind } from '../../../data/documentLayouts';
+import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, type DocKind } from '../../../data/documentLayouts';
 import type { GridTemplate } from '../../../utils/gridTemplate';
 import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME } from '../../../utils/payslipFiles';
 
@@ -178,12 +178,12 @@ export function CompanyProfilePage() {
             {tpl.payslip.showNationalId && row('NRIC / ID no.', tpl.payslip.nationalIdFull ? 'S1234567A' : '•••••567A', { muted: true })}
             {tpl.payslip.showBankAccount && row('Bank account', tpl.payslip.bankAccountFull ? 'DBS 012-345678-9' : 'DBS ••••••••78-9', { muted: true })}
             <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Earnings</td></tr>
-            {row('Basic Salary', money(9000, cur))}
-            {row('Transport allowance', money(200, cur))}
-            {row('Gross Pay', money(9200, cur), { line: true })}
+            {row('Basic Salary', money(9000, cur, tpl.payslip.amountFormat))}
+            {row('Transport allowance', money(200, cur, tpl.payslip.amountFormat))}
+            {row('Gross Pay', money(9200, cur, tpl.payslip.amountFormat), { line: true })}
             <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Deductions</td></tr>
-            {row('CPF (Employee)', `-${money(1600, cur)}`)}
-            {row('Net Pay', money(7600, cur), { bold: true, line: true })}
+            {row('CPF (Employee)', `-${money(1600, cur, tpl.payslip.amountFormat)}`)}
+            {row('Net Pay', money(7600, cur, tpl.payslip.amountFormat), { bold: true, line: true })}
           </tbody>
         </table>
       </DocumentShell>
@@ -191,6 +191,19 @@ export function CompanyProfilePage() {
   );
 
   const fileCtx = { name: 'Alice Tan', id: 'EMP-001', designation: 'Senior Designer', year: 2026, month: 5, company: v.legal_name || company.name };
+  const amountFormatCard = (kind: DocKind) => (
+    <Card size="small" style={{ ...panel, marginBottom: 12 }} title={<span style={{ color: '#f0ede6' }}>Amount format</span>}>
+      <Space wrap>
+        <Select style={{ width: 300 }} value={tpl[kind].amountFormat || 'code'}
+          onChange={x => setTplField(kind, 'amountFormat', x)}
+          options={AMOUNT_FORMATS.map(f => ({ value: f.value, label: f.label.replace(/ — .*$/, '') + ' — ' + money(1234.5, cur, f.value) }))} />
+        <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
+          How amounts appear on {kind === 'payslip' ? 'payslips' : 'invoices'}, e.g. {money(1234.5, cur, tpl[kind].amountFormat)}
+        </Text>
+      </Space>
+    </Card>
+  );
+
   const fileNamesCard = (
     <Card size="small" style={{ ...panel, marginBottom: 12 }} title={<span style={{ color: '#f0ede6' }}>Download file names</span>}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
@@ -250,9 +263,9 @@ export function CompanyProfilePage() {
         </div>
         <table style={{ width: '100%', fontSize: 13, color: '#111', borderCollapse: 'collapse' }}>
           <tbody>
-            {row('Consulting services (10 × 250.00)', money(2500, cur))}
-            {row('Travel', money(500, cur))}
-            {row('Total', money(3000, cur), { bold: true, line: true })}
+            {row('Consulting services (10 × 250.00)', money(2500, cur, tpl.invoice.amountFormat))}
+            {row('Travel', money(500, cur, tpl.invoice.amountFormat))}
+            {row('Total', money(3000, cur, tpl.invoice.amountFormat), { bold: true, line: true })}
           </tbody>
         </table>
         {tpl.invoice.bankDetails && <div style={{ fontSize: 12, color: '#444', marginTop: 10, whiteSpace: 'pre-line' }}><b>Payment details</b><br />{tpl.invoice.bankDetails}</div>}
@@ -326,7 +339,7 @@ export function CompanyProfilePage() {
               <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 640 }} title={<span style={{ color: '#f0ede6' }}>Payslip footer (the {'{{footer_note}}'} field)</span>}>
                 <Input.TextArea rows={2} value={tpl.payslip.footerNote} onChange={e => setTplField('payslip', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Profile" />
               </Card>,
-              fileNamesCard),
+              <>{amountFormatCard('payslip')}{fileNamesCard}</>),
           },
           {
             key: 'invoice-template', label: 'Invoice Template',
@@ -334,7 +347,8 @@ export function CompanyProfilePage() {
               'The Invoices screen isn’t built yet. You can set up the template now; it will be used once invoicing is added.',
               <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 640 }} title={<span style={{ color: '#f0ede6' }}>Invoice settings (used by the {'{{payment_terms}}'}, {'{{bank_details}}'} and {'{{footer_note}}'} fields)</span>}>
                 {invoiceSettings}
-              </Card>),
+              </Card>,
+              amountFormatCard('invoice')),
           },
         ]}
       />

@@ -185,8 +185,38 @@ export const STARTER_LAYOUTS: Record<DocKind, () => GridTemplate> = {
 
 // ---- filling in -------------------------------------------------------------
 
-export const money = (n: number, c = 'SGD') =>
-  `${c} ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export type AmountFormat = 'code' | 'symbol' | 'symbol_space' | 'code_after' | 'number';
+
+export const AMOUNT_FORMATS: { value: AmountFormat; label: string }[] = [
+  { value: 'code', label: 'Currency code — SGD 1,234.50' },
+  { value: 'symbol', label: 'Symbol — $1,234.50' },
+  { value: 'symbol_space', label: 'Symbol with space — $ 1,234.50' },
+  { value: 'code_after', label: 'Code after — 1,234.50 SGD' },
+  { value: 'number', label: 'Number only — 1,234.50' },
+];
+
+/** "$" for SGD/USD, "€", "£", "RM"… (falls back to the code). */
+export function currencySymbol(code: string): string {
+  try {
+    const part = new Intl.NumberFormat('en', { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' })
+      .formatToParts(0).find(p => p.type === 'currency');
+    return part?.value || code;
+  } catch { return code; }
+}
+
+/** An amount in the chosen style; minus signs go in front ("-$380.95"). */
+export function money(n: number, c = 'SGD', format: AmountFormat | string | null = 'code'): string {
+  const v = Number(n || 0);
+  const num = Math.abs(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const sign = v < 0 ? '-' : '';
+  switch (format) {
+    case 'symbol': return `${sign}${currencySymbol(c)}${num}`;
+    case 'symbol_space': return `${sign}${currencySymbol(c)} ${num}`;
+    case 'code_after': return `${sign}${num} ${c}`;
+    case 'number': return `${sign}${num}`;
+    default: return `${sign}${c} ${num}`;
+  }
+}
 
 export function companyFields(company: any, branding: any, footerNote?: string): FieldValues {
   return {
@@ -206,23 +236,25 @@ export function companyFields(company: any, branding: any, footerNote?: string):
 /** Example values shown in the designer's preview. */
 export function sampleData(kind: DocKind, company: any, branding: any): { fields: FieldValues; lists: ListValues } {
   const cur = company?.currency || 'SGD';
+  const fmt = branding?.templates?.[kind]?.amountFormat;
+  const m = (n: number) => money(n, cur, fmt);
   const base = companyFields(company, branding, kind === 'payslip' ? branding?.templates?.payslip?.footerNote : branding?.templates?.invoice?.footerNote);
   if (kind === 'payslip') {
     return {
       fields: {
         ...base, employee_name: 'Alice Tan', employee_code: 'EMP-001', employee_designation: 'Senior Designer', employee_department: 'Creative', employee_id_no: 'S1234567A', employee_id_no_masked: '•••••567A', bank_name: 'DBS', bank_account: '012-345678-9', bank_account_masked: '•••••••78-9',
-        period: 'August 2026', pay_date: '2026-08-31', gross_pay: money(9500, cur), total_deductions: money(1600, cur),
-        net_pay: money(7900, cur), total_employer: money(1371.25, cur), paid_on_behalf: '',
-        cpf_employee: money(1600, cur), cpf_employer: money(1360, cur), cpf_total: money(2960, cur), sdl: money(11.25, cur),
+        period: 'August 2026', pay_date: '2026-08-31', gross_pay: m(9500), total_deductions: m(1600),
+        net_pay: m(7900), total_employer: m(1371.25), paid_on_behalf: '',
+        cpf_employee: m(1600), cpf_employer: m(1360), cpf_total: m(2960), sdl: m(11.25),
         shg_name: '', shg_amount: '',
       },
       lists: {
-        earnings: [{ name: 'Basic Salary', amount: money(9000, cur) }, { name: 'Transport Allowance', amount: money(500, cur) }],
-        deductions: [{ name: 'CPF (Employee)', amount: money(1600, cur) }],
-        employer: [{ name: 'CPF (Employer)', amount: money(1360, cur) }, { name: 'SDL', amount: money(11.25, cur) }],
+        earnings: [{ name: 'Basic Salary', amount: m(9000) }, { name: 'Transport Allowance', amount: m(500) }],
+        deductions: [{ name: 'CPF (Employee)', amount: m(1600) }],
+        employer: [{ name: 'CPF (Employer)', amount: m(1360) }, { name: 'SDL', amount: m(11.25) }],
         statutory: [
-          { name: 'CPF', employee: money(1600, cur), employer: money(1360, cur), total: money(2960, cur) },
-          { name: 'SDL', employee: money(0, cur), employer: money(11.25, cur), total: money(11.25, cur) },
+          { name: 'CPF', employee: m(1600), employer: m(1360), total: m(2960) },
+          { name: 'SDL', employee: m(0), employer: m(11.25), total: m(11.25) },
         ],
       },
     };
@@ -233,16 +265,16 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
       ...base, invoice_no: 'INV-0001', invoice_date: '2026-08-01', due_date: '2026-08-31', payment_terms: `${terms} days`,
       customer_name: 'Acme Trading Pte Ltd', customer_address: '1 Example Road, Singapore 123456',
       customer_contact: 'Mr John Lee', customer_phone: '+65 6123 4567', customer_email: 'accounts@acme.example', customer_website: 'www.acme.example',
-      subtotal: money(3000, cur), total_discount: money(300, cur), subtotal_after_discount: money(2700, cur),
-      tax: money(243, cur), total: money(2943, cur),
+      subtotal: m(3000), total_discount: m(300), subtotal_after_discount: m(2700),
+      tax: m(243), total: m(2943),
       bank_details: branding?.templates?.invoice?.bankDetails || '',
     },
     lists: {
       lines: [
-        { no: '1', description: 'Consulting services', qty: '10', unit_price: money(250, cur), discount: '', amount: money(2500, cur) },
-        { no: '2', description: 'Travel', qty: '1', unit_price: money(500, cur), discount: '', amount: money(500, cur) },
+        { no: '1', description: 'Consulting services', qty: '10', unit_price: m(250), discount: '', amount: m(2500) },
+        { no: '2', description: 'Travel', qty: '1', unit_price: m(500), discount: '', amount: m(500) },
       ],
-      discounts: [{ name: 'Loyalty discount (10%)', amount: money(300, cur) }],
+      discounts: [{ name: 'Loyalty discount (10%)', amount: m(300) }],
     },
   };
 }
