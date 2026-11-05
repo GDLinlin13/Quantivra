@@ -289,7 +289,9 @@ export function CompaniesPage() {
     },
   ];
 
-  const countryOptions = countries.map((c: any) => ({ label: `${c.name} (${c.code})`, value: c.code }));
+  const countryOptions = [...countries]
+    .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)))
+    .map((c: any) => ({ label: `${c.name} (${c.code})`, value: c.code }));
   const getCountryName = (code: string) => countries.find(c => c.code === code)?.name || code;
 
   return (
@@ -367,7 +369,7 @@ export function CompaniesPage() {
                 <Col span={12}>
                   <Form.Item name="country" label={<Text style={{ color: '#f0ede6' }}>Country</Text>}
                     rules={[{ required: true, message: 'Required' }]}>
-                    <Select placeholder="Select country" showSearch options={countryOptions} />
+                    <Select placeholder="Select country" showSearch optionFilterProp="label" options={countryOptions} />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
