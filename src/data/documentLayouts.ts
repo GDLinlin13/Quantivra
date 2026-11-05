@@ -53,7 +53,13 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
     { name: 'payment_terms', label: 'Payment terms' },
     { name: 'customer_name', label: 'Customer name' },
     { name: 'customer_address', label: 'Customer address' },
-    { name: 'subtotal', label: 'Subtotal' },
+    { name: 'customer_contact', label: 'Customer person in charge' },
+    { name: 'customer_phone', label: 'Customer phone' },
+    { name: 'customer_email', label: 'Customer email' },
+    { name: 'customer_website', label: 'Customer website' },
+    { name: 'subtotal', label: 'Subtotal (before discount)' },
+    { name: 'total_discount', label: 'Total discount' },
+    { name: 'subtotal_after_discount', label: 'Subtotal after discount' },
     { name: 'tax', label: 'Tax' },
     { name: 'total', label: 'Total' },
     { name: 'bank_details', label: 'Bank / payment details' },
@@ -86,7 +92,14 @@ export const DOC_LISTS: Record<DocKind, ListDef[]> = {
         { name: 'lines.description', label: 'Line description' },
         { name: 'lines.qty', label: 'Line quantity' },
         { name: 'lines.unit_price', label: 'Line unit price' },
+        { name: 'lines.discount', label: 'Line discount' },
         { name: 'lines.amount', label: 'Line amount' },
+      ],
+    },
+    {
+      name: 'discounts', label: 'Discounts', fields: [
+        { name: 'discounts.name', label: 'Discount name' },
+        { name: 'discounts.amount', label: 'Discount amount' },
       ],
     },
   ],
@@ -146,6 +159,7 @@ export const STARTER_LAYOUTS: Record<DocKind, () => GridTemplate> = {
     { h: 10 },
     { cells: [[0, { v: '{{company_legal_name}}', cs: 2, b: true }], [2, label('Bill to', { cs: 3 })]] },
     { h: 36, cells: [[0, { v: '{{company_address}}', cs: 2, fs: 11, c: GREY }], [2, { v: '{{customer_name}}\n{{customer_address}}', cs: 3 }]] },
+    { h: 36, cells: [[2, { v: 'Attn: {{customer_contact}}\n{{customer_phone}} · {{customer_email}}', cs: 3, fs: 11 }]] },
     { cells: [[0, { v: 'Reg. No. {{company_reg_no}}', cs: 2, fs: 11, c: GREY }], [2, { v: 'Due date {{due_date}} ({{payment_terms}})', cs: 3, fs: 11, c: GREY }]] },
     { h: 14 },
     { cells: [
@@ -158,6 +172,7 @@ export const STARTER_LAYOUTS: Record<DocKind, () => GridTemplate> = {
       [3, { v: '{{lines.unit_price}}', al: 'right', bb: true }], [4, { v: '{{lines.amount}}', al: 'right', bb: true }],
     ] },
     { cells: [[3, { v: 'Subtotal', al: 'right' }], [4, { v: '{{subtotal}}', al: 'right' }]] },
+    { repeat: 'auto', cells: [[1, { v: '{{discounts.name}}', cs: 3, al: 'right', c: '#15803d' }], [4, { v: '-{{discounts.amount}}', al: 'right', c: '#15803d' }]] },
     { cells: [[3, { v: 'Tax', al: 'right' }], [4, { v: '{{tax}}', al: 'right' }]] },
     { h: 30, cells: [[3, { v: 'TOTAL', b: true, fs: 14, al: 'right', bt: true, va: 'middle' }], [4, { v: '{{total}}', b: true, fs: 14, al: 'right', bt: true, va: 'middle' }]] },
     { h: 14 },
@@ -217,14 +232,17 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
     fields: {
       ...base, invoice_no: 'INV-0001', invoice_date: '2026-08-01', due_date: '2026-08-31', payment_terms: `${terms} days`,
       customer_name: 'Acme Trading Pte Ltd', customer_address: '1 Example Road, Singapore 123456',
-      subtotal: money(3000, cur), tax: money(270, cur), total: money(3270, cur),
+      customer_contact: 'Mr John Lee', customer_phone: '+65 6123 4567', customer_email: 'accounts@acme.example', customer_website: 'www.acme.example',
+      subtotal: money(3000, cur), total_discount: money(300, cur), subtotal_after_discount: money(2700, cur),
+      tax: money(243, cur), total: money(2943, cur),
       bank_details: branding?.templates?.invoice?.bankDetails || '',
     },
     lists: {
       lines: [
-        { no: '1', description: 'Consulting services', qty: '10', unit_price: money(250, cur), amount: money(2500, cur) },
-        { no: '2', description: 'Travel', qty: '1', unit_price: money(500, cur), amount: money(500, cur) },
+        { no: '1', description: 'Consulting services', qty: '10', unit_price: money(250, cur), discount: '', amount: money(2500, cur) },
+        { no: '2', description: 'Travel', qty: '1', unit_price: money(500, cur), discount: '', amount: money(500, cur) },
       ],
+      discounts: [{ name: 'Loyalty discount (10%)', amount: money(300, cur) }],
     },
   };
 }
@@ -253,4 +271,5 @@ export const LIST_EXAMPLES: Record<string, string> = {
   employer: 'CPF (Employer), SDL…',
   statutory: 'CPF, SDL, CDAC… (one line per scheme, with the employee and employer share)',
   lines: 'Whatever is typed on each invoice line, e.g. Consulting services',
+  discounts: 'e.g. Loyalty discount (10%), Early payment discount — one line per discount; nothing is printed when there is none',
 };

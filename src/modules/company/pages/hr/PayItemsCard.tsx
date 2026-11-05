@@ -5,7 +5,7 @@ import dayjs from 'dayjs';
 import { hrService, calendarService, type Employee } from '../../../../services/hr';
 import { payItemService } from '../../../../services/payroll';
 import {
-  PAY_ITEM_TYPES, PAY_ITEM_BY_CODE, hourlyRate, overtimeAmount, unpaidLeaveAmount, workingDaysInMonth, payItemLabel, type PayItemRow,
+  PAY_ITEM_TYPES, PAY_ITEM_BY_CODE, hourlyRate, DEFAULT_OT_MULTIPLIER, overtimeAmount, unpaidLeaveAmount, workingDaysInMonth, payItemLabel, type PayItemRow,
 } from '../../../../data/payItems';
 
 const { Text } = Typography;
@@ -99,10 +99,10 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
       .catch(() => setWorkDays(null));
   }, [companyId, employee.id, year, month]);
 
-  const autoAmount = (code: string, qty?: number | null) => {
+  const autoAmount = (code: string, qty?: number | null, mult?: number | null, rate?: number | null) => {
     const t = PAY_ITEM_BY_CODE[code];
     if (!t?.unit || qty == null) return null;
-    if (t.code === 'OVERTIME') return overtimeAmount(basic, qty);
+    if (t.code === 'OVERTIME') return overtimeAmount(basic, qty, mult, rate);
     if (t.code === 'UNPAID_LEAVE' && workDays) return unpaidLeaveAmount(basic, qty, workDays);
     return null;
   };
@@ -110,8 +110,8 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
   const update = (key: string, patch: Partial<Draft>) => setRows(rs => rs.map(r => {
     if (r.key !== key) return r;
     const next = { ...r, ...patch };
-    if ('item_code' in patch || 'quantity' in patch) {
-      const a = autoAmount(next.item_code, next.quantity);
+    if ('item_code' in patch || 'quantity' in patch || 'rate' in patch || 'multiplier' in patch) {
+      const a = autoAmount(next.item_code, next.quantity, next.multiplier, next.rate);
       if (a != null) { next.amount = a; next.auto = true; }
       if ('item_code' in patch && !PAY_ITEM_BY_CODE[next.item_code]?.unit) next.quantity = null;
     }
@@ -154,7 +154,7 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
           const t = PAY_ITEM_BY_CODE[r.item_code];
           const calc = t?.unit && r.quantity != null
             ? (t.code === 'OVERTIME'
-              ? `${r.quantity} hrs × ${money(hourlyRate(basic), currency)}/hr × 1.5 = ${money(overtimeAmount(basic, r.quantity), currency)}`
+              ? `${r.quantity} hrs × ${money(r.rate ?? hourlyRate(basic), currency)}/hr × ${r.multiplier ?? DEFAULT_OT_MULTIPLIER} = ${money(overtimeAmount(basic, r.quantity, r.multiplier, r.rate), currency)}`
               : workDays ? `${money(basic, currency)} × ${r.quantity} ÷ ${workDays} working days = ${money(unpaidLeaveAmount(basic, r.quantity, workDays), currency)}` : null)
             : null;
           return (
@@ -165,6 +165,28 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
                   <InputNumber style={{ width: 110 }} min={0} step={t.unit === 'hours' ? 0.5 : 0.5} value={r.quantity ?? undefined}
                     suffix={t.unit === 'hours' ? 'hrs' : 'days'} placeholder={t.unit}
                     onChange={v => update(r.key, { quantity: v == null ? null : Number(v) })} />
+                )}
+                {t?.code === 'OVERTIME' && (
+                  <>
+                    <Tooltip title={`Hourly rate. Leave empty to use ${money(hourlyRate(basic), currency)} (from the basic salary, MOM formula).`}>
+                      <InputNumber style={{ width: 150 }} min={0} precision={2} value={r.rate ?? undefined} prefix={currency} suffix="/hr"
+                        placeholder={hourlyRate(basic).toFixed(2)} onChange={v => update(r.key, { rate: v == null ? null : Number(v) })} />
+                    </Tooltip>
+                    <Tooltip title="Rate multiplier: 1.5× normal overtime, 2× rest day / public holiday. Leave empty for 1.5×.">
+                      <Select style={{ width: 92 }} value={r.multiplier ?? DEFAULT_OT_MULTIPLIER}
+                        onChange={v => update(r.key, { multiplier: v === DEFAULT_OT_MULTIPLIER ? null : v })}
+                        popupRender={menu => (
+                          <>
+                            {menu}
+                            <div style={{ padding: 6 }}>
+                              <InputNumber size="small" min={0} max={10} step={0.25} placeholder="Other ×" style={{ width: '100%' }}
+                                onPressEnter={e => { const n = Number((e.target as HTMLInputElement).value); if (n >= 0 && n <= 10) update(r.key, { multiplier: n === DEFAULT_OT_MULTIPLIER ? null : n }); }} />
+                            </div>
+                          </>
+                        )}
+                        options={[...new Set([1, 1.5, 2, 3, r.multiplier ?? DEFAULT_OT_MULTIPLIER])].sort((a, b) => a - b).map(m => ({ value: m, label: `${m}×` }))} />
+                    </Tooltip>
+                  </>
                 )}
                 <InputNumber style={{ width: 160 }} min={0} precision={2} value={r.amount} prefix={currency}
                   onChange={v => update(r.key, { amount: Number(v) || 0 })} />
