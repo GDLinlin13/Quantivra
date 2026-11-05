@@ -3,6 +3,7 @@ import { Card, Form, Input, Select, Button, Typography, message, Divider, Space,
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { MODULES } from '../../../types';
+import { MODULE_GUIDE } from '../../../data/permissionGuide';
 import { timezoneOptions } from '../../../utils/timezones';
 import { currencyOptions } from '../../../utils/currencies';
 import { DocumentNumbersCard } from './settings/DocumentNumbersCard';
@@ -69,19 +70,28 @@ export function CompanySettingsPage() {
       </Card>
 
       <Title level={5} style={{ color: '#f0ede6', marginBottom: 16 }}>Modules</Title>
-      <Card style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, maxWidth: 600 }}>
-        <Space wrap>
-          {Object.entries(MODULES).map(([key, mod]) => {
+      <Card style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, maxWidth: 760, marginBottom: 24 }}>
+        <Text style={{ color: 'rgba(240,237,230,0.6)', display: 'block', marginBottom: 12 }}>
+          Click a module to switch it on or off for your company. Here is what each one covers:
+        </Text>
+        <Space direction="vertical" size={10} style={{ width: '100%' }}>
+          {Object.entries(MODULES).filter(([key]) => key !== 'platform').map(([key, mod]) => {
             const enabled = (company.modules || []).includes(key);
+            const guide = MODULE_GUIDE[key];
             return (
-              <Tag
-                key={key}
-                color={enabled ? 'green' : 'default'}
-                style={{ cursor: 'pointer', padding: '4px 12px', fontSize: 13 }}
-                onClick={() => toggleModule(key)}
-              >
-                {mod.label} {enabled ? '✓' : '○'}
-              </Tag>
+              <div key={key} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <Tag
+                  color={enabled ? 'green' : 'default'}
+                  style={{ cursor: 'pointer', padding: '4px 12px', fontSize: 13, minWidth: 120, textAlign: 'center', margin: 0 }}
+                  onClick={() => toggleModule(key)}
+                >
+                  {mod.label} {enabled ? '✓' : '○'}
+                </Tag>
+                <Text style={{ color: 'rgba(240,237,230,0.75)', paddingTop: 3 }}>
+                  {guide?.covers}
+                  {guide && !guide.built && <Text style={{ color: 'rgba(240,237,230,0.4)' }}> (not built yet)</Text>}
+                </Text>
+              </div>
             );
           })}
         </Space>
