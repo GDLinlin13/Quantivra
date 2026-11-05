@@ -27,6 +27,8 @@ export interface InvoiceTemplate {
   bankDetails: string;
   /** Payment details as label / value pairs (Account Name, Bank, Account No…). */
   paymentDetails?: { label: string; value: string }[];
+  /** Several bank accounts, each a titled list of label / value lines; one is the default. */
+  paymentAccounts?: { title: string; lines: { label: string; value: string }[]; isDefault?: boolean }[];
   footerNote: string;
   amountFormat?: AmountFormat;
   layout?: GridTemplate;

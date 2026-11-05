@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
-import { Card, Descriptions, Typography, Spin, Tabs, Form, Input, InputNumber, Button, Upload, message, Switch, Space, ColorPicker, Segmented, Alert, Tag, Tooltip, Select } from 'antd';
+import { Card, Descriptions, Typography, Spin, Tabs, Form, Input, InputNumber, Button, Upload, message, Switch, Space, ColorPicker, Segmented, Alert, Tag, Tooltip, Select, Popconfirm } from 'antd';
 import { UploadOutlined, DeleteOutlined, SaveOutlined, PlusOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { brandingService, fileToLogoDataUri, DEFAULT_TEMPLATES, type Branding } from '../../../services/branding';
 import { DocumentShell } from '../../../components/DocumentShell';
 import { GridTemplateEditor } from '../../../components/GridTemplateEditor';
-import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, DEFAULT_PAYMENT_LABELS, type DocKind } from '../../../data/documentLayouts';
+import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, paymentAccounts, DEFAULT_PAYMENT_LABELS, type DocKind, type PaymentAccount, type PaymentLine } from '../../../data/documentLayouts';
 import { CellValue } from '../../../components/GridDocument';
 import type { GridTemplate } from '../../../utils/gridTemplate';
 import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME } from '../../../utils/payslipFiles';
@@ -195,9 +195,7 @@ export function CompanyProfilePage() {
   const amountFormatCard = (kind: DocKind) => (
     <Card size="small" style={{ ...panel, marginBottom: 12 }} title={<span style={{ color: '#f0ede6' }}>Amount format</span>}>
       <Space wrap>
-        <Select style={{ width: 300 }} value={tpl[kind].amountFormat || 'code'}
-          onChange={x => setTplField(kind, 'amountFormat', x)}
-          options={AMOUNT_FORMATS.map(f => ({ value: f.value, label: f.value.startsWith('accounting') ? f.label.replace('$', f.value === 'accounting_code' ? cur : money(0, cur, 'symbol').replace(/[0-9.,]/g, '')) : f.label.replace(/ — .*$/, '') + ' — ' + money(1234.5, cur, f.value) }))} />
+        <div style={{ width: 520, maxWidth: '100%' }}>{amountSelect(kind)}</div>
         <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
           How amounts appear on {kind === 'payslip' ? 'payslips' : 'invoices'}, e.g. {plainAmount(money(1234.5, cur, tpl[kind].amountFormat))}
         </Text>
@@ -235,29 +233,61 @@ export function CompanyProfilePage() {
     </Card>
   );
 
-  const payRows = tpl.invoice.paymentDetails?.length
-    ? tpl.invoice.paymentDetails
-    : DEFAULT_PAYMENT_LABELS.map(label => ({ label, value: '' }));
-  const setPayRow = (i: number, patch: Partial<{ label: string; value: string }>) =>
-    setTplField('invoice', 'paymentDetails', payRows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const amountSelect = (kind: DocKind) => (
+    <Select style={{ width: '100%', maxWidth: 520 }} popupMatchSelectWidth={false} value={tpl[kind].amountFormat || 'code'}
+      onChange={x => setTplField(kind, 'amountFormat', x)}
+      options={AMOUNT_FORMATS.map(f => ({ value: f.value, label: f.value.startsWith('accounting') ? f.label.replace('$', f.value === 'accounting_code' ? cur : money(0, cur, 'symbol').replace(/[0-9.,]/g, '')) : f.label.replace(/ — .*$/, '') + ' — ' + money(1234.5, cur, f.value) }))} />
+  );
+
+  // Bank accounts shown as payment details; older single list becomes the first account.
+  const banks: PaymentAccount[] = paymentAccounts(tpl.invoice).length
+    ? paymentAccounts(tpl.invoice)
+    : [{ title: '', lines: DEFAULT_PAYMENT_LABELS.map(label => ({ label, value: '' })), isDefault: true }];
+  const setBanks = (next: PaymentAccount[]) => setTpl(p => ({ ...p, invoice: { ...p.invoice, paymentAccounts: next, paymentDetails: undefined } }));
+  const setBank = (bi: number, patch: Partial<PaymentAccount>) => setBanks(banks.map((b, j) => (j === bi ? { ...b, ...patch } : b)));
+  const setBankLine = (bi: number, li: number, patch: Partial<PaymentLine>) =>
+    setBank(bi, { lines: banks[bi].lines.map((r, j) => (j === li ? { ...r, ...patch } : r)) });
 
   const invoiceSettings = (
     <Form layout="vertical" component={false}>
-      <Form.Item label="Default payment terms (days)" style={{ marginTop: 8 }}>
-        <InputNumber min={0} value={tpl.invoice.paymentTermsDays} onChange={x => setTplField('invoice', 'paymentTermsDays', x ?? 30)} />
-      </Form.Item>
-      <Form.Item label="Payment details" extra="Label on the left, detail on the right. Lines left empty are not printed.">
-        {payRows.map((r, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-            <Input style={{ width: 170 }} value={r.label} placeholder="Label, e.g. Bank:" onChange={e => setPayRow(i, { label: e.target.value })} />
-            <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} style={{ flex: 1 }} value={r.value} placeholder="e.g. DBS Bank" onChange={e => setPayRow(i, { value: e.target.value })} />
-            <Button icon={<DeleteOutlined />} onClick={() => setTplField('invoice', 'paymentDetails', payRows.filter((_, j) => j !== i))} />
+      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 16, marginTop: 8 }}>
+        <Form.Item label="Payment terms (days)">
+          <InputNumber min={0} style={{ width: '100%' }} value={tpl.invoice.paymentTermsDays} onChange={x => setTplField('invoice', 'paymentTermsDays', x ?? 30)} />
+        </Form.Item>
+        <Form.Item label="Amount format">{amountSelect('invoice')}</Form.Item>
+      </div>
+      <Form.Item label="Payment details">
+        {banks.map((b, bi) => (
+          <div key={bi} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: 10, marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+              <Input style={{ width: 240 }} value={b.title} placeholder="Bank account name, e.g. DBS (SGD)" onChange={e => setBank(bi, { title: e.target.value })} />
+              <Switch size="small" checked={!!b.isDefault || banks.length === 1}
+                onChange={on => setBanks(banks.map((x, j) => ({ ...x, isDefault: on ? j === bi : (j === 0 && bi !== 0) })))} />
+              <Text style={{ color: 'rgba(240,237,230,0.7)', fontSize: 12 }}>Default</Text>
+              {banks.length > 1 && (
+                <Popconfirm title="Remove this bank account?" onConfirm={() => {
+                  const rest = banks.filter((_, j) => j !== bi);
+                  if (!rest.some(x => x.isDefault) && rest[0]) rest[0] = { ...rest[0], isDefault: true };
+                  setBanks(rest);
+                }}>
+                  <Button size="small" danger icon={<DeleteOutlined />} style={{ marginLeft: 'auto' }}>Remove bank</Button>
+                </Popconfirm>
+              )}
+            </div>
+            {b.lines.map((r, li) => (
+              <div key={li} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                <Input style={{ width: 170 }} value={r.label} onChange={e => setBankLine(bi, li, { label: e.target.value })} />
+                <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} style={{ flex: 1 }} value={r.value} onChange={e => setBankLine(bi, li, { value: e.target.value })} />
+                <Button icon={<DeleteOutlined />} onClick={() => setBank(bi, { lines: b.lines.filter((_, j) => j !== li) })} />
+              </div>
+            ))}
+            <Button size="small" icon={<PlusOutlined />} onClick={() => setBank(bi, { lines: [...b.lines, { label: '', value: '' }] })}>Add a line</Button>
           </div>
         ))}
-        <Button size="small" icon={<PlusOutlined />} onClick={() => setTplField('invoice', 'paymentDetails', [...payRows, { label: '', value: '' }])}>Add a line</Button>
+        <Button icon={<PlusOutlined />} onClick={() => setBanks([...banks, { title: '', lines: DEFAULT_PAYMENT_LABELS.map(label => ({ label, value: '' })) }])}>Add another bank</Button>
       </Form.Item>
       {(tpl.invoice.bankDetails || '').trim() && (
-        <Form.Item label="Older payment details (free text)" extra="Used only while the lines above are empty.">
+        <Form.Item label="Older payment details (free text)">
           <Input.TextArea rows={2} value={tpl.invoice.bankDetails} onChange={e => setTplField('invoice', 'bankDetails', e.target.value)} />
         </Form.Item>
       )}
@@ -373,10 +403,9 @@ export function CompanyProfilePage() {
             key: 'invoice-template', label: 'Invoice Template',
             children: templateTab('invoice', 'Invoices', tpl.invoice.layout?.enabled ? null : invoicePrebuilt,
               'Good to know: the screen for creating invoices hasn’t been built yet. Your saved template is kept and will be used automatically once invoicing is added.',
-              <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>Invoice settings — payment terms, payment details ({'{{payment.label}}'} / {'{{payment.value}}'}) and footer</span>}>
+              <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>Invoice settings</span>}>
                 {invoiceSettings}
-              </Card>,
-              amountFormatCard('invoice')),
+              </Card>),
           },
         ]}
       />

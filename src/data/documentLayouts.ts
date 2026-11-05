@@ -63,6 +63,7 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
     { name: 'tax', label: 'Tax' },
     { name: 'total', label: 'Total' },
     { name: 'bank_details', label: 'Bank / payment details' },
+    { name: 'payment_account', label: 'Bank account name (which bank is shown)' },
   ],
 };
 
@@ -283,6 +284,7 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
       subtotal: m(3000), total_discount: m(300), subtotal_after_discount: m(2700),
       tax: m(243), total: m(2943),
       bank_details: bankDetailsText(branding?.templates?.invoice),
+      payment_account: pickPaymentAccount(branding?.templates?.invoice)?.title || 'DBS Bank (SGD)',
     },
     lists: {
       lines: [
@@ -290,7 +292,7 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
         { no: '2', description: 'Travel', qty: '1', unit_price: m(500), discount: '', amount: m(500) },
       ],
       discounts: [{ name: 'Loyalty discount (10%)', amount: m(300) }],
-      payment: paymentRows(branding?.templates?.invoice, true),
+      payment: paymentRows(branding?.templates?.invoice, true).map(r => ({ label: r.label, value: r.value })),
     },
   };
 }
@@ -302,9 +304,26 @@ const EXAMPLE_PAYMENT = [
   { label: 'Account No:', value: '012-345678-9' }, { label: 'S.W.I.F.T Code:', value: 'DBSSSGSG' },
 ];
 
+export interface PaymentLine { label: string; value: string }
+export interface PaymentAccount { title: string; lines: PaymentLine[]; isDefault?: boolean }
+
+/** The company's bank accounts for payment details (older single list = one account). */
+export function paymentAccounts(inv: any): PaymentAccount[] {
+  if (Array.isArray(inv?.paymentAccounts) && inv.paymentAccounts.length) return inv.paymentAccounts;
+  if (Array.isArray(inv?.paymentDetails) && inv.paymentDetails.length) return [{ title: 'Bank account', lines: inv.paymentDetails, isDefault: true }];
+  return [];
+}
+
+/** Which account an invoice shows: the one asked for (by position), else the default, else the first. */
+export function pickPaymentAccount(inv: any, which?: number | null): PaymentAccount | null {
+  const list = paymentAccounts(inv);
+  if (which != null && list[which]) return list[which];
+  return list.find(a => a.isDefault) || list[0] || null;
+}
+
 /** The payment detail lines that have a value (the example set when none are filled in and `example` is on). */
-export function paymentRows(inv: any, example = false): { label: string; value: string }[] {
-  const rows = ((inv?.paymentDetails || []) as { label: string; value: string }[]).filter(r => (r.value || '').trim());
+export function paymentRows(inv: any, example = false, which?: number | null): PaymentLine[] {
+  const rows = (pickPaymentAccount(inv, which)?.lines || []).filter(r => (r.value || '').trim());
   return rows.length ? rows : (example && !(inv?.bankDetails || '').trim() ? EXAMPLE_PAYMENT : []);
 }
 
