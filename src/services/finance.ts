@@ -214,3 +214,59 @@ export const paymentService = {
     for (const a of allocs) await docService.refreshPaid((a as any).document_id);
   },
 };
+
+// ---- manual journals and everything the ledger needs ------------------------------------
+
+export interface JournalRow {
+  id: number; number: string | null; journal_date: string; memo: string | null;
+  lines: { id?: number; account_id: number; debit: number; credit: number; description?: string | null }[];
+}
+
+export const journalService = {
+  async list(companyId: number): Promise<JournalRow[]> {
+    const js = must(await supabase.from('fin_journals').select('*').eq('company_id', companyId).order('journal_date', { ascending: false })) || [];
+    const ls = must(await supabase.from('fin_journal_lines').select('*').eq('company_id', companyId)) || [];
+    return js.map((j: any) => ({ ...j, lines: ls.filter((l: any) => l.journal_id === j.id) }));
+  },
+  async save(companyId: number, j: Partial<JournalRow>, lines: JournalRow['lines']): Promise<number> {
+    const clean = lines.filter(l => l.account_id && (Number(l.debit) || Number(l.credit)));
+    const dr = clean.reduce((s, l) => s + (Number(l.debit) || 0), 0), cr = clean.reduce((s, l) => s + (Number(l.credit) || 0), 0);
+    if (clean.length < 2) throw new Error('A journal needs at least two lines');
+    if (Math.round(dr * 100) !== Math.round(cr * 100)) throw new Error('Debits and credits must be equal');
+    let id = j.id;
+    const row = { company_id: companyId, journal_date: j.journal_date, memo: j.memo || null };
+    if (id) must(await supabase.from('fin_journals').update(row).eq('id', id));
+    else {
+      const number = await supabase.rpc('fin_next_number', { p_company_id: companyId, p_entity: 'journal' }).then(r => (r.error ? null : r.data as string));
+      id = must(await supabase.from('fin_journals').insert({ ...row, number }).select('id').single()).id;
+    }
+    must(await supabase.from('fin_journal_lines').delete().eq('journal_id', id!));
+    must(await supabase.from('fin_journal_lines').insert(clean.map(l => ({
+      company_id: companyId, journal_id: id, account_id: l.account_id, debit: Number(l.debit) || 0, credit: Number(l.credit) || 0, description: l.description || null,
+    }))));
+    return id!;
+  },
+  async remove(id: number) { must(await supabase.from('fin_journals').delete().eq('id', id)); },
+};
+
+/** Everything the ledger and reports are worked out from. */
+export async function loadLedgerInput(companyId: number) {
+  const [accounts, docs, lines, payments, allocations, journals, payroll] = await Promise.all([
+    accountService.list(companyId),
+    supabase.from('fin_documents').select('*').eq('company_id', companyId).then(must),
+    supabase.from('fin_document_lines').select('*').eq('company_id', companyId).order('position').then(must),
+    supabase.from('fin_payments').select('*').eq('company_id', companyId).then(must),
+    supabase.from('fin_payment_allocations').select('*').eq('company_id', companyId).then(must),
+    journalService.list(companyId),
+    // payroll is pay data: people without pay access simply don't see it in the books
+    supabase.from('payroll_runs').select('id, period_year, period_month, pay_date, status, total_gross, total_deductions, total_employer, total_net')
+      .eq('company_id', companyId).then(r => (r.error ? [] : r.data || [])),
+  ]);
+  const byDoc = new Map<number, any[]>();
+  for (const l of lines || []) { const a = byDoc.get(l.document_id) || []; a.push(l); byDoc.set(l.document_id, a); }
+  return {
+    accounts,
+    docs: (docs || []).map((d: any) => ({ ...d, lines: byDoc.get(d.id) || [] })),
+    payments: payments || [], allocations: allocations || [], journals, payroll: payroll as any[],
+  };
+}
