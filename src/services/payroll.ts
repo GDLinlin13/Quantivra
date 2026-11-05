@@ -168,7 +168,7 @@ export const payrollService = {
       runId = data.id;
     }
 
-    const mask = (v?: string | null) => (v ? String(v).replace(/.(?=.{4})/g, '•') : null);
+    const mask = maskId;
     const empById = new Map(employees.map(e => [String(e.id), e]));
     const slips = result.employees.map(r => {
       const e = empById.get(r.employeeId);
@@ -182,7 +182,10 @@ export const payrollService = {
         tax_withheld: r.tax?.taxWithheld ?? 0,
         earnings_json: r.earnings, deductions_json: r.deductions, employer_json: r.employerCosts,
         statutory_json: r.statutoryContributions,
-        result_json: { ...r, bankMasked: mask(e?.bank_account), bankName: e?.bank_name ?? null },
+        result_json: {
+          ...r, bankMasked: mask(e?.bank_account), bankName: e?.bank_name ?? null,
+          designation: e?.job_title ?? null, department: e?.department_name ?? null, idMasked: mask(e?.national_id),
+        },
         status: r.status, errors: r.errors ?? null,
       };
     });
@@ -208,6 +211,11 @@ export const payrollService = {
     if (error) throw new Error(error.message);
   },
 };
+
+/** Hide all but the last 4 characters: S1234567A → •••••567A. */
+export function maskId(v?: string | null): string | null {
+  return v ? String(v).replace(/.(?=.{4})/g, '•') : null;
+}
 
 /** Pretty component-code → label. */
 export function componentLabel(code: string): string {
