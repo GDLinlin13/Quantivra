@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
-import { Card, Descriptions, Typography, Spin, Tabs, Form, Input, InputNumber, Button, Upload, message, Switch, Space, ColorPicker, Segmented, Alert } from 'antd';
+import { Card, Descriptions, Typography, Spin, Tabs, Form, Input, InputNumber, Button, Upload, message, Switch, Space, ColorPicker, Segmented, Alert, Tag, Tooltip } from 'antd';
 import { UploadOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -8,6 +8,7 @@ import { DocumentShell } from '../../../components/DocumentShell';
 import { GridTemplateEditor } from '../../../components/GridTemplateEditor';
 import { STARTER_LAYOUTS, money, type DocKind } from '../../../data/documentLayouts';
 import type { GridTemplate } from '../../../utils/gridTemplate';
+import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME } from '../../../utils/payslipFiles';
 
 const { Title, Text } = Typography;
 const panel = { background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)' };
@@ -88,7 +89,7 @@ export function CompanyProfilePage() {
   const cur = company.currency || 'SGD';
 
   /** Pre-built or custom, then the matching editor. */
-  const templateTab = (kind: DocKind, what: string, prebuilt: ReactNode, note?: string, customExtra?: ReactNode) => {
+  const templateTab = (kind: DocKind, what: string, prebuilt: ReactNode, note?: string, customExtra?: ReactNode, common?: ReactNode) => {
     const layout: GridTemplate = tpl[kind].layout || STARTER_LAYOUTS[kind]();
     const setLayout = (next: GridTemplate) => setTpl(p => ({ ...p, [kind]: { ...p[kind], layout: next } }));
     return (
@@ -109,8 +110,9 @@ export function CompanyProfilePage() {
               : `${what} are printed with Quantivra's ready-made design; you choose what it shows below.`}
             {' '}Your logo and company details come from the Profile tab.
           </Text>
-          {note && <Alert type="info" showIcon style={{ marginTop: 8 }} message={note} />}
+          {note && <Alert type="info" showIcon style={{ marginTop: 8 }} title={note} />}
         </Card>
+        {common}
         {layout.enabled && customExtra}
         {layout.enabled
           ? <GridTemplateEditor kind={kind} value={layout} onChange={setLayout} company={company} branding={previewBranding} />
@@ -186,6 +188,37 @@ export function CompanyProfilePage() {
         </table>
       </DocumentShell>
     )),
+  );
+
+  const fileCtx = { name: 'Alice Tan', id: 'EMP-001', designation: 'Senior Designer', year: 2026, month: 5, company: v.legal_name || company.name };
+  const fileNamesCard = (
+    <Card size="small" style={{ ...panel, marginBottom: 12 }} title={<span style={{ color: '#f0ede6' }}>Download file names</span>}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+        <div>
+          <Text style={{ color: 'rgba(240,237,230,0.8)' }}>Each payslip</Text>
+          <Input value={tpl.payslip.fileName ?? ''} placeholder={DEFAULT_FILE_NAME} style={{ marginTop: 4 }}
+            onChange={e => setTplField('payslip', 'fileName', e.target.value)} />
+          <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>e.g. {formatFileName(tpl.payslip.fileName, fileCtx)}</Text>
+        </div>
+        <div>
+          <Text style={{ color: 'rgba(240,237,230,0.8)' }}>All payslips in one file (or the .zip)</Text>
+          <Input value={tpl.payslip.combinedFileName ?? ''} placeholder={DEFAULT_COMBINED_FILE_NAME} style={{ marginTop: 4 }}
+            onChange={e => setTplField('payslip', 'combinedFileName', e.target.value)} />
+          <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>e.g. {formatFileName(tpl.payslip.combinedFileName, fileCtx, DEFAULT_COMBINED_FILE_NAME)}</Text>
+        </div>
+      </div>
+      <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(240,237,230,0.6)' }}>
+        Click to add:{' '}
+        {FILE_NAME_TOKENS.map(tk => (
+          <Tooltip key={tk.token} title={`Adds to “Each payslip”. ${tk.label}`}>
+            <Tag style={{ cursor: 'pointer', marginBottom: 4 }}
+              onClick={() => setTplField('payslip', 'fileName', `${(tpl.payslip.fileName ?? DEFAULT_FILE_NAME)}${tk.token}`)}>
+              {tk.token} <span style={{ opacity: 0.6 }}>{tk.label}</span>
+            </Tag>
+          </Tooltip>
+        ))}
+      </div>
+    </Card>
   );
 
   const invoiceSettings = (
@@ -292,7 +325,8 @@ export function CompanyProfilePage() {
             children: templateTab('payslip', 'Payslips', payslipPrebuilt, undefined,
               <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 640 }} title={<span style={{ color: '#f0ede6' }}>Payslip footer (the {'{{footer_note}}'} field)</span>}>
                 <Input.TextArea rows={2} value={tpl.payslip.footerNote} onChange={e => setTplField('payslip', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Profile" />
-              </Card>),
+              </Card>,
+              fileNamesCard),
           },
           {
             key: 'invoice-template', label: 'Invoice Template',

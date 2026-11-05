@@ -1,17 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, Button, Select, InputNumber, Table, Tag, message, Modal, Descriptions, Space, Popconfirm, Alert, Statistic, Row, Col, Switch, Tooltip } from 'antd';
-import { PlayCircleOutlined, FileTextOutlined, CheckCircleOutlined, DeleteOutlined, PrinterOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { PlayCircleOutlined, FileTextOutlined, CheckCircleOutlined, DeleteOutlined, PrinterOutlined, InfoCircleOutlined, DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { payrollService, statutorySettingsService, componentLabel, ABSORBABLE_SCHEMES, type PayrollRunRow, type PayslipRow } from '../../../../services/payroll';
 import { brandingService, type Branding } from '../../../../services/branding';
-import { DocumentShell } from '../../../../components/DocumentShell';
-import { GridDocument } from '../../../../components/GridDocument';
-import { companyFields, money as fmtMoney } from '../../../../data/documentLayouts';
-import { hrService, type Employee } from '../../../../services/hr';
-import { maskId } from '../../../../services/payroll';
-import type { FieldValues, ListValues } from '../../../../utils/gridTemplate';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { PayItemsCard } from './PayItemsCard';
+import { PayslipView, printPayslip } from './PayslipView';
+import { BulkPayslips } from './BulkPayslips';
+import { formatFileName, elementsToPdf, downloadBlob } from '../../../../utils/payslipFiles';
 import { supabase } from '../../../../utils/supabase';
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => ({ label: dayjs().month(i).format('MMMM'), value: i + 1 }));
@@ -30,6 +27,21 @@ export function PayrollTab({ companyId }: { companyId: number }) {
   const [slip, setSlip] = useState<PayslipRow | null>(null);
   const [absorb, setAbsorb] = useState<Record<string, boolean>>({});
   const [branding, setBranding] = useState<Branding | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  const downloadOne = async (p: PayslipRow) => {
+    const el = document.getElementById('payslip-print');
+    if (!el || !openRun) return;
+    setDownloading(true);
+    try {
+      downloadBlob(await elementsToPdf([el]), formatFileName(branding?.templates.payslip.fileName, {
+        name: p.employee_name, id: p.employee_code || '', designation: p.result_json?.designation || '',
+        year: openRun.run.period_year, month: openRun.run.period_month, company: branding?.legal_name || company?.name || '',
+      }));
+    } catch (e: any) { message.error(`Could not create the PDF: ${e.message}`); }
+    setDownloading(false);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -155,7 +167,8 @@ export function PayrollTab({ companyId }: { companyId: number }) {
                 { title: '', key: 'a', render: (_, p) => <Button size="small" icon={<FileTextOutlined />} onClick={() => setSlip(p)}>Payslip</Button> },
               ]}
             />
-            <div style={{ marginTop: 16, textAlign: 'right' }}>
+            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Button icon={<PrinterOutlined />} onClick={() => setBulkOpen(true)} disabled={!openRun.payslips.length}>Print / download payslips</Button>
               {openRun.run.status === 'draft' && (
                 <Popconfirm title="Finalise this run? It can no longer be re-calculated." onConfirm={() => finalise(openRun.run.id)}>
                   <Button type="primary" icon={<CheckCircleOutlined />}>Finalise Run</Button>
@@ -166,151 +179,19 @@ export function PayrollTab({ companyId }: { companyId: number }) {
         )}
       </Modal>
 
+      {openRun && bulkOpen && (
+        <BulkPayslips open={bulkOpen} onClose={() => setBulkOpen(false)} run={openRun.run} slips={openRun.payslips} company={company} branding={branding} />
+      )}
+
       {/* Payslip */}
       <Modal open={!!slip} onCancel={() => setSlip(null)} width={640}
         title={<Space><FileTextOutlined />Payslip</Space>}
-        footer={<Button icon={<PrinterOutlined />} onClick={() => printPayslip(slip!)}>Print / Save PDF</Button>}>
+        footer={<Space>
+          <Button icon={<PrinterOutlined />} onClick={() => printPayslip(slip!)}>Print</Button>
+          <Button type="primary" icon={<DownloadOutlined />} loading={downloading} onClick={() => downloadOne(slip!)}>Download PDF</Button>
+        </Space>}>
         {slip && <PayslipView slip={slip} company={company} branding={branding} period={openRun?.run} />}
       </Modal>
     </div>
   );
-}
-
-function PayslipView({ slip, company, branding, period }: { slip: PayslipRow; company: any; branding: Branding | null; period?: PayrollRunRow }) {
-  const cur = company?.currency || 'SGD';
-  const stat = (slip.statutory_json || []) as any[];
-  const t = branding?.templates.payslip;
-  const res = slip.result_json || {};
-  const bankMasked: string | null = res.bankMasked || null;
-  const bankName: string | null = res.bankName || null;
-  const layout = t?.layout;
-  const useLayout = !!layout?.enabled;
-  // The employee's current record (pay-access users only). Full bank / ID numbers are only kept
-  // encrypted, so they are looked up here rather than saved on the payslip; designation and
-  // department also come from here for payslips made before they were saved on the payslip.
-  const [emp, setEmp] = useState<Employee | null>(null);
-  useEffect(() => {
-    let live = true;
-    setEmp(null);
-    if (!company?.id) return;
-    hrService.listEmployees(company.id)
-      .then(list => { if (live) setEmp(list.find(e => Number(e.id) === Number(slip.employee_id)) || null); })
-      .catch(() => {});
-    return () => { live = false; };
-  }, [company?.id, slip.employee_id]);
-  const bankFull = emp?.bank_account || null;
-  const designation: string = res.designation ?? emp?.job_title ?? '';
-  const department: string = res.department ?? emp?.department_name ?? '';
-  const idMasked: string = res.idMasked ?? maskId(emp?.national_id) ?? '';
-  const idFull: string = emp?.national_id || idMasked;
-
-  if (useLayout && layout) {
-    const line = (x: { componentCode: string; amount: number; label?: string }) => ({ name: x.label || componentLabel(x.componentCode), amount: fmtMoney(x.amount, cur) });
-    const onBehalf = stat.filter(s => s.absorbedByEmployer && s.employeeTotal > 0);
-    const scheme = (code: string) => stat.find(s => String(s.schemeCode).toUpperCase() === code);
-    const cpf = scheme('CPF');
-    const shg = stat.find(s => ['CDAC', 'SINDA', 'MBMF', 'ECF'].includes(String(s.schemeCode).toUpperCase()) && s.employeeTotal > 0);
-    const n = (x: any) => Number(x) || 0;
-    const fields: FieldValues = {
-      ...companyFields(company, branding, t?.footerNote),
-      employee_name: slip.employee_name || '',
-      employee_code: slip.employee_code || '',
-      employee_designation: designation,
-      employee_department: department,
-      employee_id_no: idFull,
-      employee_id_no_masked: idMasked,
-      bank_name: bankName || '',
-      bank_account: bankFull || bankMasked || '',
-      bank_account_masked: bankMasked || '',
-      period: period ? dayjs(`${period.period_year}-${period.period_month}-01`).format('MMMM YYYY') : '',
-      pay_date: period?.pay_date || '',
-      gross_pay: fmtMoney(slip.gross_pay, cur),
-      total_deductions: fmtMoney(slip.total_deductions, cur),
-      net_pay: fmtMoney(slip.net_pay, cur),
-      total_employer: fmtMoney(slip.total_employer, cur),
-      cpf_employee: fmtMoney(n(cpf?.employeeTotal), cur),
-      cpf_employer: fmtMoney(n(cpf?.employerTotal), cur),
-      cpf_total: fmtMoney(n(cpf?.employeeTotal) + n(cpf?.employerTotal), cur),
-      sdl: fmtMoney(n(scheme('SDL')?.employerTotal), cur),
-      shg_name: shg ? (shg.schemeName || shg.schemeCode) : '',
-      shg_amount: shg ? fmtMoney(n(shg.employeeTotal), cur) : '',
-      paid_on_behalf: onBehalf.map(s => `${s.schemeName || s.schemeCode} ${fmtMoney(s.employeeTotal, cur)}`).join(' · '),
-    };
-    const lists: ListValues = {
-      earnings: (slip.earnings_json || []).map(line),
-      deductions: (slip.deductions_json || []).map(line),
-      employer: (slip.employer_json || []).map(line),
-      statutory: stat.filter(s => n(s.employeeTotal) > 0 || n(s.employerTotal) > 0).map(s => ({
-        name: s.schemeName || s.schemeCode,
-        employee: fmtMoney(n(s.employeeTotal), cur),
-        employer: fmtMoney(n(s.employerTotal), cur),
-        total: fmtMoney(n(s.employeeTotal) + n(s.employerTotal), cur),
-      })),
-    };
-    return (
-      <div id="payslip-print" style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
-        <GridDocument template={layout} fields={fields} lists={lists} logo={branding?.logo_data_uri} />
-      </div>
-    );
-  }
-
-  return (
-    <div id="payslip-print" style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
-      <DocumentShell
-        branding={branding} companyName={company?.name || ''} forPrint
-        title="PAYSLIP"
-        meta={<>{period && dayjs(`${period.period_year}-${period.period_month}-01`).format('MMMM YYYY')}<br />Pay date {period?.pay_date}</>}
-        showLogo={t?.showLogo ?? true} showCompanyBlock={t?.showCompanyBlock ?? true}
-        footerNote={t?.footerNote}
-      >
-        <table style={{ width: '100%', fontSize: 13, color: '#111', borderCollapse: 'collapse' }}>
-          <tbody>
-            <tr><td style={{ color: '#666' }}>Employee</td><td style={{ textAlign: 'right' }}>{slip.employee_name}{(t?.showEmployeeId ?? true) && slip.employee_code ? ` · ${slip.employee_code}` : ''}</td></tr>
-            {(t?.showDesignation ?? true) && designation && <tr><td style={{ color: '#666' }}>Designation</td><td style={{ textAlign: 'right' }}>{designation}</td></tr>}
-            {t?.showNationalId && idMasked && <tr><td style={{ color: '#666' }}>NRIC / ID no.</td><td style={{ textAlign: 'right' }}>{t?.nationalIdFull ? idFull : idMasked}</td></tr>}
-            {t?.showBankAccount && bankMasked && <tr><td style={{ color: '#666' }}>Bank account</td><td style={{ textAlign: 'right' }}>{[bankName, (t?.bankAccountFull && bankFull) || bankMasked].filter(Boolean).join(' ')}</td></tr>}
-
-            <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Earnings</td></tr>
-            {slip.earnings_json.map((e, i) => (
-              <tr key={i}><td style={{ padding: '2px 0' }}>{e.label || componentLabel(e.componentCode)}</td><td style={{ textAlign: 'right' }}>{money(e.amount, cur)}</td></tr>
-            ))}
-            <tr><td style={{ borderTop: '1px solid #e2e2e2' }}>Gross Pay</td><td style={{ textAlign: 'right', borderTop: '1px solid #e2e2e2' }}>{money(slip.gross_pay, cur)}</td></tr>
-
-            <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Deductions</td></tr>
-            {slip.deductions_json.map((d, i) => (
-              <tr key={i}><td style={{ padding: '2px 0' }}>{d.label || componentLabel(d.componentCode)}</td><td style={{ textAlign: 'right' }}>-{money(d.amount, cur)}</td></tr>
-            ))}
-            {slip.deductions_json.length === 0 && <tr><td colSpan={2} style={{ color: '#999' }}>None</td></tr>}
-            <tr><td style={{ borderTop: '1px solid #e2e2e2', fontWeight: 700 }}>Net Pay</td><td style={{ textAlign: 'right', borderTop: '1px solid #e2e2e2', fontWeight: 700, color: branding?.accent_color || '#0369a1' }}>{money(slip.net_pay, cur)}</td></tr>
-          </tbody>
-        </table>
-
-        {stat.some(s => s.absorbedByEmployer && s.employeeTotal > 0) && (
-          <div style={{ marginTop: 10, fontSize: 12, color: '#15803d' }}>
-            Paid by the company on your behalf: {stat.filter(s => s.absorbedByEmployer && s.employeeTotal > 0)
-              .map(s => `${s.schemeName || s.schemeCode} ${money(s.employeeTotal, cur)}`).join(' · ')}
-          </div>
-        )}
-        {stat.some(s => s.employerTotal > 0) && (
-          <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
-            Employer contributions: {stat.filter(s => s.employerTotal > 0).map(s => `${s.schemeName || s.schemeCode} ${money(s.employerTotal, cur)}`).join(' · ')}
-          </div>
-        )}
-      </DocumentShell>
-    </div>
-  );
-}
-
-function printPayslip(slip: PayslipRow) {
-  const el = document.getElementById('payslip-print');
-  if (!el) return;
-  const w = window.open('', '_blank', 'width=760,height=950');
-  if (!w) { message.error('Allow pop-ups to print'); return; }
-  w.document.write(`<html><head><title>Payslip — ${slip.employee_name}</title>
-    <style>@page{margin:16mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#fff}
-    table{width:100%;border-collapse:collapse}td{padding:3px 0}img{max-width:100%}</style>
-    </head><body>${el.innerHTML}</body></html>`);
-  w.document.close();
-  w.focus();
-  setTimeout(() => w.print(), 300);
 }
