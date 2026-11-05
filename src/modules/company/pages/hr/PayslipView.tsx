@@ -4,8 +4,8 @@ import dayjs from 'dayjs';
 import { componentLabel, maskId, type PayrollRunRow, type PayslipRow } from '../../../../services/payroll';
 import type { Branding } from '../../../../services/branding';
 import { DocumentShell } from '../../../../components/DocumentShell';
-import { GridDocument } from '../../../../components/GridDocument';
-import { companyFields, money as fmtMoney } from '../../../../data/documentLayouts';
+import { GridDocument, CellValue } from '../../../../components/GridDocument';
+import { companyFields, money as fmtMoney, plainAmount } from '../../../../data/documentLayouts';
 import { hrService, type Employee } from '../../../../services/hr';
 import type { FieldValues, ListValues } from '../../../../utils/gridTemplate';
 
@@ -83,7 +83,7 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
       sdl: M(n(scheme('SDL')?.employerTotal)),
       shg_name: shg ? (shg.schemeName || shg.schemeCode) : '',
       shg_amount: shg ? M(n(shg.employeeTotal)) : '',
-      paid_on_behalf: onBehalf.map(s => `${s.schemeName || s.schemeCode} ${M(s.employeeTotal)}`).join(' · '),
+      paid_on_behalf: onBehalf.map(s => `${s.schemeName || s.schemeCode} ${plainAmount(M(s.employeeTotal))}`).join(' · '),
     };
     const lists: ListValues = {
       earnings: (slip.earnings_json || []).map(line),
@@ -121,28 +121,28 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
 
             <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Earnings</td></tr>
             {slip.earnings_json.map((e, i) => (
-              <tr key={i}><td style={{ padding: '2px 0' }}>{e.label || componentLabel(e.componentCode)}</td><td style={{ textAlign: 'right' }}>{M(e.amount)}</td></tr>
+              <tr key={i}><td style={{ padding: '2px 0' }}>{e.label || componentLabel(e.componentCode)}</td><td style={{ textAlign: 'right' }}><CellValue text={M(e.amount)} /></td></tr>
             ))}
-            <tr><td style={{ borderTop: '1px solid #e2e2e2' }}>Gross Pay</td><td style={{ textAlign: 'right', borderTop: '1px solid #e2e2e2' }}>{M(slip.gross_pay)}</td></tr>
+            <tr><td style={{ borderTop: '1px solid #e2e2e2' }}>Gross Pay</td><td style={{ textAlign: 'right', borderTop: '1px solid #e2e2e2' }}><CellValue text={M(slip.gross_pay)} /></td></tr>
 
             <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Deductions</td></tr>
             {slip.deductions_json.map((d, i) => (
-              <tr key={i}><td style={{ padding: '2px 0' }}>{d.label || componentLabel(d.componentCode)}</td><td style={{ textAlign: 'right' }}>-{M(d.amount)}</td></tr>
+              <tr key={i}><td style={{ padding: '2px 0' }}>{d.label || componentLabel(d.componentCode)}</td><td style={{ textAlign: 'right' }}><CellValue text={M(-d.amount)} /></td></tr>
             ))}
             {slip.deductions_json.length === 0 && <tr><td colSpan={2} style={{ color: '#999' }}>None</td></tr>}
-            <tr><td style={{ borderTop: '1px solid #e2e2e2', fontWeight: 700 }}>Net Pay</td><td style={{ textAlign: 'right', borderTop: '1px solid #e2e2e2', fontWeight: 700, color: branding?.accent_color || '#0369a1' }}>{M(slip.net_pay)}</td></tr>
+            <tr><td style={{ borderTop: '1px solid #e2e2e2', fontWeight: 700 }}>Net Pay</td><td style={{ textAlign: 'right', borderTop: '1px solid #e2e2e2', fontWeight: 700, color: branding?.accent_color || '#0369a1' }}><CellValue text={M(slip.net_pay)} /></td></tr>
           </tbody>
         </table>
 
         {stat.some(s => s.absorbedByEmployer && s.employeeTotal > 0) && (
           <div style={{ marginTop: 10, fontSize: 12, color: '#15803d' }}>
             Paid by the company on your behalf: {stat.filter(s => s.absorbedByEmployer && s.employeeTotal > 0)
-              .map(s => `${s.schemeName || s.schemeCode} ${M(s.employeeTotal)}`).join(' · ')}
+              .map(s => `${s.schemeName || s.schemeCode} ${plainAmount(M(s.employeeTotal))}`).join(' · ')}
           </div>
         )}
         {stat.some(s => s.employerTotal > 0) && (
           <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
-            Employer contributions: {stat.filter(s => s.employerTotal > 0).map(s => `${s.schemeName || s.schemeCode} ${M(s.employerTotal)}`).join(' · ')}
+            Employer contributions: {stat.filter(s => s.employerTotal > 0).map(s => `${s.schemeName || s.schemeCode} ${plainAmount(M(s.employerTotal))}`).join(' · ')}
           </div>
         )}
       </DocumentShell>

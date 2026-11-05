@@ -41,6 +41,17 @@ export function LogoImg({ src, cell, height }: { src: string; cell: GridCell; he
   );
 }
 
+/** Text with an accounting amount ("$<tab>1,234.50") shows the symbol at the left and the number at the right. */
+export function CellValue({ text }: { text: string }) {
+  const i = text.indexOf('\t');
+  if (i < 0) return <>{text}</>;
+  return (
+    <span style={{ display: 'flex', justifyContent: 'space-between', gap: 6, width: '100%' }}>
+      <span>{text.slice(0, i)}</span><span style={{ textAlign: 'right' }}>{text.slice(i + 1).replace(/\t/g, ' ')}</span>
+    </span>
+  );
+}
+
 /**
  * Prints a spreadsheet-style layout with real data filled in. Inline styles
  * only, so it survives being copied into the print / save-as-PDF window.
@@ -60,7 +71,7 @@ export function GridDocument({ template, fields, lists, logo }: {
               <td key={oc.c} rowSpan={oc.rowSpan} colSpan={oc.colSpan} style={cellStyle(oc.cell)}>
                 {isLogoCell(oc.cell.v)
                   ? (logo ? <LogoImg src={logo} cell={oc.cell} height={spanHeight(template, oc.r, oc.cell.rs || 1)} /> : null)
-                  : oc.text}
+                  : <CellValue text={oc.text} />}
               </td>
             ))}
           </tr>

@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { Card, Descriptions, Typography, Spin, Tabs, Form, Input, InputNumber, Button, Upload, message, Switch, Space, ColorPicker, Segmented, Alert, Tag, Tooltip, Select } from 'antd';
-import { UploadOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
+import { UploadOutlined, DeleteOutlined, SaveOutlined, PlusOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { brandingService, fileToLogoDataUri, DEFAULT_TEMPLATES, type Branding } from '../../../services/branding';
 import { DocumentShell } from '../../../components/DocumentShell';
 import { GridTemplateEditor } from '../../../components/GridTemplateEditor';
-import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, type DocKind } from '../../../data/documentLayouts';
+import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, DEFAULT_PAYMENT_LABELS, type DocKind } from '../../../data/documentLayouts';
+import { CellValue } from '../../../components/GridDocument';
 import type { GridTemplate } from '../../../utils/gridTemplate';
 import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME } from '../../../utils/payslipFiles';
 
@@ -136,7 +137,7 @@ export function CompanyProfilePage() {
   const row = (a: ReactNode, b: ReactNode, opts: { bold?: boolean; line?: boolean; muted?: boolean } = {}) => (
     <tr>
       <td style={{ color: opts.muted ? '#666' : undefined, fontWeight: opts.bold ? 700 : 400, borderTop: opts.line ? '1px solid #e2e2e2' : undefined, padding: '2px 0' }}>{a}</td>
-      <td style={{ textAlign: 'right', fontWeight: opts.bold ? 700 : 400, borderTop: opts.line ? '1px solid #e2e2e2' : undefined }}>{b}</td>
+      <td style={{ textAlign: 'right', fontWeight: opts.bold ? 700 : 400, borderTop: opts.line ? '1px solid #e2e2e2' : undefined }}>{typeof b === 'string' ? <CellValue text={b} /> : b}</td>
     </tr>
   );
 
@@ -182,7 +183,7 @@ export function CompanyProfilePage() {
             {row('Transport allowance', money(200, cur, tpl.payslip.amountFormat))}
             {row('Gross Pay', money(9200, cur, tpl.payslip.amountFormat), { line: true })}
             <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Deductions</td></tr>
-            {row('CPF (Employee)', `-${money(1600, cur, tpl.payslip.amountFormat)}`)}
+            {row('CPF (Employee)', money(-1600, cur, tpl.payslip.amountFormat))}
             {row('Net Pay', money(7600, cur, tpl.payslip.amountFormat), { bold: true, line: true })}
           </tbody>
         </table>
@@ -196,9 +197,9 @@ export function CompanyProfilePage() {
       <Space wrap>
         <Select style={{ width: 300 }} value={tpl[kind].amountFormat || 'code'}
           onChange={x => setTplField(kind, 'amountFormat', x)}
-          options={AMOUNT_FORMATS.map(f => ({ value: f.value, label: f.label.replace(/ — .*$/, '') + ' — ' + money(1234.5, cur, f.value) }))} />
+          options={AMOUNT_FORMATS.map(f => ({ value: f.value, label: f.value.startsWith('accounting') ? f.label.replace('$', f.value === 'accounting_code' ? cur : money(0, cur, 'symbol').replace(/[0-9.,]/g, '')) : f.label.replace(/ — .*$/, '') + ' — ' + money(1234.5, cur, f.value) }))} />
         <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
-          How amounts appear on {kind === 'payslip' ? 'payslips' : 'invoices'}, e.g. {money(1234.5, cur, tpl[kind].amountFormat)}
+          How amounts appear on {kind === 'payslip' ? 'payslips' : 'invoices'}, e.g. {plainAmount(money(1234.5, cur, tpl[kind].amountFormat))}
         </Text>
       </Space>
     </Card>
@@ -234,14 +235,32 @@ export function CompanyProfilePage() {
     </Card>
   );
 
+  const payRows = tpl.invoice.paymentDetails?.length
+    ? tpl.invoice.paymentDetails
+    : DEFAULT_PAYMENT_LABELS.map(label => ({ label, value: '' }));
+  const setPayRow = (i: number, patch: Partial<{ label: string; value: string }>) =>
+    setTplField('invoice', 'paymentDetails', payRows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+
   const invoiceSettings = (
     <Form layout="vertical" component={false}>
       <Form.Item label="Default payment terms (days)" style={{ marginTop: 8 }}>
         <InputNumber min={0} value={tpl.invoice.paymentTermsDays} onChange={x => setTplField('invoice', 'paymentTermsDays', x ?? 30)} />
       </Form.Item>
-      <Form.Item label="Bank / payment details">
-        <Input.TextArea rows={2} value={tpl.invoice.bankDetails} onChange={e => setTplField('invoice', 'bankDetails', e.target.value)} />
+      <Form.Item label="Payment details" extra="Label on the left, detail on the right. Lines left empty are not printed.">
+        {payRows.map((r, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+            <Input style={{ width: 170 }} value={r.label} placeholder="Label, e.g. Bank:" onChange={e => setPayRow(i, { label: e.target.value })} />
+            <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} style={{ flex: 1 }} value={r.value} placeholder="e.g. DBS Bank" onChange={e => setPayRow(i, { value: e.target.value })} />
+            <Button icon={<DeleteOutlined />} onClick={() => setTplField('invoice', 'paymentDetails', payRows.filter((_, j) => j !== i))} />
+          </div>
+        ))}
+        <Button size="small" icon={<PlusOutlined />} onClick={() => setTplField('invoice', 'paymentDetails', [...payRows, { label: '', value: '' }])}>Add a line</Button>
       </Form.Item>
+      {(tpl.invoice.bankDetails || '').trim() && (
+        <Form.Item label="Older payment details (free text)" extra="Used only while the lines above are empty.">
+          <Input.TextArea rows={2} value={tpl.invoice.bankDetails} onChange={e => setTplField('invoice', 'bankDetails', e.target.value)} />
+        </Form.Item>
+      )}
       <Form.Item label="Invoice footer note">
         <Input.TextArea rows={2} value={tpl.invoice.footerNote} onChange={e => setTplField('invoice', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Profile" />
       </Form.Item>
@@ -268,7 +287,16 @@ export function CompanyProfilePage() {
             {row('Total', money(3000, cur, tpl.invoice.amountFormat), { bold: true, line: true })}
           </tbody>
         </table>
-        {tpl.invoice.bankDetails && <div style={{ fontSize: 12, color: '#444', marginTop: 10, whiteSpace: 'pre-line' }}><b>Payment details</b><br />{tpl.invoice.bankDetails}</div>}
+        {paymentRows(tpl.invoice).length > 0 ? (
+          <div style={{ fontSize: 12, color: '#444', marginTop: 10 }}>
+            <b>Payment details</b>
+            <table style={{ borderCollapse: 'collapse', marginTop: 4 }}><tbody>
+              {paymentRows(tpl.invoice).map((r, i) => (
+                <tr key={i}><td style={{ paddingRight: 24, verticalAlign: 'top', whiteSpace: 'nowrap' }}>{r.label}</td><td style={{ whiteSpace: 'pre-line' }}>{r.value}</td></tr>
+              ))}
+            </tbody></table>
+          </div>
+        ) : tpl.invoice.bankDetails && <div style={{ fontSize: 12, color: '#444', marginTop: 10, whiteSpace: 'pre-line' }}><b>Payment details</b><br />{tpl.invoice.bankDetails}</div>}
       </DocumentShell>
     )),
   );
@@ -344,8 +372,8 @@ export function CompanyProfilePage() {
           {
             key: 'invoice-template', label: 'Invoice Template',
             children: templateTab('invoice', 'Invoices', tpl.invoice.layout?.enabled ? null : invoicePrebuilt,
-              'The Invoices screen isn’t built yet. You can set up the template now; it will be used once invoicing is added.',
-              <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 640 }} title={<span style={{ color: '#f0ede6' }}>Invoice settings (used by the {'{{payment_terms}}'}, {'{{bank_details}}'} and {'{{footer_note}}'} fields)</span>}>
+              'Good to know: the screen for creating invoices hasn’t been built yet. Your saved template is kept and will be used automatically once invoicing is added.',
+              <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>Invoice settings — payment terms, payment details ({'{{payment.label}}'} / {'{{payment.value}}'}) and footer</span>}>
                 {invoiceSettings}
               </Card>,
               amountFormatCard('invoice')),

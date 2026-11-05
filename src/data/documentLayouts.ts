@@ -97,6 +97,12 @@ export const DOC_LISTS: Record<DocKind, ListDef[]> = {
       ],
     },
     {
+      name: 'payment', label: 'Payment details', fields: [
+        { name: 'payment.label', label: 'Payment detail label' },
+        { name: 'payment.value', label: 'Payment detail value' },
+      ],
+    },
+    {
       name: 'discounts', label: 'Discounts', fields: [
         { name: 'discounts.name', label: 'Discount name' },
         { name: 'discounts.amount', label: 'Discount amount' },
@@ -177,7 +183,7 @@ export const STARTER_LAYOUTS: Record<DocKind, () => GridTemplate> = {
     { h: 30, cells: [[3, { v: 'TOTAL', b: true, fs: 14, al: 'right', bt: true, va: 'middle' }], [4, { v: '{{total}}', b: true, fs: 14, al: 'right', bt: true, va: 'middle' }]] },
     { h: 14 },
     { cells: [[0, label('Payment details', { cs: 5 })]] },
-    { h: 36, cells: [[0, { v: '{{bank_details}}', cs: 5, fs: 11 }]] },
+    { repeat: 'auto', cells: [[0, { v: '{{payment.label}}', cs: 2, fs: 11 }], [2, { v: '{{payment.value}}', cs: 3, fs: 11 }]] },
     { h: 14 },
     { cells: [[0, { v: '{{footer_note}}', cs: 5, fs: 10, c: GREY }]] },
   ]),
@@ -185,7 +191,12 @@ export const STARTER_LAYOUTS: Record<DocKind, () => GridTemplate> = {
 
 // ---- filling in -------------------------------------------------------------
 
-export type AmountFormat = 'code' | 'symbol' | 'symbol_space' | 'code_after' | 'number';
+export type AmountFormat = 'code' | 'symbol' | 'symbol_space' | 'code_after' | 'number' | 'accounting_symbol' | 'accounting_code';
+
+/** In accounting formats the symbol and the number are split by a tab; documents show the symbol at the
+ *  left edge of the cell and the number at the right edge. Use plainAmount() wherever it is plain text. */
+export const AMOUNT_SPLIT = '\t';
+export const plainAmount = (s: string) => s.replace(/\t/g, ' ');
 
 export const AMOUNT_FORMATS: { value: AmountFormat; label: string }[] = [
   { value: 'code', label: 'Currency code — SGD 1,234.50' },
@@ -193,6 +204,8 @@ export const AMOUNT_FORMATS: { value: AmountFormat; label: string }[] = [
   { value: 'symbol_space', label: 'Symbol with space — $ 1,234.50' },
   { value: 'code_after', label: 'Code after — 1,234.50 SGD' },
   { value: 'number', label: 'Number only — 1,234.50' },
+  { value: 'accounting_symbol', label: 'Accounting — $ at the left of the cell, amount at the right' },
+  { value: 'accounting_code', label: 'Accounting — SGD at the left of the cell, amount at the right' },
 ];
 
 /** "$" for SGD/USD, "€", "£", "RM"… (falls back to the code). */
@@ -214,6 +227,8 @@ export function money(n: number, c = 'SGD', format: AmountFormat | string | null
     case 'symbol_space': return `${sign}${currencySymbol(c)} ${num}`;
     case 'code_after': return `${sign}${num} ${c}`;
     case 'number': return `${sign}${num}`;
+    case 'accounting_symbol': return `${sign}${currencySymbol(c)}${AMOUNT_SPLIT}${num}`;
+    case 'accounting_code': return `${sign}${c}${AMOUNT_SPLIT}${num}`;
     default: return `${sign}${c} ${num}`;
   }
 }
@@ -267,7 +282,7 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
       customer_contact: 'Mr John Lee', customer_phone: '+65 6123 4567', customer_email: 'accounts@acme.example', customer_website: 'www.acme.example',
       subtotal: m(3000), total_discount: m(300), subtotal_after_discount: m(2700),
       tax: m(243), total: m(2943),
-      bank_details: branding?.templates?.invoice?.bankDetails || '',
+      bank_details: bankDetailsText(branding?.templates?.invoice),
     },
     lists: {
       lines: [
@@ -275,8 +290,28 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
         { no: '2', description: 'Travel', qty: '1', unit_price: m(500), discount: '', amount: m(500) },
       ],
       discounts: [{ name: 'Loyalty discount (10%)', amount: m(300) }],
+      payment: paymentRows(branding?.templates?.invoice, true),
     },
   };
+}
+
+export const DEFAULT_PAYMENT_LABELS = ['Account Name:', 'Bank:', 'Account No:', 'Bank Code:', 'Branch Code:', 'S.W.I.F.T Code:', 'Branch Address:'];
+
+const EXAMPLE_PAYMENT = [
+  { label: 'Account Name:', value: 'Your Company Pte Ltd' }, { label: 'Bank:', value: 'DBS Bank' },
+  { label: 'Account No:', value: '012-345678-9' }, { label: 'S.W.I.F.T Code:', value: 'DBSSSGSG' },
+];
+
+/** The payment detail lines that have a value (the example set when none are filled in and `example` is on). */
+export function paymentRows(inv: any, example = false): { label: string; value: string }[] {
+  const rows = ((inv?.paymentDetails || []) as { label: string; value: string }[]).filter(r => (r.value || '').trim());
+  return rows.length ? rows : (example && !(inv?.bankDetails || '').trim() ? EXAMPLE_PAYMENT : []);
+}
+
+/** {{bank_details}} as text: the payment detail lines, or the older free-text box. */
+export function bankDetailsText(inv: any): string {
+  const rows = paymentRows(inv);
+  return rows.length ? rows.map(r => `${r.label} ${r.value}`).join('\n') : (inv?.bankDetails || '');
 }
 
 /** Short, friendly name for a {{field}}, shown on the chips in the designer. */
@@ -303,5 +338,6 @@ export const LIST_EXAMPLES: Record<string, string> = {
   employer: 'CPF (Employer), SDL…',
   statutory: 'CPF, SDL, CDAC… (one line per scheme, with the employee and employer share)',
   lines: 'Whatever is typed on each invoice line, e.g. Consulting services',
+  payment: 'Account Name, Bank, Account No… — the lines you fill in under Invoice settings; put the label in one cell and the value in the next',
   discounts: 'e.g. Loyalty discount (10%), Early payment discount — one line per discount; nothing is printed when there is none',
 };

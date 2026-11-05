@@ -32,3 +32,20 @@ describe('amount formats', () => {
     expect(money(10, 'EUR', 'symbol')).toBe('€10.00');
   });
 });
+
+describe('accounting amounts and payment details', () => {
+  it('splits symbol and number for accounting formats', async () => {
+    const { money, plainAmount } = await import('../../data/documentLayouts');
+    expect(money(1234.5, 'SGD', 'accounting_symbol')).toBe('$\t1,234.50');
+    expect(money(-5, 'SGD', 'accounting_code')).toBe('-SGD\t5.00');
+    expect(plainAmount(money(1, 'SGD', 'accounting_symbol'))).toBe('$ 1.00');
+  });
+  it('payment detail lines', async () => {
+    const { paymentRows, bankDetailsText } = await import('../../data/documentLayouts');
+    const inv = { paymentDetails: [{ label: 'Bank:', value: 'DBS Bank' }, { label: 'Branch Code:', value: '' }] };
+    expect(paymentRows(inv)).toEqual([{ label: 'Bank:', value: 'DBS Bank' }]);
+    expect(bankDetailsText(inv)).toBe('Bank: DBS Bank');
+    expect(bankDetailsText({ bankDetails: 'old text' })).toBe('old text');
+    expect(paymentRows({}, true).length).toBeGreaterThan(0);
+  });
+});
