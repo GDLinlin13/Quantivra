@@ -127,6 +127,8 @@ export interface Account {
   id: number; company_id: number; code: string; name: string; type: AccountType; subtype: string | null;
   description?: string | null; is_system: boolean; archived: boolean;
   bank_name?: string | null; bank_account_no?: string | null; opening_balance?: number; opening_date?: string | null;
+  /** Bank accounts in another currency: the currency and the opening balance in it (opening_balance stays in the company currency). */
+  currency?: string | null; opening_foreign?: number | null;
 }
 
 export const ACCOUNT_TYPE_LABEL: Record<AccountType, string> = {

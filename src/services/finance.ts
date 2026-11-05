@@ -82,6 +82,7 @@ export const accountService = {
       company_id: companyId, code: (a.code || '').trim(), name: (a.name || '').trim(), type: a.type, subtype: a.subtype || null,
       description: a.description || null, archived: !!a.archived, bank_name: a.bank_name || null, bank_account_no: a.bank_account_no || null,
       opening_balance: Number(a.opening_balance) || 0, opening_date: a.opening_date || null,
+      ...(a.currency !== undefined ? { currency: a.currency || null, opening_foreign: a.currency ? (Number(a.opening_foreign) || 0) : null } : {}),
     };
     if (!row.code || !row.name || !row.type) throw new Error('Code, name and type are needed');
     if (a.id) { must(await supabase.from('fin_accounts').update(row).eq('id', a.id)); return a.id; }
@@ -178,6 +179,8 @@ export const docService = {
 export interface Payment {
   id: number; company_id: number; direction: 'in' | 'out'; number: string | null; contact_id: number | null;
   payment_date: string; amount: number; method: string | null; reference: string | null; account_id: number | null; notes: string | null;
+  /** set when the money went through a bank account in another currency */
+  currency?: string | null; foreign_amount?: number | null;
 }
 export interface Allocation { id?: number; payment_id?: number; document_id: number; amount: number }
 
@@ -203,6 +206,7 @@ export const paymentService = {
       company_id: companyId, direction: p.direction, number, contact_id: p.contact_id || null,
       payment_date: p.payment_date || new Date().toISOString().slice(0, 10), amount: Math.round(p.amount * 100) / 100,
       method: p.method || null, reference: p.reference || null, account_id: p.account_id || null, notes: p.notes || null,
+      ...(p.currency ? { currency: p.currency, foreign_amount: p.foreign_amount ?? null } : {}),
     }).select('id').single()).id;
     const rows = allocations.filter(a => a.amount > 0).map(a => ({ company_id: companyId, payment_id: id, document_id: a.document_id, amount: Math.round(a.amount * 100) / 100 }));
     if (rows.length) must(await supabase.from('fin_payment_allocations').insert(rows));
@@ -277,6 +281,8 @@ export async function loadLedgerInput(companyId: number) {
 export interface BankTxn {
   id: number; company_id: number; account_id: number; txn_date: string; description: string | null; amount: number;
   payment_id: number | null; journal_id: number | null; status: 'unmatched' | 'matched' | 'ignored';
+  /** the line in the company's currency, for bank accounts in another currency */
+  base_amount?: number | null;
 }
 
 export const bankService = {
@@ -294,15 +300,18 @@ export const bankService = {
   async update(id: number, patch: Partial<BankTxn>) { must(await supabase.from('fin_bank_transactions').update(patch).eq('id', id)); },
   async remove(id: number) { must(await supabase.from('fin_bank_transactions').delete().eq('id', id)); },
   /** Match a statement line to a payment that's already recorded. */
-  async matchPayment(txnId: number, paymentId: number) { await this.update(txnId, { payment_id: paymentId, journal_id: null, status: 'matched' }); },
+  async matchPayment(txnId: number, paymentId: number, baseAmount?: number) {
+    await this.update(txnId, { payment_id: paymentId, journal_id: null, status: 'matched', ...(baseAmount != null ? { base_amount: baseAmount } : {}) });
+  },
   /** Money in / out that isn't an invoice or bill: book it straight to an account (e.g. bank charges, interest). */
-  async categorise(companyId: number, txn: BankTxn, accountId: number, memo: string) {
-    const amt = Math.abs(Number(txn.amount));
+  async categorise(companyId: number, txn: BankTxn, accountId: number, memo: string, baseAmount?: number) {
+    // books are in the company's currency: a foreign-currency line uses its converted amount
+    const amt = Math.abs(baseAmount != null ? baseAmount : Number(txn.amount));
     const lines = txn.amount > 0
       ? [{ account_id: txn.account_id, debit: amt, credit: 0, description: memo }, { account_id: accountId, debit: 0, credit: amt, description: memo }]
       : [{ account_id: accountId, debit: amt, credit: 0, description: memo }, { account_id: txn.account_id, debit: 0, credit: amt, description: memo }];
     const jid = await journalService.save(companyId, { journal_date: txn.txn_date, memo: memo || txn.description || 'Bank' }, lines);
-    await this.update(txn.id, { journal_id: jid, payment_id: null, status: 'matched' });
+    await this.update(txn.id, { journal_id: jid, payment_id: null, status: 'matched', ...(baseAmount != null ? { base_amount: Math.sign(Number(txn.amount)) * amt } : {}) });
   },
   async unmatch(txn: BankTxn, deleteJournal: boolean) {
     if (deleteJournal && txn.journal_id) await journalService.remove(txn.journal_id);
