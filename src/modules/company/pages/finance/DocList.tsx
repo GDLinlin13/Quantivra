@@ -19,6 +19,7 @@ const { Text } = Typography;
 export interface FinanceData {
   companyId: number; company: any; currency: string; branding: Branding | null; settings: FinanceSettings;
   contacts: Contact[]; people: ContactPerson[]; accounts: Account[]; docs: FinDocument[];
+  employees: { id: number; full_name: string }[];
   reload: () => void;
 }
 
@@ -28,7 +29,7 @@ const safeName = (s: string) => s.replace(/[\\/:*?"<>|]/g, '-');
 export function DocList({ data, docType }: { data: FinanceData; docType: DocType }) {
   const { companyId, currency, contacts, people, accounts, settings, branding, company, docs, reload } = data;
   const sales = docType === 'quote' || docType === 'invoice' || docType === 'credit_note';
-  const payable = docType === 'invoice' || docType === 'bill';
+  const payable = docType === 'invoice' || docType === 'bill' || docType === 'expense';
   const [filter, setFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<{ id: number | null } | null>(null);
@@ -78,7 +79,7 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
     <div>
       {payable && (
         <Space size={24} style={{ marginBottom: 12 }} wrap>
-          <Card size="small" style={{ minWidth: 200 }}><Statistic title={sales ? 'Customers owe' : 'We owe suppliers'} value={money(outstanding, currency)} /></Card>
+          <Card size="small" style={{ minWidth: 200 }}><Statistic title={sales ? 'Customers owe' : docType === 'expense' ? 'Expenses not yet paid' : 'We owe suppliers'} value={money(outstanding, currency)} /></Card>
           <Card size="small" style={{ minWidth: 200 }}><Statistic title="Overdue" value={money(overdue, currency)} styles={{ content: { color: overdue > 0 ? '#ff7875' : undefined } }} /></Card>
         </Space>
       )}
@@ -95,7 +96,8 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
         columns={[
           { title: 'Number', dataIndex: 'number', render: (v: string, d) => <a onClick={() => setEditing({ id: d.id })}>{v}</a> },
           { title: 'Date', dataIndex: 'issue_date', sorter: (a, b) => a.issue_date.localeCompare(b.issue_date) },
-          { title: sales ? 'Customer' : 'Supplier', key: 'c', render: (_, d) => contactName(d.contact_id) },
+          { title: sales ? 'Customer' : docType === 'expense' ? 'Paid to' : 'Supplier', key: 'c', render: (_, d) => contactName(d.contact_id) },
+          ...(docType === 'expense' ? [{ title: 'Claimed by', key: 'e', render: (_: any, d: FinDocument) => data.employees.find(e => e.id === d.employee_id)?.full_name || '—' }] : []),
           ...(docType !== 'expense' ? [{ title: docType === 'quote' ? 'Valid until' : 'Due', key: 'due', render: (_: any, d: FinDocument) => d.due_date ? <span style={{ color: isOverdue(d) ? '#ff7875' : undefined }}>{d.due_date}</span> : '—' }] : []),
           { title: 'Total', key: 't', align: 'right' as const, render: (_, d) => money(d.total, d.currency), sorter: (a, b) => a.total - b.total },
           ...(payable ? [{ title: 'Balance', key: 'b', align: 'right' as const, render: (_: any, d: FinDocument) => d.status === 'void' ? '—' : money(balanceDue(d), d.currency) }] : []),
@@ -138,7 +140,7 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
         ]} />
 
       {editing && (
-        <DocEditor companyId={companyId} docType={docType} docId={editing.id} contacts={contacts} people={people} accounts={accounts}
+        <DocEditor companyId={companyId} docType={docType} docId={editing.id} contacts={contacts} people={people} accounts={accounts} employees={data.employees}
           settings={settings} branding={branding} currency={currency}
           onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />
       )}

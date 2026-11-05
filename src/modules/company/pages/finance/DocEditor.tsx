@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Table, Divider, Typography, message, Switch, Popconfirm, Alert, Tag } from 'antd';
 import { PlusOutlined, DeleteOutlined, HolderOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { docService } from '../../../../services/finance';
+import { docService, paymentService } from '../../../../services/finance';
 import {
   docTotals, addDays, today, DOC_LABEL, STATUS_LABEL, STATUS_COLOR,
   type DocType, type FinDocument, type DocLine, type DocDiscount, type Contact, type ContactPerson, type FinanceSettings, type Account,
@@ -15,9 +15,10 @@ const { Text } = Typography;
 const blankLine = (rate: number): DocLine => ({ description: '', quantity: 1, unit_price: 0, discount_pct: 0, tax_rate: rate });
 
 /** Create or edit a quotation, invoice, credit note, bill or expense. */
-export function DocEditor({ companyId, docType, docId, contacts, people, accounts, settings, branding, currency, onClose, onSaved }: {
+export function DocEditor({ companyId, docType, docId, contacts, people, accounts, settings, branding, currency, employees = [], onClose, onSaved }: {
   companyId: number; docType: DocType; docId?: number | null;
   contacts: Contact[]; people: ContactPerson[]; accounts: Account[]; settings: FinanceSettings; branding: Branding | null; currency: string;
+  employees?: { id: number; full_name: string }[];
   onClose: () => void; onSaved: (id: number) => void;
 }) {
   const sales = docType === 'quote' || docType === 'invoice' || docType === 'credit_note';
@@ -67,6 +68,17 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
     setSaving(true);
     try {
       const id = await docService.save(companyId, { ...doc, doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines);
+      // An expense paid on the spot (from a bank / cash account) is recorded as paid straight away.
+      if (docType === 'expense' && doc.paid_from_account_id && (status === 'approved' || doc.status === 'approved')) {
+        const { doc: fresh } = await docService.get(id);
+        const owed = Math.round(((Number(fresh.total) || 0) - (Number(fresh.amount_paid) || 0)) * 100) / 100;
+        if (owed > 0) {
+          await paymentService.record(companyId, {
+            direction: 'out', amount: owed, contact_id: fresh.contact_id, payment_date: fresh.issue_date,
+            method: 'Paid on the spot', account_id: doc.paid_from_account_id,
+          }, [{ document_id: id, amount: owed }]);
+        }
+      }
       message.success(`${DOC_LABEL[docType]} saved`);
       onSaved(id);
     } catch (e: any) { message.error(e.message); }
@@ -160,6 +172,12 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
               <Form.Item label="Payment details to show">
                 <Select value={doc.payment_account_index ?? banks.findIndex(b => b.isDefault)} onChange={v => set({ payment_account_index: v })}
                   options={banks.map((b, i) => ({ value: i, label: b.title || `Bank ${i + 1}` }))} />
+              </Form.Item>
+            )}
+            {docType === 'expense' && (
+              <Form.Item label="Claimed by (staff member who paid)">
+                <Select allowClear showSearch optionFilterProp="label" value={doc.employee_id ?? undefined} onChange={v => set({ employee_id: v ?? null })}
+                  options={employees.map(e => ({ value: e.id, label: e.full_name }))} placeholder="Nobody — the company paid" />
               </Form.Item>
             )}
             <Form.Item label="Notes"><Input.TextArea autoSize={{ minRows: 2, maxRows: 6 }} value={doc.notes || ''} onChange={e => set({ notes: e.target.value })} /></Form.Item>
