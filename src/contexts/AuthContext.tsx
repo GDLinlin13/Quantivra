@@ -12,6 +12,9 @@ interface AuthState {
   login: (username: string, password: string, type: 'platform' | 'company', remember?: boolean, companyCode?: string) => Promise<void>;
   logout: () => void;
   loading: boolean;
+  /** true after signing in with a temporary password, until a new one is set */
+  mustChangePassword: boolean;
+  setFirstPassword: (newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -21,11 +24,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [type, setType] = useState<'platform' | 'company' | null>(null);
   const [companyId, setCompanyId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   const apply = (session: Session | null) => {
     setUser(session?.user ?? null);
     setType(session?.type ?? null);
     setCompanyId(session?.companyId ?? null);
+    setMustChangePassword(!!session?.mustChangePassword);
+  };
+
+  const setFirstPassword = async (newPassword: string) => {
+    await authService.setFirstPassword(newPassword);
+    setMustChangePassword(false);
   };
 
   useEffect(() => {
@@ -67,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user, type, companyId,
       isAuthenticated: !!user,
       isPlatformAdmin: type === 'platform',
-      login, logout, loading,
+      login, logout, loading, mustChangePassword, setFirstPassword,
     }}>
       {children}
     </AuthContext.Provider>

@@ -12,6 +12,8 @@ export interface Session {
   user: User;
   authUserId: string;
   companyId?: number;
+  /** signed in with a temporary password: must choose a new one first */
+  mustChangePassword?: boolean;
 }
 
 function saveSession(session: Session, remember: boolean) {
@@ -56,7 +58,9 @@ function signInMessage(error: { message?: string; status?: number; code?: string
   return msg ? `Sign-in failed: ${msg}` : INVALID;
 }
 
-async function signIn(email: string, password: string, remember: boolean): Promise<string> {
+const mustChange = (u: { user_metadata?: Record<string, any> } | null | undefined) => u?.user_metadata?.must_change_password === true;
+
+async function signIn(email: string, password: string, remember: boolean): Promise<{ id: string; mustChangePassword: boolean }> {
   setRememberMe(remember);
   let result;
   try {
@@ -65,7 +69,7 @@ async function signIn(email: string, password: string, remember: boolean): Promi
     throw new Error(signInMessage({ message: e?.message || 'network error', status: 0 }));
   }
   if (result.error || !result.data.user) throw new Error(signInMessage(result.error));
-  return result.data.user.id;
+  return { id: result.data.user.id, mustChangePassword: mustChange(result.data.user) };
 }
 
 /** Password was right, but this login has no access here: sign out and explain. */
@@ -76,7 +80,7 @@ async function rejectAccess(reason: string, error?: { message?: string } | null)
 
 export const authService = {
   async loginPlatform(identifier: string, password: string, remember = false): Promise<Session> {
-    const authUserId = await signIn(toEmail(identifier), password, remember);
+    const { id: authUserId, mustChangePassword } = await signIn(toEmail(identifier), password, remember);
     const { data, error } = await supabase.rpc('app_sign_in_platform');
     const row = Array.isArray(data) ? data[0] : data;
     if (error) await rejectAccess('Signed in, but could not check platform access', error);
@@ -85,7 +89,7 @@ export const authService = {
       id: row.id, username: row.username, email: row.email, full_name: row.full_name,
       roles: ['super_admin'], is_super_admin: true, is_active: true, created_at: new Date().toISOString(),
     };
-    const session: Session = { type: 'platform', user, authUserId };
+    const session: Session = { type: 'platform', user, authUserId, mustChangePassword };
     saveSession(session, remember);
     return session;
   },
@@ -95,7 +99,7 @@ export const authService = {
     // Usernames map to the company's hidden login address; logins created
     // before usernames existed can still type their email.
     const email = identifier.includes('@') ? identifier : loginEmailFor(companyCode, identifier);
-    const authUserId = await signIn(email, password, remember);
+    const { id: authUserId, mustChangePassword } = await signIn(email, password, remember);
     const { data, error } = await supabase.rpc('app_sign_in_company', { p_company_code: companyCode });
     const row = Array.isArray(data) ? data[0] : data;
     if (error) await rejectAccess('Signed in, but could not check company access', error);
@@ -104,7 +108,7 @@ export const authService = {
       id: row.id, company_id: row.company_id, email: row.email || '', full_name: row.full_name,
       username: row.username || row.email, roles: [], is_super_admin: false, is_active: true, created_at: new Date().toISOString(),
     };
-    const session: Session = { type: 'company', user, authUserId, companyId: row.company_id };
+    const session: Session = { type: 'company', user, authUserId, companyId: row.company_id, mustChangePassword };
     saveSession(session, remember);
     return session;
   },
@@ -114,6 +118,7 @@ export const authService = {
     const stored = readSession();
     const { data } = await supabase.auth.getSession();
     let authUserId = data.session?.user?.id;
+    let liveUser: { user_metadata?: Record<string, any> } | null = null;
     if (authUserId) {
       // The stored sign-in may have expired (e.g. overnight). Ask Supabase to
       // confirm it; if it can't, sign out so the login page shows instead of
@@ -128,13 +133,14 @@ export const authService = {
         await supabase.auth.signOut().catch(() => {});
         return null;
       }
-      if (live.user) authUserId = live.user.id;
+      if (live.user) { authUserId = live.user.id; liveUser = live.user; }
     }
     if (!stored || !authUserId || stored.authUserId !== authUserId) {
       clearSession();
       if (authUserId && !stored) await supabase.auth.signOut();
       return null;
     }
+    if (liveUser) stored.mustChangePassword = mustChange(liveUser);
     return stored;
   },
 
@@ -153,8 +159,24 @@ export const authService = {
     if (userErr || !email) throw new Error('Your session has expired. Please sign in again.');
     const check = await supabase.auth.signInWithPassword({ email, password: currentPassword });
     if (check.error) throw new Error('Current password is incorrect');
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    const { error } = await supabase.auth.updateUser({ password: newPassword, data: { must_change_password: false } });
     if (error) throw new Error(error.message);
+  },
+
+  /** First sign-in with a temporary password: set the person's own password. */
+  async setFirstPassword(newPassword: string): Promise<void> {
+    if (newPassword.length < 8) throw new Error('New password must be at least 8 characters');
+    const { error } = await supabase.auth.updateUser({ password: newPassword, data: { must_change_password: false } });
+    if (error) {
+      if (/same|different/i.test(error.message)) throw new Error('Choose a password different from the temporary one');
+      throw new Error(error.message);
+    }
+    const stored = readSession();
+    if (stored) {
+      stored.mustChangePassword = false;
+      const remember = localStorage.getItem(STORAGE_KEY) !== null;
+      saveSession(stored, remember);
+    }
   },
 
   async logout() {

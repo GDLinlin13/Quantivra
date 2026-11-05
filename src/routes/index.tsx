@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { PlatformLayout } from '../layouts/PlatformLayout';
 import { CompanyLayout } from '../layouts/CompanyLayout';
+import { RequireAuth } from '../components/RequireAuth';
 import { LoginPage } from '../modules/auth/pages/LoginPage';
 import { PlatformDashboard } from '../modules/platform/pages/Dashboard';
 import { CompaniesPage } from '../modules/platform/pages/Companies';
@@ -24,7 +25,7 @@ export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   {
     path: '/platform',
-    element: <PlatformLayout />,
+    element: <RequireAuth type="platform"><PlatformLayout /></RequireAuth>,
     children: [
       { index: true, element: <PlatformDashboard /> },
       { path: 'companies', element: <CompaniesPage /> },
@@ -37,7 +38,7 @@ export const router = createBrowserRouter([
   },
   {
     path: '/company',
-    element: <CompanyLayout />,
+    element: <RequireAuth type="company"><CompanyLayout /></RequireAuth>,
     children: [
       { index: true, element: <CompanyDashboard /> },
       { path: 'hr', element: <CompanyHRPage /> },

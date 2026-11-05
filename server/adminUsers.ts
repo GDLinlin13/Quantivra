@@ -80,7 +80,10 @@ function requireCompany(caller: Caller, companyId: number) {
 async function findOrCreateLogin(
   admin: SupabaseClient, email: string, attrs: { password?: string; password_hash?: string },
 ): Promise<{ id: string; created: boolean }> {
-  const { data, error } = await admin.auth.admin.createUser({ email, email_confirm: true, ...attrs });
+  // A password chosen by an admin is temporary: the person must set their own
+  // at first sign-in. Moved-over (legacy) passwords were already their own.
+  const user_metadata = attrs.password ? { must_change_password: true } : undefined;
+  const { data, error } = await admin.auth.admin.createUser({ email, email_confirm: true, ...attrs, ...(user_metadata ? { user_metadata } : {}) });
   if (!error && data?.user) return { id: data.user.id, created: true };
 
   const exists = error && ((error as any).code === 'email_exists' || /already (been )?registered|already exists/i.test(error.message));
@@ -158,7 +161,10 @@ async function setPassword(admin: SupabaseClient, caller: Caller, body: Body) {
     }
   }
 
-  const { error } = await admin.auth.admin.updateUserById(target.auth_user_id, { password });
+  // Resetting someone else's password makes it temporary until they change it.
+  const { error } = await admin.auth.admin.updateUserById(target.auth_user_id, {
+    password, user_metadata: { must_change_password: target.auth_user_id !== caller.authUserId },
+  });
   if (error) throw new HttpError(400, error.message);
   return { ok: true };
 }
