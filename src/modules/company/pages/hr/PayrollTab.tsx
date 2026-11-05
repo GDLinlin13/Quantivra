@@ -207,6 +207,10 @@ function PayslipView({ slip, company, branding, period }: { slip: PayslipRow; co
   if (useLayout && layout) {
     const line = (x: { componentCode: string; amount: number; label?: string }) => ({ name: x.label || componentLabel(x.componentCode), amount: fmtMoney(x.amount, cur) });
     const onBehalf = stat.filter(s => s.absorbedByEmployer && s.employeeTotal > 0);
+    const scheme = (code: string) => stat.find(s => String(s.schemeCode).toUpperCase() === code);
+    const cpf = scheme('CPF');
+    const shg = stat.find(s => ['CDAC', 'SINDA', 'MBMF', 'ECF'].includes(String(s.schemeCode).toUpperCase()) && s.employeeTotal > 0);
+    const n = (x: any) => Number(x) || 0;
     const fields: FieldValues = {
       ...companyFields(company, branding, t?.footerNote),
       employee_name: slip.employee_name || '',
@@ -224,12 +228,24 @@ function PayslipView({ slip, company, branding, period }: { slip: PayslipRow; co
       total_deductions: fmtMoney(slip.total_deductions, cur),
       net_pay: fmtMoney(slip.net_pay, cur),
       total_employer: fmtMoney(slip.total_employer, cur),
+      cpf_employee: fmtMoney(n(cpf?.employeeTotal), cur),
+      cpf_employer: fmtMoney(n(cpf?.employerTotal), cur),
+      cpf_total: fmtMoney(n(cpf?.employeeTotal) + n(cpf?.employerTotal), cur),
+      sdl: fmtMoney(n(scheme('SDL')?.employerTotal), cur),
+      shg_name: shg ? (shg.schemeName || shg.schemeCode) : '',
+      shg_amount: shg ? fmtMoney(n(shg.employeeTotal), cur) : '',
       paid_on_behalf: onBehalf.map(s => `${s.schemeName || s.schemeCode} ${fmtMoney(s.employeeTotal, cur)}`).join(' · '),
     };
     const lists: ListValues = {
       earnings: (slip.earnings_json || []).map(line),
       deductions: (slip.deductions_json || []).map(line),
       employer: (slip.employer_json || []).map(line),
+      statutory: stat.filter(s => n(s.employeeTotal) > 0 || n(s.employerTotal) > 0).map(s => ({
+        name: s.schemeName || s.schemeCode,
+        employee: fmtMoney(n(s.employeeTotal), cur),
+        employer: fmtMoney(n(s.employerTotal), cur),
+        total: fmtMoney(n(s.employeeTotal) + n(s.employerTotal), cur),
+      })),
     };
     return (
       <div id="payslip-print" style={{ background: '#fff', borderRadius: 8, padding: 24 }}>

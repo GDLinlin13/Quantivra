@@ -231,12 +231,32 @@ export type ListValues = Record<string, FieldValues[]>;
 
 const FIELD_RE = /\{\{\s*([a-z0-9_.]+)\s*\}\}/gi;
 
-export function fillText(text: string, fields: FieldValues, line?: FieldValues): string {
+/** A repeating row's current item: `line` is the row's own list, `items` every list's item at this position. */
+export interface RowItems { line?: FieldValues; items?: Record<string, FieldValues | undefined> }
+
+export function fillText(text: string, fields: FieldValues, line?: FieldValues | RowItems): string {
+  const ctx: RowItems = line && ('line' in line || 'items' in line) ? line as RowItems : { line: line as FieldValues | undefined };
   return text.replace(FIELD_RE, (_m, name: string) => {
     const k = name.toLowerCase();
-    if (k.startsWith('line.')) return line?.[k.slice(5)] ?? '';
+    const dot = k.indexOf('.');
+    if (dot > 0) {
+      const list = k.slice(0, dot), f = k.slice(dot + 1);
+      if (list === 'line') return ctx.line?.[f] ?? '';
+      return ctx.items?.[list]?.[f] ?? '';
+    }
     return fields[k] ?? '';
   });
+}
+
+/** List names a piece of text uses, e.g. "{{earnings.name}}" → ["earnings"] ("line" excluded). */
+export function listsIn(text: string): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(FIELD_RE)) {
+    const k = m[1].toLowerCase();
+    const dot = k.indexOf('.');
+    if (dot > 0 && k.slice(0, dot) !== 'line') out.add(k.slice(0, dot));
+  }
+  return [...out];
 }
 
 export function isLogoCell(v?: string) {
@@ -246,10 +266,15 @@ export function isLogoCell(v?: string) {
 export interface OutCell { r: number; c: number; cell: GridCell; text: string; rowSpan: number; colSpan: number }
 export interface OutRow { h?: number; cells: OutCell[] }
 
+/** "auto" = repeat once per item of the lists used in the row. */
+export const AUTO_REPEAT = 'auto';
+
 /**
- * Expand the template into the rows that will be printed: repeating rows are
- * printed once per list item (or not at all when the list is empty), and
- * merges that run across a repeating row stretch to match.
+ * Expand the template into the rows that will be printed. A repeating row is
+ * printed once per item; when a row shows two lists side by side (earnings on
+ * the left, deductions on the right) it is printed as many times as the longer
+ * list, and a cell whose list has run out is left blank. Merges that run
+ * across a repeating row stretch to match.
  */
 export function expandTemplate(t: GridTemplate, fields: FieldValues, lists: ListValues): OutRow[] {
   // merges may not start inside a repeating row; ignore any that do
@@ -259,19 +284,39 @@ export function expandTemplate(t: GridTemplate, fields: FieldValues, lists: List
     return [k, cell];
   })) };
   const covered = coveredSet(safe);
-  const counts = t.rows.map(row => (row.repeat ? (lists[row.repeat] || []).length : 1));
+
+  const rowLists = t.rows.map((row, r) => {
+    if (!row.repeat) return [] as string[];
+    const used = new Set<string>();
+    for (let c = 0; c < t.cols.length; c++) for (const l of listsIn(safe.cells[key(r, c)]?.v || '')) used.add(l);
+    if (row.repeat !== AUTO_REPEAT) used.add(row.repeat);
+    return [...used];
+  });
+  const counts = t.rows.map((row, r) => (row.repeat ? Math.max(0, ...rowLists[r].map(l => (lists[l] || []).length)) : 1));
+
   const out: OutRow[] = [];
   t.rows.forEach((row, r) => {
-    const items: (FieldValues | undefined)[] = row.repeat ? (lists[row.repeat] || []) : [undefined];
-    for (const item of items) {
+    for (let i = 0; i < counts[r]; i++) {
+      const items: Record<string, FieldValues | undefined> = {};
+      for (const l of rowLists[r]) items[l] = (lists[l] || [])[i];
+      const ctx: RowItems = { line: row.repeat && row.repeat !== AUTO_REPEAT ? (lists[row.repeat] || [])[i] : undefined, items };
       const cells: OutCell[] = [];
       for (let c = 0; c < t.cols.length; c++) {
         if (covered.has(key(r, c))) continue;
         const cell = safe.cells[key(r, c)] || {};
         const rs = cell.rs || 1;
         let rowSpan = 0;
-        for (let i = r; i < Math.min(r + rs, t.rows.length); i++) rowSpan += i === r ? 1 : counts[i];
-        cells.push({ r, c, cell, text: fillText(cell.v || '', fields, item), rowSpan: Math.max(1, rowSpan), colSpan: cell.cs || 1 });
+        for (let j = r; j < Math.min(r + rs, t.rows.length); j++) rowSpan += j === r ? 1 : counts[j];
+        const v = cell.v || '';
+        // In a repeating row, a cell whose list has no item at this position stays empty (no stray ":").
+        let blank = false;
+        if (row.repeat) {
+          const own = listsIn(v);
+          const usesLine = /\{\{\s*line\./i.test(v);
+          if (own.length && own.every(l => !items[l])) blank = true;
+          if (usesLine && !ctx.line) blank = true;
+        }
+        cells.push({ r, c, cell, text: blank ? '' : fillText(v, fields, ctx), rowSpan: Math.max(1, rowSpan), colSpan: cell.cs || 1 });
       }
       out.push({ h: row.h, cells });
     }
