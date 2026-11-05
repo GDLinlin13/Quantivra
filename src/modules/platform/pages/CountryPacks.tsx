@@ -48,6 +48,7 @@ export function CountryPacksPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const timer = setTimeout(() => {
+      message.warning('The database is taking too long to answer — showing built-in defaults.');
       setCountries(DEFAULT_COUNTRIES);
       setVersions([]);
       setLoading(false);
@@ -60,6 +61,8 @@ export function CountryPacksPage() {
       clearTimeout(timer);
       if (cResult.error) console.warn('country_profiles fetch error:', cResult.error.message);
       if (vResult.error) console.warn('country_pack_versions fetch error:', vResult.error.message);
+      const err = cResult.error || vResult.error;
+      if (err) message.error(`Could not load country packs from the database (${err.message}). Try signing out and in again.`);
       setCountries(cResult.data && cResult.data.length > 0 ? cResult.data : DEFAULT_COUNTRIES);
       setVersions(vResult.data || []);
     } catch (err: any) {

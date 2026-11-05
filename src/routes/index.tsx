@@ -8,6 +8,7 @@ import { CountryPacksPage } from '../modules/platform/pages/CountryPacks';
 import { BusinessPacksPage } from '../modules/platform/pages/BusinessPacks';
 import { PlatformUsersPage } from '../modules/platform/pages/Users';
 import { PlatformAuditPage } from '../modules/platform/pages/AuditLog';
+import { PlatformSettingsPage } from '../modules/platform/pages/Settings';
 import { CompanyDashboard } from '../modules/company/pages/Dashboard';
 import { CompanyProfilePage } from '../modules/company/pages/Profile';
 import { CompanyUsersPage } from '../modules/company/pages/Users';
@@ -31,7 +32,7 @@ export const router = createBrowserRouter([
       { path: 'business-packs', element: <BusinessPacksPage /> },
       { path: 'users', element: <PlatformUsersPage /> },
       { path: 'audit', element: <PlatformAuditPage /> },
-      { path: 'settings', element: <div style={{ color: '#f0ede6' }}>Platform Settings</div> },
+      { path: 'settings', element: <PlatformSettingsPage /> },
     ],
   },
   {

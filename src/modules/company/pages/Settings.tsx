@@ -5,6 +5,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { MODULES } from '../../../types';
 import { DocumentNumbersCard } from './settings/DocumentNumbersCard';
 import { WorkWeekHolidaysCard } from './settings/WorkWeekHolidaysCard';
+import { ChangePasswordCard } from '../../../components/ChangePasswordCard';
 
 const { Title, Text } = Typography;
 
@@ -86,6 +87,7 @@ export function CompanySettingsPage() {
 
       {companyId && <WorkWeekHolidaysCard companyId={companyId} country={company.country || 'SG'} />}
       {companyId && <DocumentNumbersCard companyId={companyId} />}
+      <div style={{ marginTop: 24 }}><ChangePasswordCard /></div>
     </div>
   );
 }

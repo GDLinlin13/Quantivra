@@ -109,7 +109,23 @@ export const authService = {
   async restoreSession(): Promise<Session | null> {
     const stored = readSession();
     const { data } = await supabase.auth.getSession();
-    const authUserId = data.session?.user?.id;
+    let authUserId = data.session?.user?.id;
+    if (authUserId) {
+      // The stored sign-in may have expired (e.g. overnight). Ask Supabase to
+      // confirm it; if it can't, sign out so the login page shows instead of
+      // pages that silently load nothing.
+      const { data: live, error } = await supabase.auth.getUser();
+      // Only a rejected sign-in logs out; a network hiccup keeps the session.
+      const rejected = error
+        ? (error.status === 401 || error.status === 403 || error.name === 'AuthSessionMissingError')
+        : !live.user;
+      if (rejected) {
+        clearSession();
+        await supabase.auth.signOut().catch(() => {});
+        return null;
+      }
+      if (live.user) authUserId = live.user.id;
+    }
     if (!stored || !authUserId || stored.authUserId !== authUserId) {
       clearSession();
       if (authUserId && !stored) await supabase.auth.signOut();
@@ -122,6 +138,19 @@ export const authService = {
   async accessToken(): Promise<string | null> {
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
+  },
+
+  /** Change the signed-in person's own password (current password required). */
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    if (newPassword.length < 8) throw new Error('New password must be at least 8 characters');
+    if (newPassword === currentPassword) throw new Error('New password must be different from the current one');
+    const { data: u, error: userErr } = await supabase.auth.getUser();
+    const email = u.user?.email;
+    if (userErr || !email) throw new Error('Your session has expired. Please sign in again.');
+    const check = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+    if (check.error) throw new Error('Current password is incorrect');
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw new Error(error.message);
   },
 
   async logout() {
