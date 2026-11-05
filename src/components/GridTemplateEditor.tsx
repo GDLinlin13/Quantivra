@@ -51,13 +51,6 @@ function FieldGuide({ kind, onInsert, rowRepeat, sample }: {
   const code: React.CSSProperties = { fontFamily: 'monospace', fontSize: 12, color: '#91caff', cursor: 'pointer', whiteSpace: 'nowrap' };
   return (
     <div style={{ color: 'rgba(240,237,230,0.8)', fontSize: 13, lineHeight: 1.55, maxHeight: 420, overflowY: 'auto' }}>
-      <p style={{ margin: '0 0 8px' }}>
-        A cell can hold <b>ordinary text</b> (type anything, e.g. <i>Employee</i> or <i>PAYSLIP</i>) and/or <b>fields</b>.
-        A field is a code in double curly brackets, like <code style={code}>{'{{employee_name}}'}</code>. When the {kind} is printed the code is
-        replaced by the real detail — <i>{sample.fields.employee_name || sample.fields.customer_name}</i>. You don't need to remember the codes:
-        pick one from <b>Insert a field</b> or click a code below. In the sheet a field shows as a blue <span style={{ background: '#e6f0ff', color: '#0b57d0', borderRadius: 3, padding: '0 3px' }}>⟨friendly name⟩</span>;
-        the formula bar shows its code. A red one means the code is mistyped.
-      </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 16 }}>
         <div>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Fields — one value per {kind}</div>
@@ -337,7 +330,7 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
         <>
           <Collapse size="small" style={{ marginBottom: 8, background: '#151a1e' }} defaultActiveKey={guideOpen ? ['g'] : []}
             onChange={k => { const open = (Array.isArray(k) ? k : [k]).includes('g'); try { localStorage.setItem('qv-layout-guide', open ? '1' : '0'); } catch { /* ignore */ } }}
-            items={[{ key: 'g', label: 'Guide: what can I type in a cell? How do earnings, deductions and CPF work?', children: <FieldGuide kind={kind} onInsert={insertField} rowRepeat={curRow.repeat} sample={sample} /> }]} />
+            items={[{ key: 'g', label: 'Code Guide', children: <FieldGuide kind={kind} onInsert={insertField} rowRepeat={curRow.repeat} sample={sample} /> }]} />
           {/* toolbar */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', padding: 6, background: '#1d2328', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px 6px 0 0' }}>
             {btn('Undo (Ctrl+Z)', <UndoOutlined />, doUndo, false, undo.current.length === 0)}
