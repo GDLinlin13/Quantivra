@@ -7,7 +7,7 @@ type Row = Record<string, any>;
 
 function makeFake() {
   const db: Record<string, Row[]> = {
-    companies: [{ id: 1, is_active: true }, { id: 2, is_active: true }],
+    companies: [{ id: 1, is_active: true, company_code: 'alpha' }, { id: 2, is_active: true, company_code: 'beta' }],
     platform_users: [{ id: 1, auth_user_id: 'u-admin', is_active: true }],
     company_users: [
       { id: 10, company_id: 1, email: 'a@alpha.test', auth_user_id: 'u-a', is_active: true },
@@ -59,6 +59,7 @@ function makeFake() {
       update(values: Row) { pending = { kind: 'update', values }; return b; },
       eq(col: string, val: any) { filters.push(r => get(r, col) === val); return b; },
       neq(col: string, val: any) { filters.push(r => get(r, col) !== val); return b; },
+      ilike(col: string, val: any) { filters.push(r => String(get(r, col) ?? '').toLowerCase() === String(val).toLowerCase()); return b; },
       maybeSingle() { const r = run(); return Promise.resolve({ data: r.data?.[0] ?? null, error: r.error }); },
       single() { const r = run(); return Promise.resolve({ data: r.data?.[0] ?? null, error: r.error }); },
       then(res: any, rej: any) { return Promise.resolve(run()).then(res, rej); },
@@ -111,7 +112,7 @@ async function call(token: string | null, body: Record<string, unknown>) {
 }
 
 const newUser = (company_id: number, extra: Record<string, unknown> = {}) => ({
-  action: 'create_company_user', company_id, email: 'New@Alpha.test', password: 'longenough', full_name: 'New Person', ...extra,
+  action: 'create_company_user', company_id, username: 'New.Person', email: 'New@Alpha.test', password: 'longenough', full_name: 'New Person', ...extra,
 });
 
 describe('admin-users server function', () => {
@@ -120,20 +121,30 @@ describe('admin-users server function', () => {
     expect((await call('forged', newUser(1))).status).toBe(401);
   });
 
-  it('lets a company user add a login to their own company', async () => {
+  it('lets a company user add a login to their own company, signing in by username', async () => {
     const r = await call('tok-a', newUser(1, { role_id: 100 }));
     expect(r.status).toBe(200);
-    expect(r.body.existing_login).toBe(false);
-    const row = fake.db.company_users.find(u => u.email === 'new@alpha.test');
-    expect(row?.company_id).toBe(1);
-    expect(fake.authUsers[row!.auth_user_id].password).toBe('longenough');
+    const row = fake.db.company_users.find(u => u.username === 'new.person');
+    expect(row).toMatchObject({ company_id: 1, email: 'new@alpha.test' });
+    expect(fake.authUsers[row!.auth_user_id]).toMatchObject({ email: 'alpha.new.person@users.quantivra.app', password: 'longenough' });
     expect(fake.db.company_user_roles).toEqual([{ id: expect.any(Number), user_id: row!.id, role_id: 100 }]);
+  });
+
+  it('email is optional; usernames are checked and unique per company', async () => {
+    expect((await call('tok-a', newUser(1, { email: '' }))).status).toBe(200);
+    expect(fake.db.company_users.find(u => u.username === 'new.person')?.email).toBeNull();
+    expect((await call('tok-a', newUser(1, { email: '' }))).body.error).toMatch(/already used/);
+    expect((await call('tok-a', newUser(1, { username: 'a' }))).status).toBe(400);
+    expect((await call('tok-a', newUser(1, { username: 'has space' }))).status).toBe(400);
+    expect((await call('tok-a', newUser(1, { email: 'not-an-email' }))).status).toBe(400);
+    // the same username in another company is a separate login
+    expect((await call('tok-admin', newUser(2))).status).toBe(200);
   });
 
   it('blocks adding a login to another company', async () => {
     const r = await call('tok-a', newUser(2));
     expect(r.status).toBe(403);
-    expect(fake.db.company_users.some(u => u.email === 'new@alpha.test')).toBe(false);
+    expect(fake.db.company_users.some(u => u.username === 'new.person')).toBe(false);
   });
 
   it('blocks a role from another company', async () => {
@@ -143,13 +154,6 @@ describe('admin-users server function', () => {
   it('blocks users with no company and enforces password length', async () => {
     expect((await call('tok-nobody', newUser(1))).status).toBe(403);
     expect((await call('tok-a', newUser(1, { password: 'short' }))).status).toBe(400);
-  });
-
-  it('links an existing login without changing its password', async () => {
-    const r = await call('tok-b', { ...newUser(2), email: 'staff@alpha.test', password: 'attacker-chosen' });
-    expect(r.status).toBe(200);
-    expect(r.body.existing_login).toBe(true);
-    expect(fake.authUsers['u-staff'].password).toBe('orig');
   });
 
   it('platform admins can add logins to any company', async () => {

@@ -4,6 +4,7 @@ import { PlusOutlined, CheckCircleOutlined, CheckOutlined, LoadingOutlined, Clos
 import { companyService } from '../../../services';
 import { supabase } from '../../../utils/supabase';
 import { adminUsersService, MIN_PASSWORD_LENGTH } from '../../../services/adminUsers';
+import { USERNAME_PATTERN, USERNAME_RULE_TEXT } from '../../../utils/loginEmail';
 import type { Company } from '../../../types';
 import { MODULES } from '../../../types';
 import { provisionCompany, getProvisionSteps, type ProvisionInput, type ProvisionResult, type ProvisionStep } from '../../../services/provisioning';
@@ -163,7 +164,7 @@ export function CompaniesPage() {
 
   const stepFields = [
     ['name', 'registration_number', 'country', 'business_pack', 'currency', 'financial_year_start', 'timezone'],
-    ['owner_full_name', 'owner_email', 'owner_mobile', 'owner_password'],
+    ['owner_full_name', 'owner_username', 'owner_email', 'owner_mobile', 'owner_password'],
     ['modules'],
     [],
     [],
@@ -213,6 +214,7 @@ export function CompaniesPage() {
         timezone: values.timezone,
         modules: mappedModules.length > 0 ? mappedModules : ALL_FEATURES_MODULES.map(m => m.toLowerCase()),
         owner_full_name: values.owner_full_name,
+        owner_username: values.owner_username,
         owner_email: values.owner_email,
         owner_mobile: values.owner_mobile,
         owner_password: values.owner_password,
@@ -407,8 +409,16 @@ export function CompaniesPage() {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="owner_email" label={<Text style={{ color: '#f0ede6' }}>Owner Email</Text>}
-                    rules={[{ required: true, type: 'email', message: 'Valid email required' }]}>
+                  <Form.Item name="owner_username" label={<Text style={{ color: '#f0ede6' }}>Owner Username</Text>}
+                    tooltip="Used to sign in, together with the company code"
+                    normalize={(v: string) => (v || '').trim().toLowerCase()}
+                    rules={[{ required: true, message: 'Required' }, { pattern: USERNAME_PATTERN, message: USERNAME_RULE_TEXT }]}>
+                    <Input autoComplete="off" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="owner_email" label={<Text style={{ color: '#f0ede6' }}>Owner Email (optional)</Text>}
+                    rules={[{ type: 'email', message: 'Enter a valid email, or leave it empty' }]}>
                     <Input />
                   </Form.Item>
                 </Col>
@@ -459,7 +469,8 @@ export function CompaniesPage() {
               <Card size="small" style={{ background: '#0b0f12', borderColor: 'rgba(255,255,255,0.08)', marginBottom: 16 }}>
                 <Row gutter={[16, 8]}>
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Owner</Text><br /><Text>{form.getFieldValue('owner_full_name')}</Text></Col>
-                  <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Email</Text><br /><Text>{form.getFieldValue('owner_email')}</Text></Col>
+                  <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Username</Text><br /><Text>{form.getFieldValue('owner_username')}</Text></Col>
+                  <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Email</Text><br /><Text>{form.getFieldValue('owner_email') || '-'}</Text></Col>
                 </Row>
               </Card>
               <Card size="small" style={{ background: '#0b0f12', borderColor: 'rgba(255,255,255,0.08)' }}>
@@ -518,8 +529,8 @@ export function CompaniesPage() {
                     <Button type="link" size="small" icon={<CopyOutlined />} onClick={() => copyToClipboard(provisionResult.company_code)} />
                   </Col>
                   <Col span={12}>
-                    <Text style={{ color: 'rgba(240,237,230,0.5)', display: 'block', fontSize: 12 }}>Owner Email</Text>
-                    <Text style={{ color: '#f0ede6' }}>{provisionResult.owner.email}</Text>
+                    <Text style={{ color: 'rgba(240,237,230,0.5)', display: 'block', fontSize: 12 }}>Owner Username</Text>
+                    <Text style={{ color: '#f0ede6' }}>{provisionResult.owner.username}</Text>
                   </Col>
                   <Col span={12}>
                     <Text style={{ color: 'rgba(240,237,230,0.5)', display: 'block', fontSize: 12 }}>Temporary Password</Text>

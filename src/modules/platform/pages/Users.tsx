@@ -3,6 +3,7 @@ import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Sp
 import { PlusOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { adminUsersService, MIN_PASSWORD_LENGTH } from '../../../services/adminUsers';
+import { USERNAME_PATTERN, USERNAME_RULE_TEXT } from '../../../utils/loginEmail';
 
 const { Title } = Typography;
 
@@ -16,7 +17,7 @@ export function PlatformUsersPage() {
   const load = async () => {
     setLoading(true);
     const [u, c] = await Promise.all([
-      supabase.from('company_users').select('id, company_id, email, full_name, is_active, created_at, companies(name)').order('created_at', { ascending: false }),
+      supabase.from('company_users').select('id, company_id, username, email, full_name, is_active, created_at, companies(name)').order('created_at', { ascending: false }),
       supabase.from('companies').select('id, name, company_code').eq('is_active', true),
     ]);
     setUsers(u.data || []);
@@ -30,7 +31,8 @@ export function PlatformUsersPage() {
     try {
       const res = await adminUsersService.createCompanyUser({
         company_id: values.company_id,
-        email: values.email,
+        username: values.username,
+        email: values.email || undefined,
         password: values.password,
         full_name: values.full_name,
       });
@@ -48,7 +50,8 @@ export function PlatformUsersPage() {
   };
 
   const columns = [
-    { title: 'Email', dataIndex: 'email', key: 'email' },
+    { title: 'Username', dataIndex: 'username', key: 'username', render: (v: string) => v || '-' },
+    { title: 'Email', dataIndex: 'email', key: 'email', render: (v: string) => v || '-' },
     { title: 'Name', dataIndex: 'full_name', key: 'full_name' },
     { title: 'Company', key: 'company', render: (_: any, r: any) => r.companies?.name || r.company_id },
     { title: 'Status', dataIndex: 'is_active', key: 'status', render: (v: boolean) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Inactive'}</Tag> },
@@ -74,8 +77,13 @@ export function PlatformUsersPage() {
           <Form.Item name="company_id" label="Company" rules={[{ required: true }]}>
             <Select options={companies.map((c: any) => ({ label: c.name, value: c.id }))} />
           </Form.Item>
-          <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email' }]}>
-            <Input placeholder="john@company.com" />
+          <Form.Item name="username" label="Username" tooltip="Used to sign in, together with the company code"
+            normalize={(v: string) => (v || '').trim().toLowerCase()}
+            rules={[{ required: true }, { pattern: USERNAME_PATTERN, message: USERNAME_RULE_TEXT }]}>
+            <Input autoComplete="off" />
+          </Form.Item>
+          <Form.Item name="email" label="Email (optional)" rules={[{ type: 'email', message: 'Enter a valid email, or leave it empty' }]}>
+            <Input />
           </Form.Item>
           <Form.Item name="full_name" label="Full Name" rules={[{ required: true }]}>
             <Input placeholder="John Doe" />

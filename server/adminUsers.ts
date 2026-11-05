@@ -6,6 +6,7 @@
 // who is calling before doing anything.
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { loginEmailFor, normaliseUsername, isValidUsername, USERNAME_RULE_TEXT } from '../src/utils/loginEmail.js';
 
 export const MIN_PASSWORD_LENGTH = 8;
 
@@ -92,35 +93,48 @@ async function findOrCreateLogin(
 async function createCompanyUser(admin: SupabaseClient, caller: Caller, body: Body) {
   const companyId = num(body, 'company_id')!;
   requireCompany(caller, companyId);
-  const email = str(body, 'email').toLowerCase();
+  const username = normaliseUsername(str(body, 'username'));
+  if (!isValidUsername(username)) throw new HttpError(400, `Username must be ${USERNAME_RULE_TEXT}`);
+  const contactEmail = str(body, 'email', false).toLowerCase() || null;
+  if (contactEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contactEmail)) throw new HttpError(400, 'Email address is not valid');
   const password = str(body, 'password');
   checkPassword(password);
   const roleId = num(body, 'role_id', false);
+
+  const { data: company } = await admin.from('companies').select('company_code').eq('id', companyId).maybeSingle();
+  if (!company?.company_code) throw new HttpError(404, 'Company not found');
+
+  const taken = await admin.from('company_users').select('id').eq('company_id', companyId).ilike('username', username).maybeSingle();
+  if (taken.data) throw new HttpError(400, 'This username is already used in this company');
 
   if (roleId) {
     const role = await admin.from('company_roles').select('id').eq('id', roleId).eq('company_id', companyId).maybeSingle();
     if (!role.data) throw new HttpError(400, 'Role does not belong to this company');
   }
 
-  const login = await findOrCreateLogin(admin, email, { password });
+  // Sign-in is by username: the Supabase login uses a hidden internal address
+  // unique to this company + username, so it never collides with anyone else.
+  const login = await findOrCreateLogin(admin, loginEmailFor(company.company_code, username), { password });
+  if (!login.created) throw new HttpError(400, 'This username is already used in this company');
   const { data: row, error } = await admin.from('company_users').insert({
     company_id: companyId,
-    email,
+    username,
+    email: contactEmail,
     full_name: str(body, 'full_name'),
     job_title: str(body, 'job_title', false) || null,
     phone: str(body, 'phone', false) || null,
     auth_user_id: login.id,
     is_active: true,
-  }).select('id, company_id, email, full_name, job_title, phone, is_active, created_at').single();
+  }).select('id, company_id, username, email, full_name, job_title, phone, is_active, created_at').single();
 
   if (error) {
-    if (login.created) await admin.auth.admin.deleteUser(login.id);
+    await admin.auth.admin.deleteUser(login.id);
     throw new HttpError(400, /duplicate|unique/i.test(error.message)
-      ? 'This email already has a login for this company' : error.message);
+      ? 'This username is already used in this company' : error.message);
   }
   if (roleId) await admin.from('company_user_roles').insert({ user_id: row.id, role_id: roleId });
 
-  return { user: row, existing_login: !login.created };
+  return { user: row, existing_login: false };
 }
 
 async function setPassword(admin: SupabaseClient, caller: Caller, body: Body) {
