@@ -12,6 +12,9 @@ export interface PayslipTemplate {
   showDesignation?: boolean;
   showNationalId?: boolean;
   nationalIdFull?: boolean;
+  /** Download file name patterns, e.g. "Payslip - {name} - {month} {year}". */
+  fileName?: string;
+  combinedFileName?: string;
   footerNote: string;
   /** Spreadsheet-style layout; used instead of the standard payslip when enabled. */
   layout?: GridTemplate;
