@@ -25,7 +25,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
       const [e, d, u, co] = await Promise.all([
         hrService.listEmployees(companyId),
         hrService.departments(companyId),
-        supabase.from('company_users').select('id, full_name, email').eq('company_id', companyId),
+        supabase.from('company_users').select('id, full_name, username, email').eq('company_id', companyId),
         supabase.from('companies').select('country').eq('id', companyId).maybeSingle(),
       ]);
       setRows(e); setDepts(d); setUsers(u.data || []); setCountry(co.data?.country ?? null);
@@ -141,9 +141,10 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
               <Select allowClear showSearch optionFilterProp="label"
                 options={rows.filter(r => r.id !== editing?.id).map(r => ({ label: r.full_name, value: r.id }))} />
             </Form.Item>
-            <Form.Item name="user_id" label="Login Account">
-              <Select allowClear showSearch optionFilterProp="label"
-                options={users.map(u => ({ label: `${u.full_name} (${u.email})`, value: u.id }))} />
+            <Form.Item name="user_id" label="Login Account"
+              tooltip="Link the sign-in (created under Users) this person uses, so they can see their own leave and apply for leave. Leave empty if they don't sign in.">
+              <Select allowClear showSearch optionFilterProp="label" placeholder="Not linked"
+                options={users.map(u => ({ label: `${u.full_name} (${u.username || u.email || 'no username'})`, value: u.id }))} />
             </Form.Item>
             <Form.Item name="employment_type" label="Employment Type">
               <Select options={EMP_TYPES.map(t => ({ label: t.replace('_', ' '), value: t }))} />
