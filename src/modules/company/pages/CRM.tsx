@@ -18,7 +18,7 @@ export function CompanyCRMPage() {
     <div>
       <Title level={4} style={{ color: '#f0ede6' }}>CRM</Title>
       <Tabs items={[
-        { key: 'customers', label: 'Customers & contacts', children: <ContactsManager companyId={companyId} kind="customer" currency={currency} /> },
+        { key: 'contacts', label: 'Customers & Suppliers', children: <ContactsManager companyId={companyId} kind="all" currency={currency} /> },
       ]} />
     </div>
   );

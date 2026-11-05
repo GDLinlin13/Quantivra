@@ -1,0 +1,241 @@
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  Select, Space, Button, Table, Tag, Card, Statistic, Upload, Modal, Form, DatePicker, Input, InputNumber, Segmented, message, Empty,
+  Typography, Popconfirm, Tabs, Alert,
+} from 'antd';
+import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import { bankService, paymentService, loadLedgerInput, type BankTxn, type Payment } from '../../../../services/finance';
+import { buildLedger, balances } from '../../../../data/ledger';
+import { balanceDue, type Account, type FinDocument } from '../../../../data/finance';
+import { parseBankCsv, type BankLine } from '../../../../data/bankCsv';
+import { money } from '../../../../data/documentLayouts';
+import type { FinanceData } from './DocList';
+
+const { Text } = Typography;
+
+/** Bank: statement lines (typed in or imported from CSV), matched to payments, invoices, bills or accounts. */
+export function Bank({ data }: { data: FinanceData }) {
+  const { companyId, currency, accounts } = data;
+  const banks = accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash'));
+  const [accountId, setAccountId] = useState<number | null>(() => banks.find(b => b.subtype === 'bank')?.id ?? banks[0]?.id ?? null);
+  const [txns, setTxns] = useState<BankTxn[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [allTxns, setAllTxns] = useState<BankTxn[]>([]);
+  const [booksBalance, setBooksBalance] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('unmatched');
+  const [importing, setImporting] = useState<BankLine[] | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [matching, setMatching] = useState<BankTxn | null>(null);
+  const account = accounts.find(a => a.id === accountId);
+
+  const load = useCallback(async () => {
+    if (!accountId) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const [t, all, pin, pout, input] = await Promise.all([
+        bankService.list(companyId, accountId), bankService.listAll(companyId),
+        paymentService.list(companyId, 'in'), paymentService.list(companyId, 'out'), loadLedgerInput(companyId),
+      ]);
+      setTxns(t); setAllTxns(all); setPayments([...pin, ...pout]);
+      const b = balances(input.accounts, buildLedger(input as any)).find(x => x.account.id === accountId);
+      setBooksBalance(b?.balance || 0);
+    } catch (e: any) { message.error(e.message); }
+    setLoading(false);
+  }, [companyId, accountId]);
+  useEffect(() => { load(); }, [load, data.docs]);
+
+  const statementBalance = useMemo(() => Math.round(((Number(account?.opening_balance) || 0) + txns.reduce((s, t) => s + Number(t.amount), 0)) * 100) / 100, [txns, account]);
+  const shown = txns.filter(t => filter === 'all' || t.status === filter);
+  const unmatched = txns.filter(t => t.status === 'unmatched').length;
+
+  if (!banks.length) {
+    return <Empty description="No bank accounts yet. Add one in Accounting & reports → Chart of accounts (kind: Bank account)." />;
+  }
+
+  const onFile = async (file: File) => {
+    const text = await file.text();
+    const r = parseBankCsv(text);
+    if (r.error) { message.error(r.error); return false; }
+    // leave out lines already imported (same date, amount and description)
+    const seen = new Set(txns.map(t => `${t.txn_date}|${Number(t.amount).toFixed(2)}|${t.description || ''}`));
+    const fresh = r.lines.filter(l => !seen.has(`${l.txn_date}|${l.amount.toFixed(2)}|${l.description}`));
+    if (!fresh.length) { message.info('Nothing new in that file'); return false; }
+    setImporting(fresh);
+    return false;
+  };
+
+  const describe = (t: BankTxn) => {
+    if (t.payment_id) { const p = payments.find(x => x.id === t.payment_id); return p ? `Payment ${p.number || ''} · ${data.contacts.find(c => c.id === p.contact_id)?.name || ''}` : 'Payment'; }
+    if (t.journal_id) return 'Booked to an account (journal)';
+    return '';
+  };
+
+  return (
+    <div>
+      <Space wrap style={{ marginBottom: 12 }}>
+        <Select style={{ width: 280 }} value={accountId ?? undefined} onChange={setAccountId}
+          options={banks.map(b => ({ value: b.id, label: `${b.name}${b.bank_account_no ? ` (${b.bank_account_no})` : ''}` }))} />
+        <Upload accept=".csv,text/csv" showUploadList={false} beforeUpload={onFile}><Button icon={<UploadOutlined />}>Import statement (CSV)</Button></Upload>
+        <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>Add a line</Button>
+      </Space>
+      <Space size={16} wrap style={{ marginBottom: 12 }}>
+        <Card size="small" style={{ minWidth: 200 }}><Statistic title="Balance per statement" value={money(statementBalance, currency)} /></Card>
+        <Card size="small" style={{ minWidth: 200 }}><Statistic title="Balance in Quantivra" value={money(booksBalance, currency)} /></Card>
+        <Card size="small" style={{ minWidth: 200 }}><Statistic title="Lines to match" value={unmatched} styles={{ content: { color: unmatched ? '#faad14' : undefined } }} /></Card>
+      </Space>
+      {Math.abs(statementBalance - booksBalance) >= 0.01 && unmatched === 0 && txns.length > 0 && (
+        <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+          title={`The statement and Quantivra differ by ${money(Math.abs(statementBalance - booksBalance), currency)}. Check for payments recorded in Quantivra that aren't on the statement yet, or the account's opening balance.`} />
+      )}
+      <Segmented value={filter} onChange={v => setFilter(String(v))} style={{ marginBottom: 12 }}
+        options={[{ value: 'unmatched', label: `To match (${unmatched})` }, { value: 'matched', label: 'Matched' }, { value: 'ignored', label: 'Ignored' }, { value: 'all', label: 'All' }]} />
+      <Table rowKey="id" size="small" loading={loading} dataSource={shown} pagination={{ pageSize: 100, hideOnSinglePage: true }}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={filter === 'unmatched' ? 'All matched' : 'No lines'} /> }}
+        columns={[
+          { title: 'Date', dataIndex: 'txn_date', width: 110 },
+          { title: 'Description', dataIndex: 'description' },
+          { title: 'Money in', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, currency)}</span> : '' },
+          { title: 'Money out', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{money(-t.amount, currency)}</span> : '' },
+          { title: 'Matched to', key: 'm', render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : describe(t) },
+          {
+            title: '', key: 'a', width: 170, render: (_, t) => (
+              <Space size={4}>
+                {t.status === 'unmatched'
+                  ? <Button size="small" type="primary" icon={<LinkOutlined />} onClick={() => setMatching(t)}>Match</Button>
+                  : (
+                    <Popconfirm title="Undo this match?" description={t.journal_id ? 'The journal entry made for it is deleted too.' : 'The payment itself stays recorded.'}
+                      onConfirm={async () => { await bankService.unmatch(t, !!t.journal_id); load(); data.reload(); }}>
+                      <Button size="small" icon={<DisconnectOutlined />}>Undo</Button>
+                    </Popconfirm>
+                  )}
+                {t.status === 'unmatched' && <Button size="small" onClick={async () => { await bankService.update(t.id, { status: 'ignored' }); load(); }}>Ignore</Button>}
+                <Popconfirm title="Delete this statement line?" onConfirm={async () => { await bankService.remove(t.id); load(); }}>
+                  <Button size="small" danger icon={<DeleteOutlined />} />
+                </Popconfirm>
+              </Space>
+            ),
+          },
+        ]} />
+
+      {importing && (
+        <Modal open width={760} title={`Import ${importing.length} lines into ${account?.name}`} okText="Import"
+          onCancel={() => setImporting(null)}
+          onOk={async () => { try { await bankService.add(companyId, accountId!, importing); message.success('Imported'); setImporting(null); load(); } catch (e: any) { message.error(e.message); } }}>
+          <Table size="small" rowKey={(l: BankLine) => `${l.txn_date}${l.amount}${l.description}`} pagination={{ pageSize: 10 }} dataSource={importing}
+            columns={[{ title: 'Date', dataIndex: 'txn_date' }, { title: 'Description', dataIndex: 'description' },
+              { title: 'Amount', dataIndex: 'amount', align: 'right' as const, render: (v: number) => <span style={{ color: v > 0 ? '#73d13d' : '#ff7875' }}>{money(v, currency)}</span> }]} />
+        </Modal>
+      )}
+      {adding && <AddLine onClose={() => setAdding(false)} currency={currency}
+        onAdd={async l => { await bankService.add(companyId, accountId!, [l]); setAdding(false); load(); }} />}
+      {matching && <MatchModal data={data} txn={matching} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
+        onClose={() => setMatching(null)} onDone={() => { setMatching(null); load(); data.reload(); }} />}
+    </div>
+  );
+}
+
+function AddLine({ onClose, onAdd, currency }: { onClose: () => void; onAdd: (l: BankLine) => Promise<void>; currency: string }) {
+  const [form] = Form.useForm();
+  return (
+    <Modal open title="Add a statement line" onCancel={onClose} onOk={async () => {
+      const v = await form.validateFields();
+      await onAdd({ txn_date: v.date.format('YYYY-MM-DD'), description: v.description || '', amount: v.direction === 'in' ? v.amount : -v.amount });
+    }}>
+      <Form form={form} layout="vertical" initialValues={{ date: dayjs(), direction: 'in' }}>
+        <Form.Item name="direction"><Segmented options={[{ value: 'in', label: 'Money in' }, { value: 'out', label: 'Money out' }]} /></Form.Item>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <Form.Item name="date" label="Date" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="amount" label="Amount" rules={[{ required: true }]}><InputNumber min={0.01} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>
+        </div>
+        <Form.Item name="description" label="Description"><Input /></Form.Item>
+      </Form>
+    </Modal>
+  );
+}
+
+/** Decide what a statement line is: a payment already recorded, an invoice / bill being paid, or money for an account. */
+function MatchModal({ data, txn, payments, usedPayments, onClose, onDone }: {
+  data: FinanceData; txn: BankTxn; payments: Payment[]; usedPayments: Set<number>; onClose: () => void; onDone: () => void;
+}) {
+  const inbound = txn.amount > 0;
+  const amt = Math.abs(Number(txn.amount));
+  const [busy, setBusy] = useState(false);
+  const [docId, setDocId] = useState<number | null>(null);
+  const [accountId, setAccountId] = useState<number | null>(null);
+  const [memo, setMemo] = useState(txn.description || '');
+  const near = (d: string) => Math.abs(dayjs(d).diff(dayjs(txn.txn_date), 'day')) <= 14;
+
+  const suggestions = payments.filter(p => p.direction === (inbound ? 'in' : 'out') && !usedPayments.has(p.id)
+    && Math.abs(Number(p.amount) - amt) < 0.005 && near(p.payment_date) && (!p.account_id || p.account_id === txn.account_id));
+  const openDocs: FinDocument[] = data.docs.filter(d => (inbound ? d.doc_type === 'invoice' : ['bill', 'expense'].includes(d.doc_type))
+    && !['draft', 'void', 'paid'].includes(d.status) && balanceDue(d) > 0)
+    .sort((a, b) => Number(Math.abs(balanceDue(a) - amt) > 0.005) - Number(Math.abs(balanceDue(b) - amt) > 0.005));
+  const contact = (id: number | null) => data.contacts.find(c => c.id === id)?.name || '';
+  const bookable = data.accounts.filter((a: Account) => !a.archived && a.id !== txn.account_id);
+
+  const run = async (f: () => Promise<void>) => { setBusy(true); try { await f(); message.success('Matched'); onDone(); } catch (e: any) { message.error(e.message); } setBusy(false); };
+  const payDoc = () => run(async () => {
+    const d = data.docs.find(x => x.id === docId)!;
+    const portion = Math.min(amt, balanceDue(d));
+    const pid = await paymentService.record(data.companyId, {
+      direction: inbound ? 'in' : 'out', amount: amt, contact_id: d.contact_id, payment_date: txn.txn_date,
+      method: 'Bank transfer', reference: txn.description || undefined, account_id: txn.account_id,
+    }, [{ document_id: d.id, amount: portion }]);
+    await bankService.matchPayment(txn.id, pid);
+  });
+
+  return (
+    <Modal open width={780} onCancel={onClose} footer={null}
+      title={<span>{inbound ? 'Money in' : 'Money out'} {money(amt, data.currency)} on {txn.txn_date}<div style={{ fontSize: 12, fontWeight: 400, color: '#999' }}>{txn.description}</div></span>}>
+      <Tabs defaultActiveKey={suggestions.length ? 'existing' : openDocs.length ? 'doc' : 'account'} items={[
+        {
+          key: 'doc', label: inbound ? 'Payment for an invoice' : 'Payment of a bill / expense',
+          children: (
+            <div>
+              {openDocs.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={inbound ? 'No unpaid invoices' : 'No unpaid bills or expenses'} /> : (
+                <Table rowKey="id" size="small" pagination={{ pageSize: 8, hideOnSinglePage: true }} dataSource={openDocs}
+                  rowSelection={{ type: 'radio', selectedRowKeys: docId ? [docId] : [], onChange: k => setDocId(Number(k[0])) }}
+                  columns={[
+                    { title: 'Number', dataIndex: 'number' }, { title: 'Date', dataIndex: 'issue_date' },
+                    { title: inbound ? 'Customer' : 'Supplier', key: 'c', render: (_, d) => contact(d.contact_id) },
+                    { title: 'Still owed', key: 'b', align: 'right' as const, render: (_, d) => <span style={{ fontWeight: Math.abs(balanceDue(d) - amt) < 0.005 ? 700 : 400 }}>{money(balanceDue(d), data.currency)}</span> },
+                  ]} />
+              )}
+              <Button type="primary" disabled={!docId} loading={busy} onClick={payDoc} style={{ marginTop: 8 }}>Record payment and match</Button>
+            </div>
+          ),
+        },
+        {
+          key: 'existing', label: `Payment already recorded (${suggestions.length})`,
+          children: suggestions.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No recorded payment of this amount within two weeks" /> : (
+            <Table rowKey="id" size="small" pagination={false} dataSource={suggestions}
+              columns={[
+                { title: 'Date', dataIndex: 'payment_date' }, { title: 'Number', dataIndex: 'number' },
+                { title: inbound ? 'From' : 'To', key: 'c', render: (_, p) => contact(p.contact_id) },
+                { title: 'Amount', key: 'a', align: 'right' as const, render: (_, p) => money(p.amount, data.currency) },
+                { title: '', key: 'x', render: (_, p) => <Button size="small" type="primary" loading={busy} onClick={() => run(() => bankService.matchPayment(txn.id, p.id))}>Match</Button> },
+              ]} />
+          ),
+        },
+        {
+          key: 'account', label: 'Something else',
+          children: (
+            <div>
+              <Text type="secondary">For money that isn't an invoice or bill — bank charges, interest, CPF payment, owner's capital, a loan…</Text>
+              <Form layout="vertical" style={{ marginTop: 8 }}>
+                <Form.Item label="Account">
+                  <Select showSearch optionFilterProp="label" value={accountId ?? undefined} onChange={setAccountId}
+                    options={bookable.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))} placeholder={inbound ? 'e.g. 4100 Other income' : 'e.g. 6900 Bank charges'} />
+                </Form.Item>
+                <Form.Item label="Details"><Input value={memo} onChange={e => setMemo(e.target.value)} /></Form.Item>
+              </Form>
+              <Button type="primary" disabled={!accountId} loading={busy} onClick={() => run(() => bankService.categorise(data.companyId, txn, accountId!, memo))}>Book and match</Button>
+            </div>
+          ),
+        },
+      ]} />
+    </Modal>
+  );
+}

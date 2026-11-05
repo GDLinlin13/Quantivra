@@ -270,3 +270,41 @@ export async function loadLedgerInput(companyId: number) {
     payments: payments || [], allocations: allocations || [], journals, payroll: payroll as any[],
   };
 }
+
+// ---- bank statement lines ----------------------------------------------------------------
+
+export interface BankTxn {
+  id: number; company_id: number; account_id: number; txn_date: string; description: string | null; amount: number;
+  payment_id: number | null; journal_id: number | null; status: 'unmatched' | 'matched' | 'ignored';
+}
+
+export const bankService = {
+  async list(companyId: number, accountId: number): Promise<BankTxn[]> {
+    return must(await supabase.from('fin_bank_transactions').select('*').eq('company_id', companyId).eq('account_id', accountId)
+      .order('txn_date', { ascending: false }).order('id', { ascending: false })) || [];
+  },
+  async listAll(companyId: number): Promise<BankTxn[]> {
+    return must(await supabase.from('fin_bank_transactions').select('*').eq('company_id', companyId)) || [];
+  },
+  async add(companyId: number, accountId: number, lines: { txn_date: string; description: string; amount: number }[]) {
+    if (!lines.length) return;
+    must(await supabase.from('fin_bank_transactions').insert(lines.map(l => ({ company_id: companyId, account_id: accountId, ...l, status: 'unmatched' }))));
+  },
+  async update(id: number, patch: Partial<BankTxn>) { must(await supabase.from('fin_bank_transactions').update(patch).eq('id', id)); },
+  async remove(id: number) { must(await supabase.from('fin_bank_transactions').delete().eq('id', id)); },
+  /** Match a statement line to a payment that's already recorded. */
+  async matchPayment(txnId: number, paymentId: number) { await this.update(txnId, { payment_id: paymentId, journal_id: null, status: 'matched' }); },
+  /** Money in / out that isn't an invoice or bill: book it straight to an account (e.g. bank charges, interest). */
+  async categorise(companyId: number, txn: BankTxn, accountId: number, memo: string) {
+    const amt = Math.abs(Number(txn.amount));
+    const lines = txn.amount > 0
+      ? [{ account_id: txn.account_id, debit: amt, credit: 0, description: memo }, { account_id: accountId, debit: 0, credit: amt, description: memo }]
+      : [{ account_id: accountId, debit: amt, credit: 0, description: memo }, { account_id: txn.account_id, debit: 0, credit: amt, description: memo }];
+    const jid = await journalService.save(companyId, { journal_date: txn.txn_date, memo: memo || txn.description || 'Bank' }, lines);
+    await this.update(txn.id, { journal_id: jid, payment_id: null, status: 'matched' });
+  },
+  async unmatch(txn: BankTxn, deleteJournal: boolean) {
+    if (deleteJournal && txn.journal_id) await journalService.remove(txn.journal_id);
+    await this.update(txn.id, { payment_id: null, journal_id: null, status: 'unmatched' });
+  },
+};
