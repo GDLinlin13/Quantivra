@@ -3,7 +3,6 @@ export interface Company {
   name: string;
   company_code: string;
   country: string;
-  industry: string;
   currency: string;
   financial_year_start: string;
   timezone: string;

@@ -267,7 +267,6 @@ export function CompaniesPage() {
     { title: 'Name', dataIndex: 'name', key: 'name', render: (n: string) => <span style={{ color: '#f0ede6' }}>{n}</span> },
     { title: 'Code', dataIndex: 'company_code', key: 'code' },
     { title: 'Country', dataIndex: 'country', key: 'country' },
-    { title: 'Industry', dataIndex: 'industry', key: 'industry' },
     { title: 'Currency', dataIndex: 'currency', key: 'currency' },
     {
       title: 'Status', dataIndex: 'is_active', key: 'status',

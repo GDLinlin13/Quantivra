@@ -81,7 +81,6 @@ export function CompanyProfilePage() {
                   <Descriptions.Item label="Name">{company.name}</Descriptions.Item>
                   <Descriptions.Item label="Code">{company.company_code}</Descriptions.Item>
                   <Descriptions.Item label="Country">{company.country}</Descriptions.Item>
-                  <Descriptions.Item label="Industry">{company.industry}</Descriptions.Item>
                   <Descriptions.Item label="Currency">{company.currency}</Descriptions.Item>
                   <Descriptions.Item label="Financial Year">{company.financial_year_start}</Descriptions.Item>
                   <Descriptions.Item label="Timezone">{company.timezone}</Descriptions.Item>
