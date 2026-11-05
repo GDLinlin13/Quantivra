@@ -79,7 +79,7 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
       {payable && (
         <Space size={24} style={{ marginBottom: 12 }} wrap>
           <Card size="small" style={{ minWidth: 200 }}><Statistic title={sales ? 'Customers owe' : 'We owe suppliers'} value={money(outstanding, currency)} /></Card>
-          <Card size="small" style={{ minWidth: 200 }}><Statistic title="Overdue" value={money(overdue, currency)} valueStyle={{ color: overdue > 0 ? '#ff7875' : undefined }} /></Card>
+          <Card size="small" style={{ minWidth: 200 }}><Statistic title="Overdue" value={money(overdue, currency)} styles={{ content: { color: overdue > 0 ? '#ff7875' : undefined } }} /></Card>
         </Space>
       )}
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>

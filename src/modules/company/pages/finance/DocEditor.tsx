@@ -121,7 +121,7 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
         {docId && doc.number && <Text type="secondary" style={{ display: 'block', marginTop: -8, marginBottom: 8 }}>Number {doc.number}</Text>}
       </Form>
 
-      <Table rowKey={(_, i) => String(i)} size="small" pagination={false} dataSource={lines}
+      <Table rowKey="_row" size="small" pagination={false} dataSource={lines.map((l, i) => ({ ...l, _row: i }))}
         columns={[
           { title: '', width: 24, render: () => <HolderOutlined style={{ color: '#666' }} /> },
           { title: 'Description', render: (_, l, i) => <Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} value={l.description} onChange={e => setLine(i, { description: e.target.value })} /> },

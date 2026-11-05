@@ -95,7 +95,7 @@ export function docTotals(lines: DocLine[], discounts: DocDiscount[] = [], taxIn
 }
 
 /** What the customer still owes (never below zero). */
-export const balanceDue = (d: Pick<FinDocument, 'total' | 'amount_paid'>) => Math.max(0, r2(Number(d.total) - Number(d.amount_paid)));
+export const balanceDue = (d: Pick<FinDocument, 'total' | 'amount_paid'>) => Math.max(0, r2((Number(d.total) || 0) - (Number(d.amount_paid) || 0)));
 
 /** Status after a payment change. */
 export function statusAfterPayment(d: Pick<FinDocument, 'total' | 'amount_paid' | 'status'>): DocStatus {
