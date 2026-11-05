@@ -3,7 +3,7 @@ import { Typography, Tabs, Spin, Alert, Segmented } from 'antd';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../utils/supabase';
 import { brandingService, type Branding } from '../../../services/branding';
-import { contactService, docService, accountService, financeSettingsService } from '../../../services/finance';
+import { contactService, docService, accountService, financeSettingsService, catalogService } from '../../../services/finance';
 import { DEFAULT_FINANCE_SETTINGS, type FinanceSettings } from '../../../data/finance';
 import { DocList, type FinanceData } from './finance/DocList';
 import { hrService } from '../../../services/hr';
@@ -25,15 +25,16 @@ export function CompanyFinancePage() {
   const load = useCallback(async () => {
     if (!companyId) return;
     try {
-      const [{ data: company }, branding, settings, contacts, people, accounts, docs, employees] = await Promise.all([
+      const [{ data: company }, branding, settings, contacts, people, accounts, docs, employees, items] = await Promise.all([
         supabase.from('companies').select('*').eq('id', companyId).maybeSingle(),
         brandingService.get(companyId).catch(() => null as Branding | null),
         financeSettingsService.get(companyId).catch(() => DEFAULT_FINANCE_SETTINGS as FinanceSettings),
         contactService.list(companyId), contactService.peopleOf(companyId), accountService.list(companyId),
         docService.list(companyId, ['quote', 'invoice', 'credit_note', 'bill', 'expense']),
         hrService.listEmployees(companyId).then(l => l.map(e => ({ id: Number(e.id), full_name: e.full_name }))).catch(() => []),
+        catalogService.list(companyId).catch(() => []),
       ]);
-      setData({ companyId, company, currency: company?.currency || 'SGD', branding, settings, contacts, people, accounts, docs, employees });
+      setData({ companyId, company, currency: company?.currency || 'SGD', branding, settings, contacts, people, accounts, docs, employees, items });
       setError(null);
     } catch (e: any) {
       setError(/does not exist|contacts|fin_/i.test(e.message) ? 'Finance needs database update 024 — ask your administrator to run it in Supabase.' : e.message);
@@ -52,7 +53,7 @@ export function CompanyFinancePage() {
     <div>
       <Title level={4} style={{ color: '#f0ede6' }}>Finance</Title>
       <Segmented value={area} onChange={v => changeArea(String(v))} style={{ marginBottom: 12 }}
-        options={[{ value: 'sales', label: 'Sales' }, { value: 'purchases', label: 'Purchases' }, { value: 'bank', label: 'Bank' }, { value: 'accounting', label: 'Accounting & reports' }, { value: 'settings', label: 'GST & settings' }]} />
+        options={[{ value: 'sales', label: 'Receivables' }, { value: 'purchases', label: 'Payables' }, { value: 'bank', label: 'Bank' }, { value: 'accounting', label: 'Accounting & reports' }, { value: 'settings', label: 'GST & settings' }]} />
       {area === 'sales' && (
         <Tabs activeKey={tab.sales} onChange={k => change('sales', k)} items={[
           { key: 'invoices', label: 'Invoices', children: <DocList data={d} docType="invoice" /> },

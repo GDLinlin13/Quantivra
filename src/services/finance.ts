@@ -1,3 +1,4 @@
+import type { CatalogItem, StockAdjustment } from '../data/catalog';
 import { supabase } from '../utils/supabase';
 import {
   docTotals, statusAfterPayment, DEFAULT_ACCOUNTS, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
@@ -134,7 +135,7 @@ export const docService = {
     const rows = lines.filter(l => (l.description || '').trim() || Number(l.unit_price)).map((l, i) => ({
       company_id: companyId, document_id: id, position: i, description: l.description || '',
       quantity: Number(l.quantity) || 0, unit_price: Number(l.unit_price) || 0, discount_pct: Number(l.discount_pct) || 0,
-      tax_rate: Number(l.tax_rate) || 0, account_id: l.account_id || null, amount: t.lines[lines.indexOf(l)],
+      tax_rate: Number(l.tax_rate) || 0, account_id: l.account_id || null, ...(l.item_id ? { item_id: l.item_id } : {}), amount: t.lines[lines.indexOf(l)],
     }));
     if (rows.length) must(await supabase.from('fin_document_lines').insert(rows));
     // keep paid status right if the total changed
@@ -323,4 +324,40 @@ export const pdfLayoutService = {
     must(await supabase.from('company_settings').upsert(
       { company_id: companyId, category: 'company', key: 'bank_pdf_layouts', value: all }, { onConflict: 'company_id,category,key' }));
   },
+};
+
+// ---- catalog (products and services) ---------------------------------------------------------
+
+
+export const catalogService = {
+  async list(companyId: number): Promise<CatalogItem[]> {
+    return must(await supabase.from('catalog_items').select('*').eq('company_id', companyId).order('name')) || [];
+  },
+  async save(companyId: number, i: Partial<CatalogItem>): Promise<number> {
+    const row = {
+      company_id: companyId, kind: i.kind || 'product', code: (i.code || '').trim() || null, name: (i.name || '').trim(),
+      description: i.description || null, unit: i.unit || null, sale_price: Number(i.sale_price) || 0, purchase_price: Number(i.purchase_price) || 0,
+      tax_rate: i.tax_rate == null || (i.tax_rate as any) === '' ? null : Number(i.tax_rate),
+      income_account_id: i.income_account_id || null, expense_account_id: i.expense_account_id || null,
+      track_stock: i.kind === 'service' ? false : !!i.track_stock, opening_qty: Number(i.opening_qty) || 0,
+      reorder_level: i.reorder_level == null || (i.reorder_level as any) === '' ? null : Number(i.reorder_level),
+      category: i.category || null, archived: !!i.archived, updated_at: new Date().toISOString(),
+    };
+    if (!row.name) throw new Error('Please enter a name');
+    const fix = (e: any) => { if (e && /uq_catalog_items_code|duplicate/i.test(e.message)) throw new Error(`The code "${row.code}" is already used by another item`); return e; };
+    if (i.id) { const r = await supabase.from('catalog_items').update(row).eq('id', i.id); fix(r.error); must(r); return i.id; }
+    const r = await supabase.from('catalog_items').insert(row).select('id').single(); fix(r.error);
+    return must(r).id;
+  },
+  async remove(id: number) {
+    const { error } = await supabase.from('catalog_items').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async adjustments(companyId: number): Promise<StockAdjustment[]> {
+    return must(await supabase.from('catalog_stock_adjustments').select('*').eq('company_id', companyId).order('adj_date', { ascending: false })) || [];
+  },
+  async adjust(companyId: number, itemId: number, quantity: number, date: string, reason: string) {
+    must(await supabase.from('catalog_stock_adjustments').insert({ company_id: companyId, item_id: itemId, quantity, adj_date: date, reason: reason || null }));
+  },
+  async removeAdjustment(id: number) { must(await supabase.from('catalog_stock_adjustments').delete().eq('id', id)); },
 };

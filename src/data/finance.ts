@@ -26,7 +26,7 @@ export interface DocDiscount { name: string; kind: 'percent' | 'amount'; value: 
 
 export interface DocLine {
   id?: number; position?: number; description: string; quantity: number; unit_price: number;
-  discount_pct: number; tax_rate: number; account_id?: number | null; amount?: number;
+  discount_pct: number; tax_rate: number; account_id?: number | null; item_id?: number | null; amount?: number;
 }
 
 export interface FinDocument {

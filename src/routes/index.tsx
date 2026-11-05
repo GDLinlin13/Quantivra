@@ -17,7 +17,7 @@ import { CompanyRolesPage } from '../modules/company/pages/Roles';
 import { CompanySettingsPage } from '../modules/company/pages/Settings';
 import { CompanyHRPage } from '../modules/company/pages/HR';
 import { CompanyFinancePage } from '../modules/company/pages/Finance';
-import { CompanyInventoryPage } from '../modules/company/pages/Inventory';
+import { CompanyCatalogPage } from '../modules/company/pages/Catalog';
 import { CompanyCRMPage } from '../modules/company/pages/CRM';
 import { CompanyReportsPage } from '../modules/company/pages/Reports';
 
@@ -43,7 +43,8 @@ export const router = createBrowserRouter([
       { index: true, element: <CompanyDashboard /> },
       { path: 'hr', element: <CompanyHRPage /> },
       { path: 'finance', element: <CompanyFinancePage /> },
-      { path: 'inventory', element: <CompanyInventoryPage /> },
+      { path: 'catalog', element: <CompanyCatalogPage /> },
+      { path: 'inventory', element: <Navigate to="/company/catalog" replace /> },
       { path: 'crm', element: <CompanyCRMPage /> },
       { path: 'reports', element: <CompanyReportsPage /> },
       { path: 'profile', element: <CompanyProfilePage /> },
