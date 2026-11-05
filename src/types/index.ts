@@ -170,7 +170,7 @@ export const MODULES = {
   claims: { label: 'Claims', features: ['requests', 'payments', 'categories'] },
   payroll: { label: 'Payroll', features: ['run', 'payslips', 'reports', 'components'] },
   finance: { label: 'Finance', features: ['invoices', 'payments', 'banking', 'journal', 'reports'] },
-  inventory: { label: 'Inventory', features: ['items', 'movements', 'adjustments'] },
+  inventory: { label: 'Catalog', features: ['items', 'movements', 'adjustments'] },
   crm: { label: 'CRM', features: ['leads', 'customers', 'deals'] },
   projects: { label: 'Projects', features: ['tasks', 'milestones', 'timesheets'] },
   users: { label: 'Users', features: ['manage', 'roles', 'permissions'] },

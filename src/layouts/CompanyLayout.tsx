@@ -39,7 +39,7 @@ function CompanyLayoutInner() {
     { key: '/company', icon: <DashboardOutlined />, label: 'Dashboard' },
     access.canAny(HR_MODULES) && { key: '/company/hr', icon: <TeamOutlined />, label: 'HR' },
     access.can('finance') && { key: '/company/finance', icon: <DollarOutlined />, label: 'Finance' },
-    access.can('inventory') && { key: '/company/inventory', icon: <ShopOutlined />, label: 'Inventory' },
+    access.can('inventory') && { key: '/company/catalog', icon: <ShopOutlined />, label: 'Catalog' },
     access.can('crm') && { key: '/company/crm', icon: <ContactsOutlined />, label: 'CRM' },
     access.canAny(['finance', 'employees'], 'export') && { key: '/company/reports', icon: <BarChartOutlined />, label: 'Reports' },
   ].filter(Boolean) as { key: string; icon: React.ReactNode; label: string }[];

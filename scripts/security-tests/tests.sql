@@ -384,6 +384,35 @@ BEGIN; :as_a
 DELETE FROM fin_documents; DELETE FROM contacts;
 COMMIT;
 
+\echo '9h. catalog items and stock stay inside their company'
+BEGIN; :as_a
+DO $$
+DECLARE v_i bigint;
+BEGIN
+  INSERT INTO catalog_items (company_id, name, code, sale_price, track_stock) VALUES (1, 'Logo design', 'SVC-1', 800, false);
+  INSERT INTO catalog_items (company_id, name, code, sale_price, track_stock, opening_qty) VALUES (1, 'Tote bag', 'TOTE', 25, true, 100) RETURNING id INTO v_i;
+  INSERT INTO catalog_stock_adjustments (company_id, item_id, quantity, reason) VALUES (1, v_i, -2, 'damaged');
+  PERFORM set_config('qv.alpha_item', v_i::text, false);
+  BEGIN INSERT INTO catalog_items (company_id, name) VALUES (2, 'Planted'); RAISE EXCEPTION 'FAIL: A added an item to B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO catalog_items (company_id, name, code) VALUES (1, 'Dup', 'tote'); RAISE EXCEPTION 'FAIL: duplicate item code allowed';
+  EXCEPTION WHEN unique_violation THEN NULL; END;
+END $$;
+COMMIT;
+BEGIN; :as_b
+DO $$
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM catalog_items WHERE company_id = 1), 'FAIL: B sees A catalog';
+  ASSERT NOT EXISTS (SELECT 1 FROM catalog_stock_adjustments WHERE company_id = 1), 'FAIL: B sees A stock';
+  BEGIN INSERT INTO catalog_stock_adjustments (company_id, item_id, quantity) VALUES (2, current_setting('qv.alpha_item')::bigint, 5);
+    RAISE EXCEPTION 'FAIL: B adjusted stock of an A item';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_a
+DELETE FROM catalog_items;
+COMMIT;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;

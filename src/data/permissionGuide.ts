@@ -8,7 +8,7 @@ export const MODULE_GUIDE: Record<string, { covers: string; built: boolean }> = 
   claims:     { covers: 'Expense claims: submitting, approving and paying them.', built: false },
   payroll:    { covers: 'Payroll runs, payslips and pay components (HR → Payroll). Salaries also need the role’s “Can see pay & manage users” switch.', built: true },
   finance:    { covers: 'Invoices, payments, banking and journals.', built: false },
-  inventory:  { covers: 'Stock items, movements and adjustments.', built: false },
+  inventory:  { covers: 'Catalog: products and services, prices, stock on hand and stock adjustments.', built: true },
   crm:        { covers: 'Leads, customers and deals.', built: false },
   projects:   { covers: 'Projects, tasks, milestones and timesheets.', built: false },
   users:      { covers: 'Logins, roles and permissions. Changing them also needs “Can see pay & manage users”.', built: true },

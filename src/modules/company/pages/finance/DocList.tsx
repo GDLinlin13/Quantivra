@@ -9,6 +9,7 @@ import {
 } from '../../../../data/finance';
 import { money } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
+import type { CatalogItem } from '../../../../data/catalog';
 import { DocEditor } from './DocEditor';
 import { DocumentView } from './DocumentView';
 import { PRINT_CSS } from '../hr/PayslipView';
@@ -20,6 +21,7 @@ export interface FinanceData {
   companyId: number; company: any; currency: string; branding: Branding | null; settings: FinanceSettings;
   contacts: Contact[]; people: ContactPerson[]; accounts: Account[]; docs: FinDocument[];
   employees: { id: number; full_name: string }[];
+  items: CatalogItem[];
   reload: () => void;
 }
 
@@ -140,7 +142,7 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
         ]} />
 
       {editing && (
-        <DocEditor companyId={companyId} docType={docType} docId={editing.id} contacts={contacts} people={people} accounts={accounts} employees={data.employees}
+        <DocEditor companyId={companyId} docType={docType} docId={editing.id} contacts={contacts} people={people} accounts={accounts} employees={data.employees} items={data.items}
           settings={settings} branding={branding} currency={currency}
           onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />
       )}

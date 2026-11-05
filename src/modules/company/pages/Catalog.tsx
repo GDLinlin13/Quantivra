@@ -1,0 +1,283 @@
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  Typography, Tabs, Table, Button, Space, Input, Segmented, Tag, Drawer, Form, Select, InputNumber, Switch, message, Popconfirm,
+  Modal, DatePicker, Empty, Alert, Spin, Card, Statistic,
+} from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, SwapOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import { useAuth } from '../../../contexts/AuthContext';
+import { supabase } from '../../../utils/supabase';
+import { catalogService, accountService, financeSettingsService, loadLedgerInput } from '../../../services/finance';
+import { stockMoves, onHand, type CatalogItem, type StockAdjustment } from '../../../data/catalog';
+import { DEFAULT_FINANCE_SETTINGS, type Account, type FinanceSettings } from '../../../data/finance';
+import { money } from '../../../data/documentLayouts';
+
+const { Title, Text } = Typography;
+
+type Docs = Awaited<ReturnType<typeof loadLedgerInput>>['docs'];
+
+/** Catalog: the products and services the company sells and buys, with stock for products. */
+export function CompanyCatalogPage() {
+  const { companyId } = useAuth();
+  const [items, setItems] = useState<CatalogItem[]>([]);
+  const [adjustments, setAdjustments] = useState<StockAdjustment[]>([]);
+  const [docs, setDocs] = useState<Docs>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [settings, setSettings] = useState<FinanceSettings>(DEFAULT_FINANCE_SETTINGS);
+  const [currency, setCurrency] = useState('SGD');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!companyId) return;
+    setLoading(true);
+    try {
+      const [it, adj, input, s, co] = await Promise.all([
+        catalogService.list(companyId), catalogService.adjustments(companyId), loadLedgerInput(companyId),
+        financeSettingsService.get(companyId).catch(() => DEFAULT_FINANCE_SETTINGS),
+        supabase.from('companies').select('currency').eq('id', companyId).maybeSingle(),
+      ]);
+      setItems(it); setAdjustments(adj); setDocs(input.docs); setAccounts(input.accounts); setSettings(s);
+      setCurrency(co.data?.currency || 'SGD'); setError(null);
+    } catch (e: any) {
+      setError(/catalog_|does not exist|item_id/i.test(e.message) ? 'Catalog needs database update 025 — ask your administrator to run it in Supabase.' : e.message);
+    }
+    setLoading(false);
+  }, [companyId]);
+  useEffect(() => { load(); }, [load]);
+
+  const stock = useMemo(() => new Map(items.filter(i => i.track_stock).map(i => [i.id, onHand(stockMoves(i, docs, adjustments))])), [items, docs, adjustments]);
+
+  if (!companyId) return null;
+  if (error) return <div><Title level={4} style={{ color: '#f0ede6' }}>Catalog</Title><Alert type="warning" showIcon title={error} /></div>;
+  if (loading && !items.length) return <Spin />;
+  return (
+    <div>
+      <Title level={4} style={{ color: '#f0ede6' }}>Catalog</Title>
+      <Tabs items={[
+        { key: 'items', label: 'Products & services', children: <ItemsTab companyId={companyId} items={items} stock={stock} accounts={accounts} settings={settings} currency={currency} reload={load} /> },
+        { key: 'stock', label: 'Stock', children: <StockTab companyId={companyId} items={items} stock={stock} docs={docs} adjustments={adjustments} currency={currency} reload={load} /> },
+      ]} />
+    </div>
+  );
+}
+
+function ItemsTab({ companyId, items, stock, accounts, settings, currency, reload }: {
+  companyId: number; items: CatalogItem[]; stock: Map<number, number>; accounts: Account[]; settings: FinanceSettings; currency: string; reload: () => void;
+}) {
+  const [kind, setKind] = useState('all');
+  const [search, setSearch] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
+  const [editing, setEditing] = useState<Partial<CatalogItem> | null>(null);
+  const q = search.trim().toLowerCase();
+  const shown = items.filter(i => (showArchived || !i.archived) && (kind === 'all' || i.kind === kind)
+    && (!q || [i.name, i.code, i.category, i.description].some(v => (v || '').toLowerCase().includes(q))));
+  const M = (n: number) => money(n, currency);
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <Space wrap>
+          <Segmented value={kind} onChange={v => setKind(String(v))} options={[{ value: 'all', label: 'All' }, { value: 'product', label: 'Products' }, { value: 'service', label: 'Services' }]} />
+          <Input allowClear prefix={<SearchOutlined />} placeholder="Search name, code, category" style={{ width: 260 }} value={search} onChange={e => setSearch(e.target.value)} />
+          <Space size={6}><Switch size="small" checked={showArchived} onChange={setShowArchived} /><Text type="secondary">Show archived</Text></Space>
+        </Space>
+        <Space>
+          <Button icon={<PlusOutlined />} onClick={() => setEditing({ kind: 'service' })}>Service</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ kind: 'product' })}>Product</Button>
+        </Space>
+      </div>
+      <Table rowKey="id" size="small" dataSource={shown} pagination={{ pageSize: 50, hideOnSinglePage: true }}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing in the catalog yet" /> }}
+        columns={[
+          { title: 'Code', dataIndex: 'code', width: 110, render: (v: string | null) => v || '—' },
+          { title: 'Name', key: 'n', render: (_, i) => <a onClick={() => setEditing(i)}>{i.name}</a>, sorter: (a, b) => a.name.localeCompare(b.name) },
+          { title: 'Type', key: 'k', width: 100, render: (_, i) => <Tag color={i.kind === 'product' ? 'blue' : 'purple'}>{i.kind === 'product' ? 'Product' : 'Service'}</Tag> },
+          { title: 'Category', dataIndex: 'category', render: (v: string | null) => v || '—' },
+          { title: 'Selling price', key: 's', align: 'right' as const, render: (_, i) => `${M(i.sale_price)}${i.unit ? ` / ${i.unit}` : ''}` },
+          { title: 'Cost', key: 'c', align: 'right' as const, render: (_, i) => (Number(i.purchase_price) ? M(i.purchase_price) : '—') },
+          {
+            title: 'In stock', key: 'st', align: 'right' as const, render: (_, i) => {
+              if (!i.track_stock) return <Text type="secondary">—</Text>;
+              const q2 = stock.get(i.id) ?? 0;
+              const low = i.reorder_level != null && q2 <= Number(i.reorder_level);
+              return <span style={{ color: q2 < 0 ? '#ff7875' : low ? '#faad14' : undefined }}>{q2}{i.unit ? ` ${i.unit}` : ''}{low ? ' · reorder' : ''}</span>;
+            },
+          },
+          { title: '', key: 'x', width: 60, render: (_, i) => i.archived ? <Tag>archived</Tag> : null },
+          {
+            title: '', key: 'a', width: 90, render: (_, i) => (
+              <Space>
+                <Button size="small" icon={<EditOutlined />} onClick={() => setEditing(i)} />
+                <Popconfirm title={`Delete ${i.name}?`} description="Invoices and bills that used it keep their lines."
+                  onConfirm={async () => { try { await catalogService.remove(i.id); message.success('Deleted'); reload(); } catch (e: any) { message.error(e.message); } }}>
+                  <Button size="small" danger icon={<DeleteOutlined />} />
+                </Popconfirm>
+              </Space>
+            ),
+          },
+        ]} />
+      {editing && <ItemDrawer companyId={companyId} item={editing} accounts={accounts} settings={settings} currency={currency}
+        categories={[...new Set(items.map(i => i.category).filter(Boolean) as string[])]}
+        onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
+    </div>
+  );
+}
+
+function ItemDrawer({ companyId, item, accounts, settings, currency, categories, onClose, onSaved }: {
+  companyId: number; item: Partial<CatalogItem>; accounts: Account[]; settings: FinanceSettings; currency: string; categories: string[];
+  onClose: () => void; onSaved: () => void;
+}) {
+  const [form] = Form.useForm();
+  const [saving, setSaving] = useState(false);
+  const kind = Form.useWatch('kind', form) ?? item.kind;
+  const track = Form.useWatch('track_stock', form);
+  const income = accounts.filter(a => a.type === 'income' && !a.archived);
+  const costs = accounts.filter(a => (a.type === 'expense' || a.type === 'asset') && !a.archived && !['bank', 'cash', 'receivable'].includes(a.subtype || ''));
+  const submit = async () => {
+    const v = await form.validateFields();
+    setSaving(true);
+    try {
+      await catalogService.save(companyId, { ...item, ...v, tax_rate: v.tax_rate === 'default' ? null : v.tax_rate });
+      message.success('Saved'); onSaved();
+    } catch (e: any) { message.error(e.message); }
+    setSaving(false);
+  };
+  // make sure the accounts exist before picking (first visit creates the standard chart)
+  useEffect(() => { if (!accounts.length) accountService.list(companyId).catch(() => null); }, [accounts.length, companyId]);
+  return (
+    <Drawer open onClose={onClose} size={640} title={item.id ? item.name : kind === 'service' ? 'New service' : 'New product'}
+      extra={<Button type="primary" loading={saving} onClick={submit}>Save</Button>}>
+      <Form form={form} layout="vertical" initialValues={{ kind: 'product', ...item, tax_rate: item.tax_rate == null ? 'default' : Number(item.tax_rate) }}>
+        <Form.Item name="kind"><Segmented options={[{ value: 'product', label: 'Product' }, { value: 'service', label: 'Service' }]} /></Form.Item>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
+          <Form.Item name="code" label="Code / SKU"><Input placeholder="optional" /></Form.Item>
+          <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
+        </div>
+        <Form.Item name="description" label="Description (goes on invoices)"><Input.TextArea autoSize={{ minRows: 2, maxRows: 6 }} /></Form.Item>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <Form.Item name="unit" label="Unit"><Input placeholder={kind === 'service' ? 'e.g. hour, project' : 'e.g. pc, box, kg'} /></Form.Item>
+          <Form.Item name="sale_price" label="Selling price"><InputNumber min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="purchase_price" label="Cost / buying price"><InputNumber min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <Form.Item name="category" label="Category">
+            <Select allowClear showSearch mode={undefined} options={categories.map(c => ({ value: c, label: c }))}
+              placeholder="e.g. Design, Printing" onSearch={() => null}
+              popupRender={menu => <>{menu}<div style={{ padding: 6 }}><Input size="small" placeholder="New category — press Enter"
+                onPressEnter={e => form.setFieldValue('category', (e.target as HTMLInputElement).value)} /></div></>} />
+          </Form.Item>
+          {settings.gstRegistered && (
+            <Form.Item name="tax_rate" label="GST">
+              <Select options={[{ value: 'default', label: `Standard (${settings.gstRate}%)` }, { value: 0, label: '0% (zero-rated / exempt)' }]} />
+            </Form.Item>
+          )}
+          <Form.Item name="income_account_id" label="Sales go to">
+            <Select allowClear showSearch optionFilterProp="label" placeholder="4000 Sales" options={income.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+          </Form.Item>
+          <Form.Item name="expense_account_id" label="Purchases go to">
+            <Select allowClear showSearch optionFilterProp="label" placeholder={kind === 'product' ? '5000 Cost of sales' : '6990 General expenses'} options={costs.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+          </Form.Item>
+        </div>
+        {kind === 'product' && (
+          <Card size="small" style={{ background: 'transparent' }}>
+            <Form.Item name="track_stock" valuePropName="checked" style={{ marginBottom: track ? 12 : 0 }}>
+              <Switch checkedChildren="Track stock" unCheckedChildren="Don't track stock" />
+            </Form.Item>
+            {track && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <Form.Item name="opening_qty" label="Stock when you started" tooltip="Bills add stock, invoices take it away, and you can adjust it on the Stock tab.">
+                  <InputNumber style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item name="reorder_level" label="Remind me to reorder at"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
+              </div>
+            )}
+          </Card>
+        )}
+        <Form.Item name="archived" valuePropName="checked" style={{ marginTop: 12 }}>
+          <Switch checkedChildren="Archived" unCheckedChildren="In use" />
+        </Form.Item>
+      </Form>
+    </Drawer>
+  );
+}
+
+function StockTab({ companyId, items, stock, docs, adjustments, currency, reload }: {
+  companyId: number; items: CatalogItem[]; stock: Map<number, number>; docs: Docs; adjustments: StockAdjustment[]; currency: string; reload: () => void;
+}) {
+  const tracked = items.filter(i => i.track_stock && !i.archived);
+  const [history, setHistory] = useState<CatalogItem | null>(null);
+  const [adjusting, setAdjusting] = useState<CatalogItem | null>(null);
+  const value = tracked.reduce((s, i) => s + Math.max(0, stock.get(i.id) ?? 0) * Number(i.purchase_price || 0), 0);
+  const low = tracked.filter(i => i.reorder_level != null && (stock.get(i.id) ?? 0) <= Number(i.reorder_level));
+  if (!tracked.length) return <Empty description="No products are tracking stock. Turn on “Track stock” on a product." />;
+  return (
+    <div>
+      <Space size={16} style={{ marginBottom: 12 }} wrap>
+        <Card size="small" style={{ minWidth: 200 }}><Statistic title="Stock value (at cost)" value={money(value, currency)} /></Card>
+        <Card size="small" style={{ minWidth: 200 }}><Statistic title="Need reordering" value={low.length} styles={{ content: { color: low.length ? '#faad14' : undefined } }} /></Card>
+      </Space>
+      <Table rowKey="id" size="small" dataSource={tracked} pagination={false}
+        columns={[
+          { title: 'Code', dataIndex: 'code', render: (v: string | null) => v || '—' },
+          { title: 'Product', key: 'n', render: (_, i) => <a onClick={() => setHistory(i)}>{i.name}</a> },
+          { title: 'In stock', key: 'q', align: 'right' as const, render: (_, i) => { const q = stock.get(i.id) ?? 0; return <b style={{ color: q < 0 ? '#ff7875' : undefined }}>{q}{i.unit ? ` ${i.unit}` : ''}</b>; } },
+          { title: 'Reorder at', dataIndex: 'reorder_level', align: 'right' as const, render: (v: number | null) => (v == null ? '—' : v) },
+          { title: 'Value at cost', key: 'v', align: 'right' as const, render: (_, i) => money(Math.max(0, stock.get(i.id) ?? 0) * Number(i.purchase_price || 0), currency) },
+          { title: '', key: 'a', width: 120, render: (_, i) => <Button size="small" icon={<SwapOutlined />} onClick={() => setAdjusting(i)}>Adjust</Button> },
+        ]} />
+      {adjusting && <AdjustModal companyId={companyId} item={adjusting} current={stock.get(adjusting.id) ?? 0} onClose={() => setAdjusting(null)} onDone={() => { setAdjusting(null); reload(); }} />}
+      {history && (
+        <Drawer open onClose={() => setHistory(null)} size={720} title={`${history.name} — stock history`}>
+          <Table rowKey={(_, i) => String(i)} size="small" pagination={false} dataSource={(() => {
+            let run = 0;
+            return stockMoves(history, docs, adjustments).map(m => ({ ...m, balance: (run = Math.round((run + m.quantity) * 10000) / 10000) }));
+          })()}
+            columns={[
+              { title: 'Date', dataIndex: 'date', render: (v: string) => v || '—' },
+              { title: 'What', dataIndex: 'kind', render: (k: string) => ({ opening: 'Opening stock', sold: 'Sold', bought: 'Bought', returned: 'Returned', adjusted: 'Adjusted' } as Record<string, string>)[k] },
+              { title: 'Ref', dataIndex: 'ref' }, { title: 'Note', dataIndex: 'note', render: (v?: string) => v || '' },
+              { title: 'Change', dataIndex: 'quantity', align: 'right' as const, render: (v: number) => <span style={{ color: v < 0 ? '#ff7875' : '#73d13d' }}>{v > 0 ? `+${v}` : v}</span> },
+              { title: 'In stock', dataIndex: 'balance', align: 'right' as const },
+            ]} />
+          {adjustments.filter(a => a.item_id === history.id).length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <Text type="secondary">Adjustments can be removed:</Text>
+              {adjustments.filter(a => a.item_id === history.id).map(a => (
+                <div key={a.id} style={{ marginTop: 4 }}>
+                  {a.adj_date} · {a.quantity > 0 ? '+' : ''}{a.quantity} {a.reason ? `· ${a.reason}` : ''}{' '}
+                  <Popconfirm title="Remove this adjustment?" onConfirm={async () => { await catalogService.removeAdjustment(a.id); reload(); setHistory(null); }}>
+                    <Button size="small" type="link" danger>remove</Button>
+                  </Popconfirm>
+                </div>
+              ))}
+            </div>
+          )}
+        </Drawer>
+      )}
+    </div>
+  );
+}
+
+function AdjustModal({ companyId, item, current, onClose, onDone }: { companyId: number; item: CatalogItem; current: number; onClose: () => void; onDone: () => void }) {
+  const [mode, setMode] = useState<'count' | 'change'>('count');
+  const [qty, setQty] = useState<number | null>(current);
+  const [date, setDate] = useState(dayjs());
+  const [reason, setReason] = useState('');
+  const change = mode === 'count' ? (qty ?? current) - current : (qty ?? 0);
+  return (
+    <Modal open title={`Adjust stock — ${item.name}`} onCancel={onClose} okText="Save" okButtonProps={{ disabled: !change }}
+      onOk={async () => { try { await catalogService.adjust(companyId, item.id, change, date.format('YYYY-MM-DD'), reason); message.success('Stock adjusted'); onDone(); } catch (e: any) { message.error(e.message); } }}>
+      <Text type="secondary">In stock now: <b>{current}{item.unit ? ` ${item.unit}` : ''}</b></Text>
+      <div style={{ margin: '12px 0' }}>
+        <Segmented value={mode} onChange={v => { setMode(v as any); setQty(v === 'count' ? current : 0); }}
+          options={[{ value: 'count', label: 'I counted the stock' }, { value: 'change', label: 'Add / remove an amount' }]} />
+      </div>
+      <Space wrap>
+        <InputNumber value={qty} onChange={v => setQty(v)} placeholder={mode === 'count' ? 'Counted' : '+ or −'} />
+        <DatePicker allowClear={false} value={date} onChange={d => d && setDate(d)} />
+      </Space>
+      <Input style={{ marginTop: 8 }} placeholder="Reason, e.g. stock take, damaged, sample" value={reason} onChange={e => setReason(e.target.value)} />
+      <div style={{ marginTop: 8 }}>Change: <b style={{ color: change < 0 ? '#ff7875' : '#73d13d' }}>{change > 0 ? '+' : ''}{change}</b></div>
+    </Modal>
+  );
+}

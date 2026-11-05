@@ -351,12 +351,11 @@ function BankAccountModal({ data, account, onClose, onSaved }: { data: FinanceDa
   return (
     <Modal open onCancel={onClose} onOk={submit} confirmLoading={saving} title={account.id ? `Edit ${account.name}` : 'New bank account'}>
       <Form form={form} layout="vertical" initialValues={{ ...account, opening_date: account.opening_date ? dayjs(account.opening_date) : null }}>
-        <Form.Item name="name" label="Name in Quantivra" rules={[{ required: true }]}><Input placeholder="e.g. DBS current account" /></Form.Item>
+        <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <Form.Item name="bank_name" label="Bank"><Input placeholder="e.g. DBS" /></Form.Item>
+          <Form.Item name="bank_name" label="Bank"><Input /></Form.Item>
           <Form.Item name="bank_account_no" label="Account no."><Input /></Form.Item>
-          <Form.Item name="opening_balance" label="Opening balance"
-            tooltip="The balance on the day you started recording in Quantivra, e.g. the day before your first payroll or invoice here.">
+          <Form.Item name="opening_balance" label="Opening balance">
             <InputNumber precision={2} style={{ width: '100%' }} prefix={data.currency} />
           </Form.Item>
           <Form.Item name="opening_date" label="As at"><DatePicker style={{ width: '100%' }} /></Form.Item>

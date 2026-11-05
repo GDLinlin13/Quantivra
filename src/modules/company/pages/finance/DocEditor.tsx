@@ -9,16 +9,18 @@ import {
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
+import type { CatalogItem } from '../../../../data/catalog';
 
 const { Text } = Typography;
 
 const blankLine = (rate: number): DocLine => ({ description: '', quantity: 1, unit_price: 0, discount_pct: 0, tax_rate: rate });
 
 /** Create or edit a quotation, invoice, credit note, bill or expense. */
-export function DocEditor({ companyId, docType, docId, contacts, people, accounts, settings, branding, currency, employees = [], onClose, onSaved }: {
+export function DocEditor({ companyId, docType, docId, contacts, people, accounts, settings, branding, currency, employees = [], items = [], onClose, onSaved }: {
   companyId: number; docType: DocType; docId?: number | null;
   contacts: Contact[]; people: ContactPerson[]; accounts: Account[]; settings: FinanceSettings; branding: Branding | null; currency: string;
   employees?: { id: number; full_name: string }[];
+  items?: CatalogItem[];
   onClose: () => void; onSaved: (id: number) => void;
 }) {
   const sales = docType === 'quote' || docType === 'invoice' || docType === 'credit_note';
@@ -50,7 +52,28 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
 
   const contactList = contacts.filter(c => !c.archived && (sales ? c.is_customer : c.is_supplier) || c.id === doc.contact_id);
   const contactPeople = people.filter(p => p.contact_id === doc.contact_id);
-  const lineAccounts = accounts.filter(a => !a.archived && (sales ? a.type === 'income' : a.type === 'expense' || a.type === 'asset'));
+  // What a line can be booked to: income for sales; for purchases, expenses plus the few asset accounts you can
+  // buy into (prepayments, equipment) — never bank / cash / receivables, and not the payroll accounts payroll books itself.
+  const AUTO = ['bank', 'cash', 'receivable', 'payroll', 'payroll_employer'];
+  const lineAccounts = accounts.filter(a => !a.archived && !AUTO.includes(a.subtype || '')
+    && (sales ? a.type === 'income' : a.type === 'expense' || a.type === 'asset'));
+  const accountOptions = sales
+    ? lineAccounts.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))
+    : [
+      { label: 'Expenses', options: lineAccounts.filter(a => a.type === 'expense').map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
+      { label: 'Things you own (assets)', options: lineAccounts.filter(a => a.type === 'asset').map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
+    ];
+  const catalog = items.filter(it => !it.archived || lines.some(l => l.item_id === it.id));
+  const pickItem = (i: number, id: number | null) => {
+    const it = items.find(x => x.id === id);
+    if (!it) { setLine(i, { item_id: null }); return; }
+    setLine(i, {
+      item_id: it.id, description: it.description ? `${it.name}\n${it.description}` : it.name,
+      unit_price: Number(sales ? it.sale_price : it.purchase_price) || 0,
+      tax_rate: settings.gstRegistered ? (it.tax_rate == null ? gstRate : Number(it.tax_rate)) : 0,
+      account_id: (sales ? it.income_account_id : it.expense_account_id) || null,
+    });
+  };
   const payFrom = accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash'));
   const banks = paymentAccounts(branding?.templates.invoice);
 
@@ -137,10 +160,15 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
       <Table rowKey="_row" size="small" pagination={false} dataSource={lines.map((l, i) => ({ ...l, _row: i }))}
         columns={[
           { title: '', width: 24, render: () => <HolderOutlined style={{ color: '#666' }} /> },
+          ...(catalog.length ? [{ title: 'Item', width: 190, render: (_: any, l: DocLine, i: number) => (
+            <Select style={{ width: '100%' }} allowClear showSearch optionFilterProp="label" value={l.item_id ?? undefined} placeholder="From the catalog"
+              onChange={v => pickItem(i, v ?? null)}
+              options={catalog.map(it => ({ value: it.id, label: `${it.code ? `${it.code} · ` : ''}${it.name}` }))} />
+          ) }] : []),
           { title: 'Description', render: (_, l, i) => <Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} value={l.description} onChange={e => setLine(i, { description: e.target.value })} /> },
           ...(lineAccounts.length && !sales ? [{ title: 'Account', width: 180, render: (_: any, l: DocLine, i: number) => (
             <Select style={{ width: '100%' }} showSearch optionFilterProp="label" value={l.account_id ?? undefined} onChange={v => setLine(i, { account_id: v })}
-              options={lineAccounts.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))} placeholder="General" />
+              options={accountOptions as any} placeholder="General expenses" />
           ) }] : []),
           { title: 'Qty', width: 80, render: (_, l, i) => <InputNumber style={{ width: '100%' }} value={l.quantity} onChange={v => setLine(i, { quantity: Number(v) || 0 })} /> },
           { title: 'Unit price', width: 120, render: (_, l, i) => <InputNumber style={{ width: '100%' }} precision={2} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} /> },
