@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, Form, Input, Button, Checkbox } from 'antd';
 import { UserOutlined, LockOutlined, BankOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { isPlatformUsername } from '../../../services/auth';
 
@@ -9,6 +9,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
   const [form] = Form.useForm();
+  const [params] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState('');
@@ -101,7 +102,8 @@ export function LoginPage() {
           </div>
         </div>
 
-        <Form form={form} layout="vertical" onFinish={handleLogin} autoComplete="off">
+        <Form form={form} layout="vertical" onFinish={handleLogin} autoComplete="off"
+          initialValues={{ company_code: params.get('company') || undefined }}>
           <Form.Item name="company_code">
             <Input
               prefix={<BankOutlined style={{ color: 'rgba(240,237,230,0.3)' }} />}

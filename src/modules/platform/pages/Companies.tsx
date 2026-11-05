@@ -4,8 +4,9 @@ import { PlusOutlined, CheckCircleOutlined, CheckOutlined, LoadingOutlined, Clos
 import { companyService } from '../../../services';
 import { supabase } from '../../../utils/supabase';
 import { adminUsersService, MIN_PASSWORD_LENGTH } from '../../../services/adminUsers';
-import { USERNAME_PATTERN, USERNAME_RULE_TEXT } from '../../../utils/loginEmail';
+import { USERNAME_PATTERN, USERNAME_RULE_TEXT, COMPANY_CODE_PATTERN, COMPANY_CODE_RULE_TEXT, suggestCompanyCode } from '../../../utils/loginEmail';
 import { timezoneOptions } from '../../../utils/timezones';
+import { currencyOptions } from '../../../utils/currencies';
 import { packFor2026 } from '../../../data/country-law-2026';
 import type { Company } from '../../../types';
 import { MODULES } from '../../../types';
@@ -114,6 +115,7 @@ export function CompaniesPage() {
   const [deleting, setDeleting] = useState(false);
   const [form] = Form.useForm();
   const provisionStarted = useRef(false);
+  const codeTouched = useRef(false);  // stop auto-suggesting once the code is edited by hand
   const [legacyLogins, setLegacyLogins] = useState(0);
   const [migrating, setMigrating] = useState(false);
 
@@ -165,7 +167,7 @@ export function CompaniesPage() {
   useEffect(() => { load(); }, []);
 
   const stepFields = [
-    ['name', 'registration_number', 'country', 'business_pack', 'currency', 'financial_year_start', 'timezone'],
+    ['name', 'company_code', 'registration_number', 'country', 'business_pack', 'currency', 'financial_year_start', 'timezone'],
     ['owner_full_name', 'owner_username', 'owner_email', 'owner_mobile', 'owner_password'],
     ['modules'],
     [],
@@ -209,6 +211,7 @@ export function CompaniesPage() {
     try {
       const result = await provisionCompany({
         name: values.name,
+        company_code: values.company_code,
         registration_number: values.registration_number,
         country: values.country,
         business_pack: values.business_pack || '',
@@ -252,6 +255,7 @@ export function CompaniesPage() {
     setProvisionResult(null);
     setProvisionSteps(getProvisionSteps());
     form.resetFields();
+    codeTouched.current = false;
     load();
   };
 
@@ -300,6 +304,7 @@ export function CompaniesPage() {
       currency: g.currency || form.getFieldValue('currency'),
       timezone: g.timezone || form.getFieldValue('timezone'),
     });
+    form.validateFields(['currency', 'timezone']).catch(() => {});
   };
 
   const countryOptions = [...countries]
@@ -359,20 +364,35 @@ export function CompaniesPage() {
           form={form}
           layout="vertical"
           initialValues={{
-            currency: 'SGD', financial_year_start: '01-01', timezone: 'Asia/Singapore',
+            financial_year_start: '01-01',
             modules: ALL_FEATURES_MODULES, business_pack: 'enterprise',
           }}
         >
           {currentStep === 0 && (
             <>
               <Row gutter={16}>
-                <Col span={12}>
+                <Col span={8}>
                   <Form.Item name="name" label={<Text style={{ color: '#f0ede6' }}>Company Name</Text>}
                     rules={[{ required: true, message: 'Required' }]}>
-                    <Input />
+                    <Input onChange={e => {
+                      if (!codeTouched.current) form.setFieldValue('company_code', suggestCompanyCode(e.target.value));
+                    }} />
                   </Form.Item>
                 </Col>
-                <Col span={12}>
+                <Col span={8}>
+                  <Form.Item name="company_code" label={<Text style={{ color: '#f0ede6' }}>Company Code</Text>}
+                    tooltip="Staff type this on the login page. Suggested from the name; you can change it."
+                    normalize={(v: string) => (v || '').toLowerCase().replace(/[^a-z0-9-]/g, '')}
+                    rules={[
+                      { required: true, message: 'Required' },
+                      { pattern: COMPANY_CODE_PATTERN, message: COMPANY_CODE_RULE_TEXT },
+                      { validator: (_, v) => (v && companies.some((c: any) => String(c.company_code).toLowerCase() === v)
+                        ? Promise.reject(new Error('Another company already uses this code')) : Promise.resolve()) },
+                    ]}>
+                    <Input onChange={() => { codeTouched.current = true; }} />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
                   <Form.Item name="registration_number" label={<Text style={{ color: '#f0ede6' }}>Registration Number</Text>}>
                     <Input />
                   </Form.Item>
@@ -394,8 +414,9 @@ export function CompaniesPage() {
               </Row>
               <Row gutter={16}>
                 <Col span={8}>
-                  <Form.Item name="currency" label={<Text style={{ color: '#f0ede6' }}>Currency</Text>}>
-                    <Input />
+                  <Form.Item name="currency" label={<Text style={{ color: '#f0ede6' }}>Currency</Text>}
+                    rules={[{ required: true, message: 'Choose a currency, or pick a country' }]}>
+                    <Select showSearch optionFilterProp="label" options={currencyOptions()} />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
@@ -404,7 +425,8 @@ export function CompaniesPage() {
                   </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item name="timezone" label={<Text style={{ color: '#f0ede6' }}>Timezone</Text>}>
+                  <Form.Item name="timezone" label={<Text style={{ color: '#f0ede6' }}>Timezone</Text>}
+                    rules={[{ required: true, message: 'Choose a timezone, or pick a country' }]}>
                     <Select showSearch optionFilterProp="label" options={timezoneOptions()} />
                   </Form.Item>
                 </Col>
@@ -482,6 +504,7 @@ export function CompaniesPage() {
               <Card size="small" style={{ background: '#0b0f12', borderColor: 'rgba(255,255,255,0.08)', marginBottom: 16 }}>
                 <Row gutter={[16, 8]}>
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Owner</Text><br /><Text>{form.getFieldValue('owner_full_name')}</Text></Col>
+                  <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Company Code</Text><br /><Text>{form.getFieldValue('company_code')}</Text></Col>
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Username</Text><br /><Text>{form.getFieldValue('owner_username')}</Text></Col>
                   <Col span={12}><Text style={{ color: 'rgba(240,237,230,0.5)' }}>Email</Text><br /><Text>{form.getFieldValue('owner_email') || '-'}</Text></Col>
                 </Row>

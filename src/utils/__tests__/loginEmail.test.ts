@@ -12,3 +12,15 @@ describe('username logins', () => {
     for (const bad of ['jo', 'john tan', '.john', 'john.', 'john@x', 'a'.repeat(33)]) expect(isValidUsername(bad), bad).toBe(false);
   });
 });
+
+import { suggestCompanyCode, COMPANY_CODE_PATTERN } from '../loginEmail';
+describe('company codes', () => {
+  it('suggests a valid code from the company name', () => {
+    expect(suggestCompanyCode('Acme Pte. Ltd.')).toBe('acme-pte-ltd');
+    expect(suggestCompanyCode('  C3 Vantage  ')).toBe('c3-vantage');
+    expect(suggestCompanyCode('A very long company name indeed Pte Ltd').length).toBeLessThanOrEqual(20);
+    for (const n of ['Acme Pte. Ltd.', 'C3 Vantage', 'A very long company name indeed Pte Ltd']) {
+      expect(COMPANY_CODE_PATTERN.test(suggestCompanyCode(n)), n).toBe(true);
+    }
+  });
+});
