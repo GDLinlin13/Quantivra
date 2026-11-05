@@ -10,6 +10,7 @@ import { hrService } from '../../../services/hr';
 import { ContactsManager } from './finance/ContactsManager';
 import { PaymentsList } from './finance/PaymentsList';
 import { FinanceSettingsTab } from './finance/FinanceSettingsTab';
+import { Accounting } from './finance/Accounting';
 
 const { Title } = Typography;
 
@@ -51,7 +52,7 @@ export function CompanyFinancePage() {
     <div>
       <Title level={4} style={{ color: '#f0ede6' }}>Finance</Title>
       <Segmented value={area} onChange={v => changeArea(String(v))} style={{ marginBottom: 12 }}
-        options={[{ value: 'sales', label: 'Sales' }, { value: 'purchases', label: 'Purchases' }, { value: 'settings', label: 'GST & settings' }]} />
+        options={[{ value: 'sales', label: 'Sales' }, { value: 'purchases', label: 'Purchases' }, { value: 'accounting', label: 'Accounting & reports' }, { value: 'settings', label: 'GST & settings' }]} />
       {area === 'sales' && (
         <Tabs activeKey={tab.sales} onChange={k => change('sales', k)} items={[
           { key: 'invoices', label: 'Invoices', children: <DocList data={d} docType="invoice" /> },
@@ -67,6 +68,7 @@ export function CompanyFinancePage() {
           { key: 'suppliers', label: 'Suppliers', children: <ContactsManager companyId={data.companyId} kind="supplier" currency={data.currency} onChanged={load} /> },
         ]} />
       )}
+      {area === 'accounting' && <Accounting data={d} />}
       {area === 'settings' && <FinanceSettingsTab companyId={data.companyId} settings={data.settings} onSaved={load} />}
     </div>
   );
