@@ -3,12 +3,15 @@ import {
   Select, Space, Button, Table, Tag, Card, Statistic, Upload, Modal, Form, DatePicker, Input, InputNumber, Segmented, message, Empty,
   Typography, Popconfirm, Tabs, Alert,
 } from 'antd';
-import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined } from '@ant-design/icons';
+import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { bankService, paymentService, loadLedgerInput, type BankTxn, type Payment } from '../../../../services/finance';
+import { bankService, paymentService, loadLedgerInput, accountService, type BankTxn, type Payment } from '../../../../services/finance';
 import { buildLedger, balances } from '../../../../data/ledger';
 import { balanceDue, type Account, type FinDocument } from '../../../../data/finance';
 import { parseBankCsv, type BankLine } from '../../../../data/bankCsv';
+import { parseStatementText, pdfToLines } from '../../../../data/bankPdf';
+
+type ImportLine = BankLine & { sure: boolean };
 import { money } from '../../../../data/documentLayouts';
 import type { FinanceData } from './DocList';
 
@@ -25,7 +28,8 @@ export function Bank({ data }: { data: FinanceData }) {
   const [booksBalance, setBooksBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('unmatched');
-  const [importing, setImporting] = useState<BankLine[] | null>(null);
+  const [importing, setImporting] = useState<ImportLine[] | null>(null);
+  const [bankEdit, setBankEdit] = useState<Partial<Account> | null>(null);
   const [adding, setAdding] = useState(false);
   const [matching, setMatching] = useState<BankTxn | null>(null);
   const account = accounts.find(a => a.id === accountId);
@@ -50,13 +54,34 @@ export function Bank({ data }: { data: FinanceData }) {
   const shown = txns.filter(t => filter === 'all' || t.status === filter);
   const unmatched = txns.filter(t => t.status === 'unmatched').length;
 
+  const bankModal = bankEdit && (
+    <BankAccountModal data={data} account={bankEdit} onClose={() => setBankEdit(null)}
+      onSaved={id => { setBankEdit(null); setAccountId(id); data.reload(); }} />
+  );
   if (!banks.length) {
-    return <Empty description="No bank accounts yet. Add one in Accounting & reports → Chart of accounts (kind: Bank account)." />;
+    return (
+      <div>
+        <Empty description="No bank accounts yet">
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setBankEdit({})}>Bank account</Button>
+        </Empty>
+        {bankModal}
+      </div>
+    );
   }
 
   const onFile = async (file: File) => {
-    const text = await file.text();
-    const r = parseBankCsv(text);
+    let r: { lines: ImportLine[]; error?: string };
+    if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+      const hide = message.loading('Reading the PDF…', 0);
+      try {
+        const parsed = parseStatementText(await pdfToLines(file));
+        r = parsed.lines.length ? { lines: parsed.lines } : { lines: [], error: 'No transactions found in that PDF. Scanned (photo) statements can’t be read — download the statement from internet banking as PDF or CSV.' };
+      } catch (e: any) { r = { lines: [], error: `Couldn’t read the PDF: ${e.message}` }; }
+      hide();
+    } else {
+      const c = parseBankCsv(await file.text());
+      r = { lines: c.lines.map(l => ({ ...l, sure: true })), error: c.error };
+    }
     if (r.error) { message.error(r.error); return false; }
     // leave out lines already imported (same date, amount and description)
     const seen = new Set(txns.map(t => `${t.txn_date}|${Number(t.amount).toFixed(2)}|${t.description || ''}`));
@@ -77,7 +102,9 @@ export function Bank({ data }: { data: FinanceData }) {
       <Space wrap style={{ marginBottom: 12 }}>
         <Select style={{ width: 280 }} value={accountId ?? undefined} onChange={setAccountId}
           options={banks.map(b => ({ value: b.id, label: `${b.name}${b.bank_account_no ? ` (${b.bank_account_no})` : ''}` }))} />
-        <Upload accept=".csv,text/csv" showUploadList={false} beforeUpload={onFile}><Button icon={<UploadOutlined />}>Import statement (CSV)</Button></Upload>
+        <Button icon={<EditOutlined />} onClick={() => account && setBankEdit(account)} title="Edit this bank account" />
+        <Button icon={<PlusOutlined />} onClick={() => setBankEdit({})}>Bank account</Button>
+        <Upload accept=".csv,text/csv,.pdf,application/pdf" showUploadList={false} beforeUpload={onFile}><Button icon={<UploadOutlined />}>Import statement (PDF or CSV)</Button></Upload>
         <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>Add a line</Button>
       </Space>
       <Space size={16} wrap style={{ marginBottom: 12 }}>
@@ -85,6 +112,11 @@ export function Bank({ data }: { data: FinanceData }) {
         <Card size="small" style={{ minWidth: 200 }}><Statistic title="Balance in Quantivra" value={money(booksBalance, currency)} /></Card>
         <Card size="small" style={{ minWidth: 200 }}><Statistic title="Lines to match" value={unmatched} styles={{ content: { color: unmatched ? '#faad14' : undefined } }} /></Card>
       </Space>
+      {booksBalance < 0 && !Number(account?.opening_balance) && (
+        <Alert type="info" showIcon style={{ marginBottom: 12 }}
+          title="The balance in Quantivra is negative because this account has no opening balance yet."
+          description={<>Payroll net pay, payments and other money out are taken from this account, but the money that was in it when you started isn't recorded. Click <EditOutlined /> next to the account and enter the opening balance and its date (e.g. your bank balance on the day before your first payroll in Quantivra).</>} />
+      )}
       {Math.abs(statementBalance - booksBalance) >= 0.01 && unmatched === 0 && txns.length > 0 && (
         <Alert type="warning" showIcon style={{ marginBottom: 12 }}
           title={`The statement and Quantivra differ by ${money(Math.abs(statementBalance - booksBalance), currency)}. Check for payments recorded in Quantivra that aren't on the statement yet, or the account's opening balance.`} />
@@ -120,16 +152,34 @@ export function Bank({ data }: { data: FinanceData }) {
         ]} />
 
       {importing && (
-        <Modal open width={760} title={`Import ${importing.length} lines into ${account?.name}`} okText="Import"
+        <Modal open width={860} title={`Import ${importing.length} lines into ${account?.name}`} okText={`Import ${importing.length} lines`}
           onCancel={() => setImporting(null)}
-          onOk={async () => { try { await bankService.add(companyId, accountId!, importing); message.success('Imported'); setImporting(null); load(); } catch (e: any) { message.error(e.message); } }}>
-          <Table size="small" rowKey={(l: BankLine) => `${l.txn_date}${l.amount}${l.description}`} pagination={{ pageSize: 10 }} dataSource={importing}
-            columns={[{ title: 'Date', dataIndex: 'txn_date' }, { title: 'Description', dataIndex: 'description' },
-              { title: 'Amount', dataIndex: 'amount', align: 'right' as const, render: (v: number) => <span style={{ color: v > 0 ? '#73d13d' : '#ff7875' }}>{money(v, currency)}</span> }]} />
+          onOk={async () => { try { await bankService.add(companyId, accountId!, importing.map(({ sure: _s, ...l }) => l)); message.success('Imported'); setImporting(null); load(); } catch (e: any) { message.error(e.message); } }}>
+          {importing.some(l => !l.sure) && (
+            <Alert type="warning" showIcon style={{ marginBottom: 8 }}
+              title={`${importing.filter(l => !l.sure).length} lines are marked “check”: the statement didn't show a running balance for them, so money in / out was guessed. Flip any that are wrong.`} />
+          )}
+          <Table size="small" rowKey={(_l: ImportLine) => importing.indexOf(_l)} pagination={{ pageSize: 12 }} dataSource={importing}
+            columns={[
+              { title: 'Date', dataIndex: 'txn_date', width: 110 },
+              { title: 'Description', dataIndex: 'description' },
+              { title: 'Amount', key: 'a', align: 'right' as const, width: 140, render: (_: any, l: ImportLine) => <span style={{ color: l.amount > 0 ? '#73d13d' : '#ff7875' }}>{money(l.amount, currency)}</span> },
+              {
+                title: 'In / out', key: 'f', width: 190, render: (_: any, l: ImportLine) => (
+                  <Space size={4}>
+                    <Segmented size="small" value={l.amount > 0 ? 'in' : 'out'} options={[{ value: 'in', label: 'In' }, { value: 'out', label: 'Out' }]}
+                      onChange={v => setImporting(ls => ls!.map(x => (x === l ? { ...x, amount: (v === 'in' ? 1 : -1) * Math.abs(x.amount), sure: true } : x)))} />
+                    {!l.sure && <Tag color="gold">check</Tag>}
+                  </Space>
+                ),
+              },
+              { title: '', key: 'x', width: 40, render: (_: any, l: ImportLine) => <Button size="small" icon={<DeleteOutlined />} onClick={() => setImporting(ls => ls!.filter(x => x !== l))} /> },
+            ]} />
         </Modal>
       )}
       {adding && <AddLine onClose={() => setAdding(false)} currency={currency}
         onAdd={async l => { await bankService.add(companyId, accountId!, [l]); setAdding(false); load(); }} />}
+      {bankModal}
       {matching && <MatchModal data={data} txn={matching} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
         onClose={() => setMatching(null)} onDone={() => { setMatching(null); load(); data.reload(); }} />}
     </div>
@@ -236,6 +286,46 @@ function MatchModal({ data, txn, payments, usedPayments, onClose, onDone }: {
           ),
         },
       ]} />
+    </Modal>
+  );
+}
+
+/** Add or edit a bank account (an asset account of kind "bank" in the chart of accounts). */
+function BankAccountModal({ data, account, onClose, onSaved }: { data: FinanceData; account: Partial<Account>; onClose: () => void; onSaved: (id: number) => void }) {
+  const [form] = Form.useForm();
+  const [saving, setSaving] = useState(false);
+  const nextCode = () => {
+    const used = new Set(data.accounts.map(a => a.code));
+    for (let c = 1001; c < 1100; c++) if (!used.has(String(c))) return String(c);
+    return `1${Date.now() % 1000}`;
+  };
+  const submit = async () => {
+    const v = await form.validateFields();
+    setSaving(true);
+    try {
+      const id = await accountService.save(data.companyId, {
+        ...account, code: account.code || nextCode(), name: v.name, type: 'asset', subtype: account.subtype || 'bank',
+        bank_name: v.bank_name, bank_account_no: v.bank_account_no, opening_balance: v.opening_balance || 0,
+        opening_date: v.opening_date ? v.opening_date.format('YYYY-MM-DD') : null, description: account.description,
+      });
+      message.success('Saved'); onSaved(id);
+    } catch (e: any) { message.error(e.message); }
+    setSaving(false);
+  };
+  return (
+    <Modal open onCancel={onClose} onOk={submit} confirmLoading={saving} title={account.id ? `Edit ${account.name}` : 'New bank account'}>
+      <Form form={form} layout="vertical" initialValues={{ ...account, opening_date: account.opening_date ? dayjs(account.opening_date) : null }}>
+        <Form.Item name="name" label="Name in Quantivra" rules={[{ required: true }]}><Input placeholder="e.g. DBS current account" /></Form.Item>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <Form.Item name="bank_name" label="Bank"><Input placeholder="e.g. DBS" /></Form.Item>
+          <Form.Item name="bank_account_no" label="Account no."><Input /></Form.Item>
+          <Form.Item name="opening_balance" label="Opening balance"
+            tooltip="The balance on the day you started recording in Quantivra, e.g. the day before your first payroll or invoice here.">
+            <InputNumber precision={2} style={{ width: '100%' }} prefix={data.currency} />
+          </Form.Item>
+          <Form.Item name="opening_date" label="As at"><DatePicker style={{ width: '100%' }} /></Form.Item>
+        </div>
+      </Form>
     </Modal>
   );
 }
