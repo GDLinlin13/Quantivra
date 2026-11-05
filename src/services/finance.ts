@@ -76,15 +76,15 @@ export const accountService = {
     }
     return rows;
   },
-  async save(companyId: number, a: Partial<Account>) {
+  async save(companyId: number, a: Partial<Account>): Promise<number> {
     const row = {
       company_id: companyId, code: (a.code || '').trim(), name: (a.name || '').trim(), type: a.type, subtype: a.subtype || null,
       description: a.description || null, archived: !!a.archived, bank_name: a.bank_name || null, bank_account_no: a.bank_account_no || null,
       opening_balance: Number(a.opening_balance) || 0, opening_date: a.opening_date || null,
     };
     if (!row.code || !row.name || !row.type) throw new Error('Code, name and type are needed');
-    if (a.id) must(await supabase.from('fin_accounts').update(row).eq('id', a.id));
-    else must(await supabase.from('fin_accounts').insert(row));
+    if (a.id) { must(await supabase.from('fin_accounts').update(row).eq('id', a.id)); return a.id; }
+    return must(await supabase.from('fin_accounts').insert(row).select('id').single()).id;
   },
   async remove(id: number) {
     const { error } = await supabase.from('fin_accounts').delete().eq('id', id);
