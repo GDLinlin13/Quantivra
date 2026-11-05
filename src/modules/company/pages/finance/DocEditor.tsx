@@ -106,7 +106,8 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr', gap: 12 }}>
           <Form.Item label={sales ? 'Customer' : 'Supplier'} required={docType !== 'expense'}>
             <Select showSearch optionFilterProp="label" value={doc.contact_id ?? undefined} onChange={pickContact} allowClear={docType === 'expense'}
-              options={contactList.map(c => ({ value: c.id, label: c.name }))} placeholder={sales ? 'Choose a customer' : 'Choose a supplier'} />
+              options={contactList.map(c => ({ value: c.id, label: c.name }))} placeholder={sales ? 'Choose a customer' : 'Choose a supplier'}
+              notFoundContent={`No ${sales ? 'customers' : 'suppliers'} yet — add them in CRM → Customers & Suppliers`} />
           </Form.Item>
           <Form.Item label="Person in charge">
             <Select allowClear value={doc.contact_person_id ?? undefined} onChange={v => set({ contact_person_id: v ?? null })}
