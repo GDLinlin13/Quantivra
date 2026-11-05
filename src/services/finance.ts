@@ -308,3 +308,19 @@ export const bankService = {
     await this.update(txn.id, { payment_id: null, journal_id: null, status: 'unmatched' });
   },
 };
+
+// ---- how to read each bank's PDF statements (taught by the user) ---------------------------
+
+export const pdfLayoutService = {
+  async get(companyId: number): Promise<Record<string, any>> {
+    const { data } = await supabase.from('company_settings').select('value')
+      .eq('company_id', companyId).eq('category', 'company').eq('key', 'bank_pdf_layouts').maybeSingle();
+    return (data?.value as Record<string, any>) || {};
+  },
+  async save(companyId: number, accountId: number, layout: any | null) {
+    const all = await this.get(companyId);
+    if (layout) all[String(accountId)] = layout; else delete all[String(accountId)];
+    must(await supabase.from('company_settings').upsert(
+      { company_id: companyId, category: 'company', key: 'bank_pdf_layouts', value: all }, { onConflict: 'company_id,category,key' }));
+  },
+};

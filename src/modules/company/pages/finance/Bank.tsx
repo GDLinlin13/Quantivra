@@ -5,11 +5,12 @@ import {
 } from 'antd';
 import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { bankService, paymentService, loadLedgerInput, accountService, type BankTxn, type Payment } from '../../../../services/finance';
+import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, type BankTxn, type Payment } from '../../../../services/finance';
 import { buildLedger, balances } from '../../../../data/ledger';
 import { balanceDue, type Account, type FinDocument } from '../../../../data/finance';
 import { parseBankCsv, type BankLine } from '../../../../data/bankCsv';
-import { parseStatementText, pdfToLines } from '../../../../data/bankPdf';
+import { parseStatementText, pdfToRows, rowsToLines, parseWithLayout, type PdfRow, type PdfLayout } from '../../../../data/bankPdf';
+import { TeachPdf } from './TeachPdf';
 
 type ImportLine = BankLine & { sure: boolean };
 import { money } from '../../../../data/documentLayouts';
@@ -30,6 +31,10 @@ export function Bank({ data }: { data: FinanceData }) {
   const [filter, setFilter] = useState('unmatched');
   const [importing, setImporting] = useState<ImportLine[] | null>(null);
   const [bankEdit, setBankEdit] = useState<Partial<Account> | null>(null);
+  const [pdfRows, setPdfRows] = useState<PdfRow[] | null>(null);
+  const [teaching, setTeaching] = useState(false);
+  const [layouts, setLayouts] = useState<Record<string, PdfLayout>>({});
+  useEffect(() => { pdfLayoutService.get(companyId).then(setLayouts).catch(() => setLayouts({})); }, [companyId]);
   const [adding, setAdding] = useState(false);
   const [matching, setMatching] = useState<BankTxn | null>(null);
   const account = accounts.find(a => a.id === accountId);
@@ -71,25 +76,34 @@ export function Bank({ data }: { data: FinanceData }) {
 
   const onFile = async (file: File) => {
     let r: { lines: ImportLine[]; error?: string };
+    setPdfRows(null);
     if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
       const hide = message.loading('Reading the PDF…', 0);
       try {
-        const parsed = parseStatementText(await pdfToLines(file));
-        r = parsed.lines.length ? { lines: parsed.lines } : { lines: [], error: 'No transactions found in that PDF. Scanned (photo) statements can’t be read — download the statement from internet banking as PDF or CSV.' };
-      } catch (e: any) { r = { lines: [], error: `Couldn’t read the PDF: ${e.message}` }; }
-      hide();
+        const rows = await pdfToRows(file);
+        hide();
+        if (!rows.length) { message.error('No text in that PDF. Scanned (photo) statements can’t be read — download the statement from internet banking as PDF or CSV.'); return false; }
+        setPdfRows(rows);
+        const taught = layouts[String(accountId)];
+        const parsed = taught ? parseWithLayout(rows, taught) : parseStatementText(rowsToLines(rows));
+        if (!parsed.lines.length) { setTeaching(true); return false; }
+        r = { lines: parsed.lines };
+      } catch (e: any) { hide(); r = { lines: [], error: `Couldn’t read the PDF: ${e.message}` }; }
     } else {
       const c = parseBankCsv(await file.text());
       r = { lines: c.lines.map(l => ({ ...l, sure: true })), error: c.error };
     }
     if (r.error) { message.error(r.error); return false; }
-    // leave out lines already imported (same date, amount and description)
-    const seen = new Set(txns.map(t => `${t.txn_date}|${Number(t.amount).toFixed(2)}|${t.description || ''}`));
-    const fresh = r.lines.filter(l => !seen.has(`${l.txn_date}|${l.amount.toFixed(2)}|${l.description}`));
-    if (!fresh.length) { message.info('Nothing new in that file'); return false; }
-    setImporting(fresh);
+    showImport(r.lines);
     return false;
   };
+  // leave out lines already imported (same date, amount and description)
+  function showImport(lines: ImportLine[]) {
+    const seen = new Set(txns.map(t => `${t.txn_date}|${Number(t.amount).toFixed(2)}|${t.description || ''}`));
+    const fresh = lines.filter(l => !seen.has(`${l.txn_date}|${l.amount.toFixed(2)}|${l.description}`));
+    if (!fresh.length) { message.info('Nothing new in that file'); setImporting(null); return; }
+    setImporting(fresh);
+  }
 
   const describe = (t: BankTxn) => {
     if (t.payment_id) { const p = payments.find(x => x.id === t.payment_id); return p ? `Payment ${p.number || ''} · ${data.contacts.find(c => c.id === p.contact_id)?.name || ''}` : 'Payment'; }
@@ -155,6 +169,19 @@ export function Bank({ data }: { data: FinanceData }) {
         <Modal open width={860} title={`Import ${importing.length} lines into ${account?.name}`} okText={`Import ${importing.length} lines`}
           onCancel={() => setImporting(null)}
           onOk={async () => { try { await bankService.add(companyId, accountId!, importing.map(({ sure: _s, ...l }) => l)); message.success('Imported'); setImporting(null); load(); } catch (e: any) { message.error(e.message); } }}>
+          {pdfRows && (
+            <Space style={{ marginBottom: 8 }} wrap>
+              <Text type="secondary">{layouts[String(accountId)] ? 'Read the way you taught Quantivra for this bank.' : 'Read automatically.'} Not right?</Text>
+              <Button size="small" onClick={() => setTeaching(true)}>Teach Quantivra how to read this PDF</Button>
+              {layouts[String(accountId)] && (
+                <Button size="small" type="link" onClick={async () => {
+                  await pdfLayoutService.save(companyId, accountId!, null);
+                  setLayouts(l => { const n = { ...l }; delete n[String(accountId)]; return n; });
+                  showImport(parseStatementText(rowsToLines(pdfRows)).lines);
+                }}>Forget what was taught</Button>
+              )}
+            </Space>
+          )}
           {importing.some(l => !l.sure) && (
             <Alert type="warning" showIcon style={{ marginBottom: 8 }}
               title={`${importing.filter(l => !l.sure).length} lines are marked “check”: the statement didn't show a running balance for them, so money in / out was guessed. Flip any that are wrong.`} />
@@ -180,6 +207,15 @@ export function Bank({ data }: { data: FinanceData }) {
       {adding && <AddLine onClose={() => setAdding(false)} currency={currency}
         onAdd={async l => { await bankService.add(companyId, accountId!, [l]); setAdding(false); load(); }} />}
       {bankModal}
+      {teaching && pdfRows && (
+        <TeachPdf rows={pdfRows} bankName={account?.name || 'this bank'} onClose={() => setTeaching(false)}
+          onDone={async (layout, lines) => {
+            try { await pdfLayoutService.save(companyId, accountId!, layout); setLayouts(l => ({ ...l, [String(accountId)]: layout })); } catch (e: any) { message.error(e.message); }
+            setTeaching(false);
+            message.success('Got it — statements for this bank will be read this way from now on');
+            showImport(lines);
+          }} />
+      )}
       {matching && <MatchModal data={data} txn={matching} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
         onClose={() => setMatching(null)} onDone={() => { setMatching(null); load(); data.reload(); }} />}
     </div>

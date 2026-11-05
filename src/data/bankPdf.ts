@@ -80,26 +80,102 @@ export function parseStatementText(lines: string[][]): { lines: PdfBankLine[]; u
   return { lines: out, unsure: out.filter(l => !l.sure).length };
 }
 
-/** Read a PDF file into text lines (words grouped by their position on the page). */
-export async function pdfToLines(file: File): Promise<string[][]> {
+export interface PdfPiece { s: string; x: number; w: number }
+export type PdfRow = PdfPiece[];
+
+/** Read a PDF file into rows of text pieces, each with its position across the page. */
+export async function pdfToRows(file: File): Promise<PdfRow[]> {
   const pdfjs = await import('pdfjs-dist');
   const worker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
   pdfjs.GlobalWorkerOptions.workerSrc = worker;
   const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
-  const lines: string[][] = [];
+  const rows: PdfRow[] = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
     const content = await page.getTextContent();
     const items = (content.items as any[]).filter(i => typeof i.str === 'string' && i.str.trim())
-      .map(i => ({ s: i.str.trim(), x: i.transform[4], y: i.transform[5] }));
+      .map(i => ({ s: i.str.trim().replace(/\s+/g, ' '), x: Math.round(i.transform[4]), w: Math.round(i.width || 0), y: i.transform[5] }));
     items.sort((a, b) => b.y - a.y || a.x - b.x);
     let row: typeof items = [];
-    const flush = () => { if (row.length) lines.push(row.sort((a, b) => a.x - b.x).flatMap(i => i.s.split(/\s+/))); row = []; };
+    const flush = () => { if (row.length) rows.push(row.sort((a, b) => a.x - b.x).map(({ s, x, w }) => ({ s, x, w }))); row = []; };
     for (const it of items) {
       if (row.length && Math.abs(row[0].y - it.y) > 3) flush();
       row.push(it);
     }
     flush();
   }
-  return lines.map(words => words.filter(Boolean));
+  return rows;
+}
+
+/** Rows as words, for the automatic reader. */
+export const rowsToLines = (rows: PdfRow[]): string[][] => rows.map(r => r.flatMap(p => p.s.split(/\s+/)).filter(Boolean));
+
+export async function pdfToLines(file: File): Promise<string[][]> {
+  return rowsToLines(await pdfToRows(file));
+}
+
+// ---- reading a statement the way the user taught it -----------------------------------------
+
+export type PieceRole = 'date' | 'description' | 'out' | 'in' | 'amount' | 'balance' | 'ignore';
+export const ROLE_LABEL: Record<PieceRole, string> = {
+  date: 'Date', description: 'Description', out: 'Money out (withdrawal)', in: 'Money in (deposit)',
+  amount: 'Amount (+ in / − out)', balance: 'Balance', ignore: 'Ignore',
+};
+
+/** Where each kind of information sits across the page (x positions of the column centres). */
+export interface PdfLayout { columns: { role: PieceRole; x: number }[] }
+
+const centre = (p: PdfPiece) => p.x + (p.w || 0) / 2;
+
+/** Learn a layout from one transaction row and the roles the user gave its pieces. */
+export function learnLayout(row: PdfRow, roles: PieceRole[]): PdfLayout {
+  return { columns: row.map((p, i) => ({ role: roles[i], x: centre(p) })).filter(c => c.role && c.role !== 'ignore') };
+}
+
+/** Read every row with a taught layout: each piece goes to the nearest taught column. */
+export function parseWithLayout(rows: PdfRow[], layout: PdfLayout): { lines: PdfBankLine[]; unsure: number } {
+  const cols = layout.columns;
+  if (!cols.some(c => c.role === 'date')) return { lines: [], unsure: 0 };
+  const all = rows.map(r => r.map(p => p.s).join(' ')).join('\n');
+  const year = (all.match(/\b(20\d{2})\b/) || [])[1] || null;
+  const out: PdfBankLine[] = [];
+  let last: PdfBankLine | null = null;
+  let prevBalance: number | null = null;
+  for (const row of rows) {
+    const parts: Record<string, string[]> = {};
+    for (const p of row) {
+      let best = cols[0], dist = Infinity;
+      for (const c of cols) { const d = Math.abs(c.x - centre(p)); if (d < dist) { dist = d; best = c; } }
+      (parts[best.role] ||= []).push(p.s);
+    }
+    const text = row.map(p => p.s).join(' ');
+    const dateText = (parts.date || []).join(' ');
+    const d = leadingDate(dateText.split(/\s+/), year);
+    const num = (k: string) => { const t = (parts[k] || []).join(' ').trim(); return t && /\d/.test(t) ? val(t.split(/\s+/).filter(w => /\d/.test(w)).pop() || '') : null; };
+    const outAmt = num('out'), inAmt = num('in'), amt = num('amount'), bal = num('balance');
+    if (/balance\s+(brought|b\/f|carried|c\/f)|opening balance|previous balance|balance forward/i.test(text)) {
+      if (bal != null) prevBalance = bal;
+      last = null; continue;
+    }
+    if (!d) {
+      const extra = (parts.description || []).join(' ').trim();
+      if (last && extra && outAmt == null && inAmt == null && amt == null && !/total|page \d/i.test(text)) last.description = `${last.description} ${extra}`.trim().slice(0, 300);
+      continue;
+    }
+    let amount = 0, sure = true;
+    if (inAmt) amount = Math.abs(inAmt);
+    else if (outAmt) amount = -Math.abs(outAmt);
+    else if (amt != null) {
+      amount = amt;
+      if (bal != null && prevBalance != null) {
+        const diff = r2(bal - prevBalance);
+        if (Math.abs(Math.abs(diff) - Math.abs(amt)) < 0.005) amount = diff; else sure = amt < 0;
+      } else sure = amt < 0;
+    }
+    if (bal != null) prevBalance = bal;
+    if (!amount) { last = null; continue; }
+    last = { txn_date: d.date, description: (parts.description || []).join(' ').replace(/\s+/g, ' ').trim().slice(0, 300), amount: r2(amount), sure };
+    out.push(last);
+  }
+  return { lines: out, unsure: out.filter(l => !l.sure).length };
 }
