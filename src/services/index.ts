@@ -1,4 +1,5 @@
 import { supabase } from '../utils/supabase';
+import { adminUsersService } from './adminUsers';
 import type { Company, CountryPack } from '../types';
 
 export const companyService = {
@@ -44,9 +45,9 @@ export const companyService = {
     return this.setActive(id, false);
   },
 
+  /** Deletes the company, all its data and its now-unused logins (server-side). */
   async remove(id: number): Promise<void> {
-    const { error } = await supabase.rpc('company_delete', { p_company_id: id });
-    if (error) throw new Error(error.message);
+    await adminUsersService.deleteCompany(id);
   },
 };
 

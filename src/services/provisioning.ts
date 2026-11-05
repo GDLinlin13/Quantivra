@@ -123,7 +123,31 @@ export function getProvisionSteps(): ProvisionStep[] {
   return STEPS.map(s => ({ ...s }));
 }
 
+/**
+ * Creates a company and everything it needs. If any step fails, whatever was
+ * already created (the company, its data and the owner's login) is removed
+ * again, so a failed attempt never leaves a half-made company behind.
+ */
 export async function provisionCompany(input: ProvisionInput, onProgress?: ProgressCallback): Promise<ProvisionResult> {
+  const created: { id?: number } = {};
+  try {
+    return await provisionSteps(input, onProgress, created);
+  } catch (err) {
+    if (created.id) {
+      try {
+        await supabase.rpc('company_set_active', { p_company_id: created.id, p_active: false });
+        await adminUsersService.deleteCompany(created.id);
+      } catch (cleanupErr) {
+        console.error('Could not remove the partly created company', cleanupErr);
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`${msg} — the partly created company could not be removed automatically; delete it from the Companies list.`);
+      }
+    }
+    throw err;
+  }
+}
+
+async function provisionSteps(input: ProvisionInput, onProgress: ProgressCallback | undefined, created: { id?: number }): Promise<ProvisionResult> {
   const company_code = (input.company_code || suggestCompanyCode(input.name)).trim().toLowerCase();
   if (!COMPANY_CODE_PATTERN.test(company_code)) throw new Error(`Company code must be ${COMPANY_CODE_RULE_TEXT}`);
 
@@ -157,6 +181,7 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
     if (error) throw error;
     return data;
   });
+  created.id = company.id;
 
   // 1. Company Settings
   await run(1, async () => {
