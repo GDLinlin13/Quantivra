@@ -11,6 +11,8 @@ export interface JournalConfig {
   statutoryPayableName: string;
   taxPayableAccount: string;
   taxPayableName: string;
+  otherDeductionsAccount: string;
+  otherDeductionsName: string;
   cashAccount: string;
   cashName: string;
 }
@@ -26,6 +28,8 @@ export const DEFAULT_JOURNAL_CONFIG: JournalConfig = {
   statutoryPayableName: 'Statutory Payable',
   taxPayableAccount: '2120',
   taxPayableName: 'Tax Withholding Payable',
+  otherDeductionsAccount: '2130',
+  otherDeductionsName: 'Employee Deductions (loans, advances)',
   cashAccount: '1100',
   cashName: 'Cash at Bank',
 };
@@ -76,6 +80,15 @@ export function generatePayrollJournals(
       config.taxPayableAccount, config.taxPayableName,
       0, taxWithheld,
       `Tax withholding: ${taxWithheld}`,
+    ));
+  }
+
+  // Credit other deductions (loan repayments, advances…)
+  if ((result.otherDeductions ?? 0) > 0) {
+    accrualLines.push(makeLine(
+      config.otherDeductionsAccount, config.otherDeductionsName,
+      0, result.otherDeductions!,
+      `Other deductions: ${result.otherDeductions}`,
     ));
   }
 

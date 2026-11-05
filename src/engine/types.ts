@@ -50,6 +50,21 @@ export interface EmployeeSalaryComponent {
   componentCode: string;
   amount: number;
   effectiveDate?: string;
+  /** Shown on the payslip instead of the code, e.g. "Overtime (10 hrs)". */
+  label?: string;
+  /** When the country pack has no rule for this code, classify it like this code instead (e.g. unpaid leave like BASIC). */
+  classifyAs?: string;
+  /** false = not income for tax (e.g. reimbursed expenses). Default true. */
+  taxable?: boolean;
+  /** false = paid in full even when the month is prorated (one-off items like overtime). Default true. */
+  prorate?: boolean;
+}
+
+/** Deductions that aren't statutory (loan repayment, salary advance…): taken off net pay. */
+export interface OtherDeduction {
+  componentCode: string;
+  amount: number;
+  label?: string;
 }
 
 export interface EmployeePayrollInput {
@@ -65,6 +80,7 @@ export interface EmployeePayrollInput {
   /** chinese | malay | indian | eurasian | other — drives SG self-help group eligibility. */
   ethnicity?: string;
   salaryComponents: EmployeeSalaryComponent[];
+  otherDeductions?: OtherDeduction[];
   ytdValues?: Record<string, number>;
   previousPeriodValues?: Record<string, number>;
   hoursWorked?: number;
@@ -106,9 +122,11 @@ export interface PipelineContext {
   employee: EmployeePayrollInput;
   absorbedSchemes: string[];
   ytdValues: Record<string, number>;
-  earnings: { componentCode: string; amount: number }[];
-  deductions: { componentCode: string; amount: number }[];
+  earnings: { componentCode: string; amount: number; label?: string }[];
+  deductions: { componentCode: string; amount: number; label?: string }[];
   employerCosts: { componentCode: string; amount: number }[];
+  /** Part of gross pay that is not prorated (one-off items). */
+  unproratedGross: number;
   ordinaryWages: number;
   additionalWages: number;
   grossPay: number;
@@ -195,11 +213,13 @@ export interface JournalEntry {
 export interface EmployeePayrollResult {
   employeeId: string;
   name: string;
-  earnings: { componentCode: string; amount: number }[];
-  deductions: { componentCode: string; amount: number }[];
+  earnings: { componentCode: string; amount: number; label?: string }[];
+  deductions: { componentCode: string; amount: number; label?: string }[];
   employerCosts: { componentCode: string; amount: number }[];
   grossPay: number;
   totalDeductions: number;
+  /** Total of non-statutory deductions (loans, advances…), included in totalDeductions. */
+  otherDeductions?: number;
   totalEmployerCosts: number;
   netPay: number;
   statutoryContributions: StatutoryContributionResult[];

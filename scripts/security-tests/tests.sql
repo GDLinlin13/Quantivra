@@ -297,6 +297,44 @@ BEGIN
 END $$;
 ROLLBACK;
 
+\echo '9f. pay items (overtime, allowances, deductions) are pay data and stay inside their company'
+BEGIN; :as_a
+DO $$
+BEGIN
+  INSERT INTO payroll_pay_items (company_id, employee_id, item_code, amount, recurring) VALUES (1, 1, 'ALLOWANCE_TRANSPORT', 200, true);
+  INSERT INTO payroll_pay_items (company_id, employee_id, item_code, quantity, amount, period_year, period_month)
+    VALUES (1, 1, 'OVERTIME', 10, 300, 2026, 8);
+  BEGIN INSERT INTO payroll_pay_items (company_id, employee_id, item_code, amount, recurring) VALUES (2, 3, 'BONUS', 1, true);
+    RAISE EXCEPTION 'FAIL: A added a pay item to company B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO payroll_pay_items (company_id, employee_id, item_code, amount, recurring) VALUES (1, 3, 'BONUS', 1, true);
+    RAISE EXCEPTION 'FAIL: A added a pay item for a B employee';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  ASSERT (SELECT count(*) FROM payroll_pay_items) = 2, 'FAIL: A cannot see own pay items';
+END $$;
+COMMIT;
+BEGIN; :as_staff
+DO $$
+DECLARE n int;
+BEGIN
+  ASSERT (SELECT count(*) FROM payroll_pay_items) = 0, 'FAIL: staff without pay access sees pay items';
+  BEGIN INSERT INTO payroll_pay_items (company_id, employee_id, item_code, amount, recurring) VALUES (1, 1, 'BONUS', 9999, true);
+    RAISE EXCEPTION 'FAIL: staff without pay access added a pay item';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  UPDATE payroll_pay_items SET amount = 9999;
+  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: staff changed a pay item';
+END $$;
+ROLLBACK;
+BEGIN; :as_b
+DO $$
+BEGIN
+  ASSERT (SELECT count(*) FROM payroll_pay_items) = 0, 'FAIL: B sees A pay items';
+END $$;
+ROLLBACK;
+BEGIN; :as_a
+DELETE FROM payroll_pay_items;
+COMMIT;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;

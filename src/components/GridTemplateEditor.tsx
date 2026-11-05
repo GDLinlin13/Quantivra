@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode, type KeyboardEvent as RKeyboardEvent } from 'react';
-import { Button, Tooltip, Select, InputNumber, ColorPicker, Dropdown, Segmented, Space, Input, Divider, Typography, Popconfirm } from 'antd';
+import { Button, Tooltip, Select, InputNumber, ColorPicker, Dropdown, Segmented, Space, Input, Divider, Typography, Popconfirm, Collapse } from 'antd';
 import {
   BoldOutlined, ItalicOutlined, UnderlineOutlined, AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined,
   VerticalAlignTopOutlined, VerticalAlignMiddleOutlined, VerticalAlignBottomOutlined, BorderOutlined,
@@ -10,7 +10,7 @@ import {
   key, colName, coveredSet, mergeAt, normRange, expandRange, mergeRange, unmergeRange, insertRow, deleteRow, insertCol, deleteCol,
   styleRange, outlineRange, isLogoCell, moveRange, copyBlock, pasteBlock, clearArea, type Block, type GridTemplate, type GridCell, type Range,
 } from '../utils/gridTemplate';
-import { DOC_FIELDS, DOC_LISTS, STARTER_LAYOUTS, sampleData, type DocKind } from '../data/documentLayouts';
+import { DOC_FIELDS, DOC_LISTS, STARTER_LAYOUTS, sampleData, fieldShortName, LIST_EXAMPLES, type DocKind } from '../data/documentLayouts';
 import { GridDocument, cellStyle, LogoImg, spanHeight } from './GridDocument';
 
 const { Text } = Typography;
@@ -22,14 +22,89 @@ const SELECT_BLUE = '#1677ff';
 type Pos = { r: number; c: number };
 
 /** Shows {{fields}} as little blue chips so they stand out from plain text. */
-function CellText({ v }: { v: string }) {
+function CellText({ v, kind }: { v: string; kind: DocKind }) {
   const parts = v.split(FIELD_SPLIT);
   return (
     <>
-      {parts.map((p, i) => (i % 2 === 1
-        ? <span key={i} style={{ background: '#e6f0ff', color: '#0b57d0', borderRadius: 3, padding: "0 2px", fontSize: "0.9em", whiteSpace: "nowrap" }}>{p}</span>
-        : <span key={i}>{p}</span>))}
+      {parts.map((p, i) => {
+        if (i % 2 === 0) return <span key={i}>{p}</span>;
+        const name = p.replace(/[{}\s]/g, '');
+        const short = fieldShortName(kind, name);
+        return (
+          <span key={i} title={`${p} — filled in when printed`}
+            style={{ background: short ? '#e6f0ff' : '#fde2e1', color: short ? '#0b57d0' : '#b42318', borderRadius: 3, padding: '0 3px', fontSize: '0.9em', whiteSpace: 'nowrap' }}>
+            {short ? `⟨${short}⟩` : `${p} ?`}
+          </span>
+        );
+      })}
     </>
+  );
+}
+
+/** "What can I type?" — plain-language help for the fields and repeating rows. */
+function FieldGuide({ kind, onInsert, rowRepeat, sample }: {
+  kind: DocKind; onInsert: (name: string) => void; rowRepeat?: string;
+  sample: { fields: Record<string, string>; lists: Record<string, Record<string, string>[]> };
+}) {
+  const lists = DOC_LISTS[kind];
+  const cellStyleTd: React.CSSProperties = { padding: '3px 8px', borderBottom: '1px solid rgba(255,255,255,0.06)', verticalAlign: 'top' };
+  const code: React.CSSProperties = { fontFamily: 'monospace', fontSize: 12, color: '#91caff', cursor: 'pointer', whiteSpace: 'nowrap' };
+  return (
+    <div style={{ color: 'rgba(240,237,230,0.8)', fontSize: 13, lineHeight: 1.55, maxHeight: 420, overflowY: 'auto' }}>
+      <p style={{ margin: '0 0 8px' }}>
+        A cell can hold <b>ordinary text</b> (type anything, e.g. <i>Employee</i> or <i>PAYSLIP</i>) and/or <b>fields</b>.
+        A field is a code in double curly brackets, like <code style={code}>{'{{employee_name}}'}</code>. When the {kind} is printed the code is
+        replaced by the real detail — <i>{sample.fields.employee_name || sample.fields.customer_name}</i>. You don't need to remember the codes:
+        pick one from <b>Insert a field</b> or click a code below. In the sheet a field shows as a blue <span style={{ background: '#e6f0ff', color: '#0b57d0', borderRadius: 3, padding: '0 3px' }}>⟨friendly name⟩</span>;
+        the formula bar shows its code. A red one means the code is mistyped.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 16 }}>
+        <div>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Fields — one value per {kind}</div>
+          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+            <tbody>
+              {DOC_FIELDS[kind].map(f => (
+                <tr key={f.name}>
+                  <td style={cellStyleTd}><span style={code} onClick={() => onInsert(f.name)} title="Click to put it in the selected cell">{`{{${f.name}}}`}</span></td>
+                  <td style={cellStyleTd}>{f.label}<div style={{ color: 'rgba(240,237,230,0.45)', fontSize: 12 }}>{f.name === 'logo' ? 'your uploaded logo' : (sample.fields[f.name] ? `e.g. ${sample.fields[f.name]}` : '')}</div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Lists — several lines per {kind}</div>
+          <p style={{ margin: '0 0 8px' }}>
+            Some things have a different number of lines for each person — one employee has only Basic Salary, another also has Overtime and a
+            Bonus. You can't know in advance how many rows to leave, so you design <b>one</b> row and mark it as repeating
+            (<b>Row … repeats for</b> in the toolbar; it turns yellow ↻). When printed, that row is copied once per item.
+          </p>
+          <p style={{ margin: '0 0 8px' }}>
+            Inside a repeating row, <code style={code}>line.</code> means “this item”: <code style={code}>{'{{line.name}}'}</code> is the item's name and
+            <code style={code}> {'{{line.amount}}'}</code> its amount. They only work in a repeating row.
+            {rowRepeat ? <> The selected row repeats for <b>{lists.find(l => l.name === rowRepeat)?.label.toLowerCase()}</b>.</> : null}
+          </p>
+          {lists.map(l => (
+            <div key={l.name} style={{ marginBottom: 8 }}>
+              <b>{l.label}</b> <span style={{ color: 'rgba(240,237,230,0.5)' }}>— items look like: {LIST_EXAMPLES[l.name]}</span>
+              <div>
+                {l.fields.map(f => (
+                  <span key={f.name} style={{ marginRight: 12 }}>
+                    <span style={code} onClick={() => onInsert(f.name)} title="Click to put it in the selected cell">{`{{${f.name}}}`}</span>
+                    <span style={{ color: 'rgba(240,237,230,0.6)' }}> {f.label.toLowerCase()}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+          <p style={{ margin: '8px 0 0', color: 'rgba(240,237,230,0.55)' }}>
+            {kind === 'payslip'
+              ? 'The item names come from payroll: Basic Salary from the employee record, the statutory ones (CPF, SDL, CDAC…) are worked out automatically, and the rest are whatever you add under Payroll → Pay items. You never type item codes — the payslip shows the names.'
+              : 'The item names are whatever is typed on each invoice line.'}
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -41,6 +116,7 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
   branding: any;
 }) {
   const [mode, setMode] = useState<'design' | 'preview'>('design');
+  const [guideOpen] = useState(() => { try { return localStorage.getItem('qv-layout-guide') !== '0'; } catch { return true; } });
   const [anchor, setAnchor] = useState<Pos>({ r: 0, c: 0 });
   const [focus, setFocus] = useState<Pos>({ r: 0, c: 0 });
   const [editing, setEditing] = useState<{ pos: Pos; text: string } | null>(null);
@@ -247,6 +323,9 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
 
       {mode === 'design' && (
         <>
+          <Collapse size="small" style={{ marginBottom: 8, background: '#151a1e' }} defaultActiveKey={guideOpen ? ['g'] : []}
+            onChange={k => { const open = (Array.isArray(k) ? k : [k]).includes('g'); try { localStorage.setItem('qv-layout-guide', open ? '1' : '0'); } catch { /* ignore */ } }}
+            items={[{ key: 'g', label: 'Guide: what can I type in a cell? What is {{line.name}}?', children: <FieldGuide kind={kind} onInsert={insertField} rowRepeat={curRow.repeat} sample={sample} /> }]} />
           {/* toolbar */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', padding: 6, background: '#1d2328', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px 6px 0 0' }}>
             {btn('Undo (Ctrl+Z)', <UndoOutlined />, doUndo, false, undo.current.length === 0)}
@@ -449,8 +528,8 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
                           ) : isLogoCell(cell.v) ? (
                             branding?.logo_data_uri
                               ? <LogoImg src={branding.logo_data_uri} cell={cell} height={spanHeight(t, r, cell.rs || 1)} />
-                              : <CellText v={cell.v || ''} />
-                          ) : <CellText v={cell.v || ''} />}
+                              : <CellText v={cell.v || ''} kind={kind} />
+                          ) : <CellText v={cell.v || ''} kind={kind} />}
                         </td>
                       );
                     })}

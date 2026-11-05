@@ -121,6 +121,7 @@ function buildPipelineContext(
     earnings: [],
     deductions: [],
     employerCosts: [],
+    unproratedGross: 0,
     ordinaryWages: 0,
     additionalWages: 0,
     grossPay: 0,
@@ -162,17 +163,25 @@ function runPipeline(ctx: PipelineContext): EmployeePayrollResult {
 
   // === Stage 2: Salary Component Classification ===
   for (const sc of employee.salaryComponents) {
-    ctx.earnings.push({ componentCode: sc.componentCode, amount: sc.amount });
+    ctx.earnings.push({ componentCode: sc.componentCode, amount: sc.amount, ...(sc.label ? { label: sc.label } : {}) });
+    if (sc.prorate === false) ctx.unproratedGross += sc.amount;
 
-    let isOW = false;
-    let isAW = false;
-    for (const schemeDef of Object.values(countryPack.statutorySchemes)) {
-      const mapping = schemeDef.salaryComponents.find((m) => m.componentCode === sc.componentCode);
-      if (mapping) {
-        if (mapping.classification === 'ordinary_wage' && mapping.included) isOW = true;
-        if (mapping.classification === 'additional_wage' && mapping.included) isAW = true;
+    const classify = (code: string) => {
+      let ow = false, aw = false, known = false;
+      for (const schemeDef of Object.values(countryPack.statutorySchemes)) {
+        const mapping = schemeDef.salaryComponents.find((m) => m.componentCode === code);
+        if (mapping) {
+          known = true;
+          if (mapping.classification === 'ordinary_wage' && mapping.included) ow = true;
+          if (mapping.classification === 'additional_wage' && mapping.included) aw = true;
+        }
       }
-    }
+      return { ow, aw, known };
+    };
+    let cls = classify(sc.componentCode);
+    if (!cls.known && sc.classifyAs) cls = classify(sc.classifyAs);
+    const isOW = cls.ow;
+    const isAW = cls.aw;
 
     if (isOW) ctx.ordinaryWages += sc.amount;
     if (isAW) ctx.additionalWages += sc.amount;
@@ -259,7 +268,9 @@ function runPipeline(ctx: PipelineContext): EmployeePayrollResult {
   }
 
   // === Stage 4: Tax ===
-  const salaryComponentsTotal = ctx.earnings.reduce((s, e) => s + e.amount, 0);
+  const salaryComponentsTotal = employee.salaryComponents
+    .filter((sc) => sc.taxable !== false)
+    .reduce((s, sc) => s + sc.amount, 0);
   const taxableDeductionCodes = new Set(
     ctx.deductions
       .filter((d) => {
@@ -324,7 +335,9 @@ function runPipeline(ctx: PipelineContext): EmployeePayrollResult {
   let finalEmployerCosts = ctx.employerCosts.reduce((s, c) => s + c.amount, 0);
 
   if (ctx.prorationFactor < 1) {
-    finalGrossPay = roundAmount(finalGrossPay * ctx.prorationFactor);
+    // one-off items (overtime, bonus, reimbursements…) are paid in full
+    const prorated = finalGrossPay - ctx.unproratedGross;
+    finalGrossPay = roundAmount(prorated * ctx.prorationFactor + ctx.unproratedGross);
     finalDeductions = roundAmount(finalDeductions * ctx.prorationFactor);
     finalEmployerCosts = roundAmount(finalEmployerCosts * ctx.prorationFactor);
     step({
@@ -337,7 +350,24 @@ function runPipeline(ctx: PipelineContext): EmployeePayrollResult {
     });
   }
 
-  const netPay = finalGrossPay - finalDeductions;
+  // Non-statutory deductions (loans, advances…) come off after everything else, in full.
+  let otherDeductionsTotal = 0;
+  for (const d of employee.otherDeductions ?? []) {
+    if (!(d.amount > 0)) continue;
+    ctx.deductions.push({ componentCode: d.componentCode, amount: d.amount, ...(d.label ? { label: d.label } : {}) });
+    otherDeductionsTotal += d.amount;
+    step({
+      id: `${employee.employeeId}_OTHER_${d.componentCode}_${otherDeductionsTotal}`,
+      stage: 'net_pay',
+      label: d.label || d.componentCode,
+      value: d.amount,
+      explanation: `${d.label || d.componentCode}: ${d.amount}`,
+    });
+  }
+  otherDeductionsTotal = roundAmount(otherDeductionsTotal);
+  finalDeductions = roundAmount(finalDeductions + otherDeductionsTotal);
+
+  const netPay = roundAmount(finalGrossPay - finalDeductions);
   step({
     id: `${employee.employeeId}_NETPAY`,
     stage: 'net_pay',
@@ -358,6 +388,7 @@ function runPipeline(ctx: PipelineContext): EmployeePayrollResult {
     totalDeductions: finalDeductions,
     totalEmployerCosts: finalEmployerCosts,
     netPay,
+    ...(otherDeductionsTotal > 0 ? { otherDeductions: otherDeductionsTotal } : {}),
     statutoryContributions: statutoryResults,
     tax: taxResult,
     leave: leaveResult,

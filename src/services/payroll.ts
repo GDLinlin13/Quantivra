@@ -4,6 +4,7 @@ import type { CountryPackDef } from '../data/country-packs/schema';
 import type { EmployeePayrollInput, PayrollPeriod, PayrollRunResult } from '../engine/types';
 import { hrService, type Employee } from './hr';
 import dayjs from 'dayjs';
+import { toEngineItems, PAY_ITEM_BY_CODE, type PayItemRow } from '../data/payItems';
 
 /** Country packs authored for the payroll engine. */
 const COUNTRY_PACK_LOADERS: Record<string, () => Promise<{ default: CountryPackDef }>> = {
@@ -27,10 +28,11 @@ const STATUS_MAP: Record<string, string> = {
   intern: 'INTERNSHIP', casual: 'CASUAL',
 };
 
-function toEngineInput(e: Employee, periodEnd: string): EmployeePayrollInput {
+function toEngineInput(e: Employee, periodEnd: string, items: PayItemRow[] = []): EmployeePayrollInput {
   // Fall back to a ~35-year-old if DOB missing, so the run still produces numbers.
   const dob = e.date_of_birth || dayjs(periodEnd).subtract(35, 'year').format('YYYY-MM-DD');
   const residency = (e as any).residency_status || 'SC';
+  const extra = toEngineItems(items);
   return {
     employeeId: String(e.id),
     name: e.full_name,
@@ -41,7 +43,8 @@ function toEngineInput(e: Employee, periodEnd: string): EmployeePayrollInput {
     immigrationStatusCode: residency,
     prStage: (e as any).pr_stage || undefined,
     ethnicity: (e as any).ethnicity || undefined,
-    salaryComponents: [{ componentCode: 'BASIC', amount: Number(e.base_salary) || 0 }],
+    salaryComponents: [{ componentCode: 'BASIC', amount: Number(e.base_salary) || 0 }, ...extra.salaryComponents],
+    otherDeductions: extra.otherDeductions,
   };
 }
 
@@ -57,8 +60,8 @@ export interface PayrollRunRow {
 export interface PayslipRow {
   id: number; run_id: number; employee_id: number; employee_name: string; employee_code: string | null;
   gross_pay: number; total_deductions: number; total_employer: number; net_pay: number; tax_withheld: number;
-  earnings_json: { componentCode: string; amount: number }[];
-  deductions_json: { componentCode: string; amount: number }[];
+  earnings_json: { componentCode: string; amount: number; label?: string }[];
+  deductions_json: { componentCode: string; amount: number; label?: string }[];
   employer_json: { componentCode: string; amount: number }[];
   statutory_json: any[];
   result_json: any;
@@ -132,10 +135,12 @@ export const payrollService = {
     };
 
     const absorbedSchemes = await statutorySettingsService.absorbedList(companyId);
+    const items = await payItemService.listForPeriod(companyId, year, month);
+    const itemsFor = (id: number) => items.filter(i => Number(i.employee_id) === Number(id));
 
     const result = calculatePayroll({
       period, countryPack: pack,
-      employees: employees.map(e => toEngineInput(e, period.endDate)),
+      employees: employees.map(e => toEngineInput(e, period.endDate, itemsFor(e.id))),
       absorbedSchemes,
     });
 
@@ -211,5 +216,41 @@ export function componentLabel(code: string): string {
     AWS: 'Annual Wage Supplement', DEDUCTION_CPF: 'CPF (Employee)', DEDUCTION_PAYE: 'Income Tax',
     DEDUCTION_SDL: 'SDL', DEDUCTION_SHG: 'Self-Help Group', CPF_EMPLOYER: 'CPF (Employer)',
   };
-  return map[code] || code.replace(/^DEDUCTION_/, '').replace(/_/g, ' ');
+  return map[code] || PAY_ITEM_BY_CODE[code]?.label || code.replace(/^DEDUCTION_/, '').replace(/_/g, ' ');
 }
+
+/** Overtime, allowances, bonuses, reimbursements and deductions for payroll (pay-access users only). */
+export const payItemService = {
+  /** Fixed monthly items plus the one-off items for this month. */
+  async listForPeriod(companyId: number, year: number, month: number): Promise<PayItemRow[]> {
+    const { data, error } = await supabase.from('payroll_pay_items').select('*')
+      .eq('company_id', companyId)
+      .or(`recurring.eq.true,and(period_year.eq.${Number(year)},period_month.eq.${Number(month)})`)
+      .order('id');
+    if (error) throw new Error(error.message);
+    return (data || []) as PayItemRow[];
+  },
+
+  async save(row: PayItemRow): Promise<void> {
+    const t = PAY_ITEM_BY_CODE[row.item_code];
+    if (!t) throw new Error('Unknown pay item');
+    const payload = {
+      company_id: row.company_id, employee_id: row.employee_id, item_code: row.item_code,
+      label: row.label || null, quantity: t.unit && row.quantity != null ? row.quantity : null,
+      amount: Math.max(0, Math.round((Number(row.amount) || 0) * 100) / 100),
+      note: row.note?.trim() || null, recurring: !!row.recurring,
+      period_year: row.recurring ? null : row.period_year, period_month: row.recurring ? null : row.period_month,
+      updated_at: new Date().toISOString(),
+    };
+    const q = row.id
+      ? supabase.from('payroll_pay_items').update(payload).eq('id', row.id)
+      : supabase.from('payroll_pay_items').insert(payload);
+    const { error } = await q;
+    if (error) throw new Error(error.message);
+  },
+
+  async remove(id: number): Promise<void> {
+    const { error } = await supabase.from('payroll_pay_items').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+};
