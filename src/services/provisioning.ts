@@ -153,7 +153,6 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
       financial_year_start: input.financial_year_start,
       timezone: input.timezone,
       modules: input.modules,
-      metadata: { registration_number: input.registration_number },
     }).select().single();
     if (error) throw error;
     return data;
