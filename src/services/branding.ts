@@ -25,6 +25,8 @@ export interface InvoiceTemplate {
   showCompanyBlock: boolean;
   paymentTermsDays: number;
   bankDetails: string;
+  /** Payment details as label / value pairs (Account Name, Bank, Account No…). */
+  paymentDetails?: { label: string; value: string }[];
   footerNote: string;
   amountFormat?: AmountFormat;
   layout?: GridTemplate;

@@ -10,7 +10,7 @@ import {
   key, colName, coveredSet, mergeAt, normRange, expandRange, mergeRange, unmergeRange, insertRow, deleteRow, insertCol, deleteCol,
   styleRange, outlineRange, isLogoCell, rowUsesList, AUTO_REPEAT, moveRange, copyBlock, pasteBlock, clearArea, type Block, type GridTemplate, type GridCell, type Range,
 } from '../utils/gridTemplate';
-import { DOC_FIELDS, DOC_LISTS, STARTER_LAYOUTS, sampleData, fieldShortName, LIST_EXAMPLES, type DocKind } from '../data/documentLayouts';
+import { DOC_FIELDS, DOC_LISTS, STARTER_LAYOUTS, sampleData, fieldShortName, LIST_EXAMPLES, plainAmount, type DocKind } from '../data/documentLayouts';
 import { GridDocument, cellStyle, LogoImg, spanHeight } from './GridDocument';
 
 const { Text } = Typography;
@@ -59,7 +59,7 @@ function FieldGuide({ kind, onInsert, rowRepeat, sample }: {
               {DOC_FIELDS[kind].map(f => (
                 <tr key={f.name}>
                   <td style={cellStyleTd}><span style={code} onClick={() => onInsert(f.name)} title="Click to put it in the selected cell">{`{{${f.name}}}`}</span></td>
-                  <td style={cellStyleTd}>{f.label}<div style={{ color: 'rgba(240,237,230,0.45)', fontSize: 12 }}>{f.name === 'logo' ? 'your uploaded logo' : (sample.fields[f.name] ? `e.g. ${sample.fields[f.name]}` : '')}</div></td>
+                  <td style={cellStyleTd}>{f.label}<div style={{ color: 'rgba(240,237,230,0.45)', fontSize: 12 }}>{f.name === 'logo' ? 'your uploaded logo' : (sample.fields[f.name] ? `e.g. ${plainAmount(sample.fields[f.name])}` : '')}</div></td>
                 </tr>
               ))}
             </tbody>
@@ -91,6 +91,11 @@ function FieldGuide({ kind, onInsert, rowRepeat, sample }: {
               Each invoice has a different number of lines. You can't know in advance how many rows to leave, so you design <b>one</b> row with the
               line fields in it, e.g. <code style={code} onClick={() => onInsert('lines.description')} title="Click to put it in the selected cell">{'{{lines.description}}'}</code> and <code style={code} onClick={() => onInsert('lines.amount')} title="Click to put it in the selected cell">{'{{lines.amount}}'}</code>. That row turns
               yellow ↻ and, when printed, is copied once per invoice line.
+            </p>
+            <p style={{ margin: '0 0 8px' }}>
+              <b>Payment details, left and right:</b> in one row, put <code style={code} onClick={() => onInsert('payment.label')} title="Click to put it in the selected cell">{'{{payment.label}}'}</code> in
+              the left cell and <code style={code} onClick={() => onInsert('payment.value')} title="Click to put it in the selected cell">{'{{payment.value}}'}</code> in the right cell. The row is
+              printed once per line you fill in under Invoice settings (Account Name, Bank, Account No…).
             </p>
             <p style={{ margin: '0 0 8px' }}>
               <b>Discounts:</b> put <code style={code} onClick={() => onInsert('discounts.name')} title="Click to put it in the selected cell">{'{{discounts.name}}'}</code> and <code style={code} onClick={() => onInsert('discounts.amount')} title="Click to put it in the selected cell">{'{{discounts.amount}}'}</code> in a row below
