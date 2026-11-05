@@ -23,3 +23,12 @@ export function loginEmailFor(companyCode: string, username: string): string {
 export function isInternalLoginEmail(email: string | null | undefined): boolean {
   return !!email && email.toLowerCase().endsWith('@users.quantivra.app');
 }
+
+/** Company codes: 3–20 lowercase letters, numbers or dashes (not at the ends). */
+export const COMPANY_CODE_PATTERN = /^[a-z0-9][a-z0-9-]{1,18}[a-z0-9]$/;
+export const COMPANY_CODE_RULE_TEXT = '3–20 characters: lowercase letters, numbers or dashes';
+
+/** A suggested company code from the company name, e.g. "Acme Pte. Ltd." → "acme-pte-ltd". */
+export function suggestCompanyCode(name: string): string {
+  return (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20).replace(/-+$/g, '');
+}

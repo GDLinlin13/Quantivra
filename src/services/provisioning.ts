@@ -1,9 +1,12 @@
 import { supabase } from '../utils/supabase';
 import { adminUsersService } from './adminUsers';
+import { suggestCompanyCode, COMPANY_CODE_PATTERN, COMPANY_CODE_RULE_TEXT } from '../utils/loginEmail';
 import { packFor2026 } from '../data/country-law-2026';
 
 export interface ProvisionInput {
   name: string;
+  /** chosen in the wizard; suggested from the name when empty */
+  company_code?: string;
   registration_number?: string;
   country: string;
   business_pack: string;
@@ -121,7 +124,8 @@ export function getProvisionSteps(): ProvisionStep[] {
 }
 
 export async function provisionCompany(input: ProvisionInput, onProgress?: ProgressCallback): Promise<ProvisionResult> {
-  const company_code = input.name.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').slice(0, 20);
+  const company_code = (input.company_code || suggestCompanyCode(input.name)).trim().toLowerCase();
+  if (!COMPANY_CODE_PATTERN.test(company_code)) throw new Error(`Company code must be ${COMPANY_CODE_RULE_TEXT}`);
 
   const mark = (i: number, status: 'running' | 'done' | 'error') => {
     if (onProgress) onProgress(i, status);

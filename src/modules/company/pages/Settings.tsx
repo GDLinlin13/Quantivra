@@ -4,6 +4,7 @@ import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { MODULES } from '../../../types';
 import { timezoneOptions } from '../../../utils/timezones';
+import { currencyOptions } from '../../../utils/currencies';
 import { DocumentNumbersCard } from './settings/DocumentNumbersCard';
 import { WorkWeekHolidaysCard } from './settings/WorkWeekHolidaysCard';
 import { ChangePasswordCard } from '../../../components/ChangePasswordCard';
@@ -53,7 +54,7 @@ export function CompanySettingsPage() {
             <Input />
           </Form.Item>
           <Form.Item name="currency" label={<Text style={{ color: '#f0ede6' }}>Currency</Text>}>
-            <Input />
+            <Select showSearch optionFilterProp="label" options={currencyOptions()} />
           </Form.Item>
           <Form.Item name="financial_year_start" label={<Text style={{ color: '#f0ede6' }}>Financial Year Start</Text>}>
             <Input placeholder="MM-DD" />
