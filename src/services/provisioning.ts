@@ -170,7 +170,7 @@ async function provisionSteps(input: ProvisionInput, onProgress: ProgressCallbac
   // 0. Company
   const company = await run(0, async () => {
     const { data, error } = await supabase.from('companies').insert({
-      name: input.name,
+      name: input.name.trim().replace(/\s+/g, ' '),
       company_code,
       country: input.country,
       currency: input.currency,

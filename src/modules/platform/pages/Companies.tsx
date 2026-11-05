@@ -112,6 +112,9 @@ export function CompaniesPage() {
   const [provisionSteps, setProvisionSteps] = useState<ProvisionStep[]>(getProvisionSteps());
   const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  // Typed name must match, ignoring extra spaces and capital letters.
+  const normaliseName = (v: string | undefined) => (v || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  const deleteNameMatches = !!deleteTarget && normaliseName(deleteConfirmText) === normaliseName(deleteTarget.name);
   const [deleting, setDeleting] = useState(false);
   const [form] = Form.useForm();
   const provisionStarted = useRef(false);
@@ -620,7 +623,7 @@ export function CompaniesPage() {
         open={!!deleteTarget}
         onCancel={() => { setDeleteTarget(null); setDeleteConfirmText(''); }}
         okText="Delete everything"
-        okButtonProps={{ danger: true, disabled: deleteConfirmText !== deleteTarget?.name, loading: deleting }}
+        okButtonProps={{ danger: true, disabled: !deleteNameMatches, loading: deleting }}
         onOk={async () => {
           if (!deleteTarget) return;
           setDeleting(true);
@@ -637,7 +640,7 @@ export function CompaniesPage() {
           message="This cannot be undone"
           description="Users, employees, leave records, payroll runs, payslips, branding and all settings for this company are removed." />
         <p style={{ color: '#f0ede6' }}>Type <b>{deleteTarget?.name}</b> to confirm:</p>
-        <Input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder={deleteTarget?.name} />
+        <Input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder={deleteTarget?.name} autoFocus />
       </Modal>
     </div>
   );
