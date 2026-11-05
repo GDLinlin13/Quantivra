@@ -5,6 +5,10 @@ import dayjs from 'dayjs';
 import { payrollService, statutorySettingsService, componentLabel, ABSORBABLE_SCHEMES, type PayrollRunRow, type PayslipRow } from '../../../../services/payroll';
 import { brandingService, type Branding } from '../../../../services/branding';
 import { DocumentShell } from '../../../../components/DocumentShell';
+import { GridDocument } from '../../../../components/GridDocument';
+import { companyFields, money as fmtMoney } from '../../../../data/documentLayouts';
+import { hrService } from '../../../../services/hr';
+import type { FieldValues, ListValues } from '../../../../utils/gridTemplate';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { supabase } from '../../../../utils/supabase';
 
@@ -175,6 +179,51 @@ function PayslipView({ slip, company, branding, period }: { slip: PayslipRow; co
   const res = slip.result_json || {};
   const bankMasked: string | null = res.bankMasked || null;
   const bankName: string | null = res.bankName || null;
+  const layout = t?.layout;
+  const useLayout = !!layout?.enabled;
+  const needsFullBank = useLayout && JSON.stringify(layout?.cells || {}).includes('{{bank_account}}');
+  const [bankFull, setBankFull] = useState<string | null>(null);
+
+  // The full bank number is only kept encrypted; fetch it (pay-access users only) when the layout asks for it.
+  useEffect(() => {
+    let live = true;
+    setBankFull(null);
+    if (!needsFullBank || !company?.id) return;
+    hrService.listEmployees(company.id)
+      .then(list => { if (live) setBankFull(list.find(e => Number(e.id) === Number(slip.employee_id))?.bank_account || null); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [needsFullBank, company?.id, slip.employee_id]);
+
+  if (useLayout && layout) {
+    const line = (x: { componentCode: string; amount: number }) => ({ name: componentLabel(x.componentCode), amount: fmtMoney(x.amount, cur) });
+    const onBehalf = stat.filter(s => s.absorbedByEmployer && s.employeeTotal > 0);
+    const fields: FieldValues = {
+      ...companyFields(company, branding, t?.footerNote),
+      employee_name: slip.employee_name || '',
+      employee_code: slip.employee_code || '',
+      bank_name: bankName || '',
+      bank_account: bankFull || bankMasked || '',
+      bank_account_masked: bankMasked || '',
+      period: period ? dayjs(`${period.period_year}-${period.period_month}-01`).format('MMMM YYYY') : '',
+      pay_date: period?.pay_date || '',
+      gross_pay: fmtMoney(slip.gross_pay, cur),
+      total_deductions: fmtMoney(slip.total_deductions, cur),
+      net_pay: fmtMoney(slip.net_pay, cur),
+      total_employer: fmtMoney(slip.total_employer, cur),
+      paid_on_behalf: onBehalf.map(s => `${s.schemeName || s.schemeCode} ${fmtMoney(s.employeeTotal, cur)}`).join(' · '),
+    };
+    const lists: ListValues = {
+      earnings: (slip.earnings_json || []).map(line),
+      deductions: (slip.deductions_json || []).map(line),
+      employer: (slip.employer_json || []).map(line),
+    };
+    return (
+      <div id="payslip-print" style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
+        <GridDocument template={layout} fields={fields} lists={lists} logo={branding?.logo_data_uri} />
+      </div>
+    );
+  }
 
   return (
     <div id="payslip-print" style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
@@ -227,7 +276,7 @@ function printPayslip(slip: PayslipRow) {
   const w = window.open('', '_blank', 'width=760,height=950');
   if (!w) { message.error('Allow pop-ups to print'); return; }
   w.document.write(`<html><head><title>Payslip — ${slip.employee_name}</title>
-    <style>@page{margin:16mm}body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#fff}
+    <style>@page{margin:16mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#fff}
     table{width:100%;border-collapse:collapse}td{padding:3px 0}img{max-width:100%}</style>
     </head><body>${el.innerHTML}</body></html>`);
   w.document.close();
