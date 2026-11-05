@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { Card, Table, Button, Modal, Form, Input, Select, message, Typography, Checkbox, Space, Tag, Divider, Switch, Tooltip, Alert } from 'antd';
 import { PlusOutlined, SafetyOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { MODULES, type ModuleAction } from '../../../types';
+import { MODULE_GUIDE, ACTION_GUIDE } from '../../../data/permissionGuide';
 
 const { Title, Text } = Typography;
 const ALL_ACTIONS: ModuleAction[] = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'print', 'void'];
@@ -42,7 +43,7 @@ export function CompanyRolesPage() {
     const { data } = await supabase.from('company_permissions').select('*').eq('role_id', role.id);
     const perms: Record<string, Record<string, ModuleAction[]>> = {};
     for (const [mod, modData] of Object.entries(MODULES)) {
-      perms[mod] = {};
+      perms[mod] = { '*': [] };
       for (const feat of modData.features) {
         perms[mod][feat] = [];
       }
@@ -137,23 +138,43 @@ export function CompanyRolesPage() {
         onCancel={() => setPermModalOpen(false)} width={800}
         footer={<Button type="primary" onClick={savePermissions} style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>Save Permissions</Button>}
         styles={{ header: { background: '#151a1e', color: '#f0ede6' }, body: { background: '#151a1e', maxHeight: 500, overflow: 'auto' } }}>
-        {Object.entries(MODULES).map(([modKey, mod]) => (
+        <Alert type="info" showIcon style={{ marginBottom: 16 }}
+          message="How permissions work"
+          description={
+            <div style={{ fontSize: 12 }}>
+              Tick what people with this role may do in each section. Ticks marked ✓ are already used by Quantivra; the others take effect as those features are built.
+              <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '2px 12px', marginTop: 8 }}>
+                {ALL_ACTIONS.map(a => (
+                  <Fragment key={a}><b>{a}{ACTION_GUIDE[a]?.usedNow ? ' ✓' : ''}</b><span>{ACTION_GUIDE[a]?.means} — {ACTION_GUIDE[a]?.example}</span></Fragment>
+                ))}
+              </div>
+              <div style={{ marginTop: 8 }}>Salaries, payroll and ID numbers are controlled by the role’s <b>Can see pay &amp; manage users</b> switch, not by these ticks.</div>
+            </div>
+          } />
+        {Object.entries(MODULES).filter(([modKey]) => modKey !== 'platform').map(([modKey, mod]) => (
           <div key={modKey} style={{ marginBottom: 20 }}>
-            <Text style={{ color: '#f0ede6', fontWeight: 600, fontSize: 14 }}>{mod.label}</Text>
+            <Space>
+              <Text style={{ color: '#f0ede6', fontWeight: 600, fontSize: 14 }}>{mod.label}</Text>
+              {MODULE_GUIDE[modKey] && !MODULE_GUIDE[modKey].built && <Tag>Not built yet</Tag>}
+            </Space>
+            {MODULE_GUIDE[modKey] && <div style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>{MODULE_GUIDE[modKey].covers}</div>}
             <Divider style={{ margin: '8px 0', borderColor: 'rgba(255,255,255,0.06)' }} />
-            {mod.features.map(feat => (
+            {['*', ...mod.features].map(feat => (
               <div key={feat} style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Text style={{ color: 'rgba(240,237,230,0.7)', width: 120, textTransform: 'capitalize' }}>{feat}</Text>
-                <Space>
+                <Text style={{ color: feat === '*' ? '#f0ede6' : 'rgba(240,237,230,0.7)', width: 120, textTransform: 'capitalize', fontWeight: feat === '*' ? 600 : 400 }}>
+                  {feat === '*' ? 'Whole section' : feat}
+                </Text>
+                <Space wrap>
                   {ALL_ACTIONS.map(action => (
-                    <Checkbox
-                      key={action}
-                      checked={permissions[modKey]?.[feat]?.includes(action) || false}
-                      onChange={() => togglePerm(modKey, feat, action)}
-                      style={{ color: '#f0ede6', fontSize: 12 }}
-                    >
-                      {action}
-                    </Checkbox>
+                    <Tooltip key={action} title={`${ACTION_GUIDE[action]?.means}${ACTION_GUIDE[action]?.usedNow ? '' : ' (takes effect when built)'}`}>
+                      <Checkbox
+                        checked={permissions[modKey]?.[feat]?.includes(action) || false}
+                        onChange={() => togglePerm(modKey, feat, action)}
+                        style={{ color: '#f0ede6', fontSize: 12 }}
+                      >
+                        {action}
+                      </Checkbox>
+                    </Tooltip>
                   ))}
                 </Space>
               </div>
