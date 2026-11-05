@@ -30,3 +30,26 @@ describe('bank statement PDF text', () => {
     expect(r.unsure).toBe(2);
   });
 });
+
+describe('taught layouts', () => {
+  const P = (s: string, x: number, w = 40) => ({ s, x, w });
+  const rows = [
+    [P('OCBC Statement November 2026', 20, 200)],
+    [P('Date', 20), P('Particulars', 90), P('Withdrawal', 300), P('Deposit', 380), P('Balance', 460)],
+    [P('BALANCE B/F', 90, 80), P('10,000.00', 460)],
+    [P('02 NOV', 20), P('INWARD PAYMENT', 90, 120), P('3,270.00', 385), P('13,270.00', 460)],
+    [P('ACME TRADING', 90, 90)],
+    [P('03 NOV', 20), P('CPF BOARD', 90, 70), P('6,000.00', 300), P('7,270.00', 460)],
+  ];
+  it('learns columns from one row and reads the rest', async () => {
+    const { learnLayout, parseWithLayout } = await import('../bankPdf');
+    const layout = learnLayout(rows[3], ['date', 'description', 'in', 'balance']);
+    // the money-out column wasn't in the example row, so teach it from the header
+    layout.columns.push({ role: 'out', x: 320 });
+    const r = parseWithLayout(rows, layout);
+    expect(r.lines).toEqual([
+      { txn_date: '2026-11-02', description: 'INWARD PAYMENT ACME TRADING', amount: 3270, sure: true },
+      { txn_date: '2026-11-03', description: 'CPF BOARD', amount: -6000, sure: true },
+    ]);
+  });
+});
