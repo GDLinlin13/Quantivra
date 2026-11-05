@@ -34,6 +34,7 @@ export interface Employee {
   pr_stage: string | null;
   ethnicity: string | null;
   marital_status: string | null;
+  gender: string | null;
   national_id: string | null;
   tax_id: string | null;
   bank_account: string | null;
@@ -117,7 +118,7 @@ function entitlementInDays(lt: LeaveType, employee: Employee, deps: Dependent[],
     leaveTypeName: lt.name, countryCode,
     employee: {
       residency_status: employee.residency_status, marital_status: employee.marital_status,
-      join_date: employee.join_date, employment_type: employee.employment_type,
+      join_date: employee.join_date, employment_type: employee.employment_type, gender: employee.gender,
     },
     dependents: deps.map(d => ({ relationship: d.relationship, date_of_birth: d.date_of_birth, citizenship: d.citizenship })),
     templateDefault: Number(lt.default_days), statutoryMin: Number(lt.statutory_min || 0),

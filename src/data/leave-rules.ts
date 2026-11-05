@@ -11,12 +11,14 @@
 export interface LeaveRuleEmployee {
   residency_status?: string | null;   // SC | PR | FOREIGNER | citizen codes per country
   marital_status?: string | null;     // single | married | divorced | widowed
+  gender?: string | null;             // female | male
   join_date?: string | null;
   employment_type?: string | null;
 }
 
 export interface Dependent {
-  relationship: string;               // child | spouse | parent
+  relationship: string;               // child | expected_child | spouse | parent
+  /** for expected_child this is the expected delivery date */
   date_of_birth?: string | null;
   citizenship?: string | null;        // SC | PR | FOREIGNER
 }
@@ -86,6 +88,13 @@ function singapore(i: LeaveRuleInput): RuleResult | null {
   const name = i.leaveTypeName.toLowerCase();
   const res = i.employee.residency_status;
   const kids = i.dependents.filter(d => d.relationship === 'child');
+  // A birth that parental leave can be taken for: an expected baby (due date
+  // recorded) or a child born in the last 12 months.
+  const yearAgo = new Date(asOf); yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+  const births = i.dependents.filter(d =>
+    d.relationship === 'expected_child'
+    || (d.relationship === 'child' && !!d.date_of_birth && new Date(d.date_of_birth + 'T00:00:00') >= yearAgo));
+  const birth = births.sort((a, b) => String(b.date_of_birth || '').localeCompare(String(a.date_of_birth || '')))[0] ?? null;
   const married = i.employee.marital_status === 'married';
   const svc = completedYears(i.employee.join_date, asOf);
   const monthsService = i.employee.join_date
@@ -103,6 +112,14 @@ function singapore(i: LeaveRuleInput): RuleResult | null {
   }
 
   if (name.includes('maternity')) {
+    if (i.employee.gender !== 'female') {
+      return { days: 0, statutoryMin: 0, computed: true, warnings: [],
+        basis: i.employee.gender === 'male' ? 'Maternity leave is for mothers (see Paternity Leave)' : "Set the employee's gender in HR → Employees" };
+    }
+    if (!birth) {
+      return { days: 0, statutoryMin: 0, computed: true, warnings: [],
+        basis: 'Add the expected delivery date (or the baby\'s birth date) under HR → Employees → Dependents' };
+    }
     const warnings: string[] = [];
     if (monthsService < 3) warnings.push('Must have served at least 90 days before the birth to qualify for paid maternity leave.');
     if (isCitizen(res)) {
@@ -136,8 +153,8 @@ function singapore(i: LeaveRuleInput): RuleResult | null {
   if (name.includes('shared parental')) {
     // Government-Paid Shared Parental Leave, by the youngest Singapore-citizen
     // child's birth date: 10 weeks from 1 Apr 2026, 6 weeks from 1 Apr 2025.
-    const born = kids
-      .filter(k => isCitizen(k.citizenship) && k.date_of_birth)
+    const born = births
+      .filter(k => isCitizen(k.citizenship ?? 'SC') && k.date_of_birth)
       .map(k => k.date_of_birth as string)
       .sort()
       .pop();
@@ -146,13 +163,21 @@ function singapore(i: LeaveRuleInput): RuleResult | null {
       days: weeks * WK, statutoryMin: weeks * WK, computed: true,
       basis: weeks
         ? `Singapore-citizen child born ${born} → ${weeks} weeks Shared Parental Leave, shared between both parents`
-        : 'Shared Parental Leave needs a Singapore-citizen child born on or after 1 April 2025',
+        : 'Needs an expected or newborn Singapore-citizen child (due or born on/after 1 April 2025) under HR → Employees → Dependents',
       warnings: weeks ? ['This is the total for both parents; deduct whatever the other parent takes.'] : [],
     };
   }
 
   if (name.includes('paternity')) {
-    if (isCitizen(res) && married) {
+    if (i.employee.gender !== 'male') {
+      return { days: 0, statutoryMin: 0, computed: true, warnings: [],
+        basis: i.employee.gender === 'female' ? 'Paternity leave is for fathers (see Maternity Leave)' : "Set the employee's gender in HR → Employees" };
+    }
+    if (!birth) {
+      return { days: 0, statutoryMin: 0, computed: true, warnings: [],
+        basis: 'Add the expected delivery date (or the baby\'s birth date) under HR → Employees → Dependents' };
+    }
+    if (isCitizen(birth.citizenship ?? 'SC') && married) {
       return { days: 4 * WK, statutoryMin: 4 * WK, computed: true,
         basis: 'Singapore citizen, married — 4 weeks Government-Paid Paternity Leave', warnings: [] };
     }

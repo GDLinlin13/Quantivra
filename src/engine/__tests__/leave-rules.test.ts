@@ -21,20 +21,7 @@ describe('SG leave eligibility rules', () => {
     expect(computeLeaveEntitlement({ ...base, leaveTypeName: 'Childcare Leave', employee: emp(), dependents: [] }).days).toBe(0);
   });
 
-  it('maternity: citizen 16 weeks, PR statutory min is 8 weeks, foreigner 0', () => {
-    expect(computeLeaveEntitlement({ ...base, leaveTypeName: 'Maternity Leave', employee: emp({ residency_status: 'SC' }), dependents: [] }).days).toBe(80);
-    const pr = computeLeaveEntitlement({ ...base, leaveTypeName: 'Maternity Leave', employee: emp({ residency_status: 'PR' }), dependents: [] });
-    expect(pr.days).toBe(80);
-    expect(pr.statutoryMin).toBe(40);
-    const fr = computeLeaveEntitlement({ ...base, leaveTypeName: 'Maternity Leave', employee: emp({ residency_status: 'FOREIGNER' }), dependents: [] });
-    expect(fr.days).toBe(0);
-    expect(fr.warnings.length).toBeGreaterThan(0);
-  });
 
-  it('paternity: citizen + married → 4 weeks, otherwise 0', () => {
-    expect(computeLeaveEntitlement({ ...base, leaveTypeName: 'Paternity Leave', employee: emp({ residency_status: 'SC', marital_status: 'married' }), dependents: [] }).days).toBe(20);
-    expect(computeLeaveEntitlement({ ...base, leaveTypeName: 'Paternity Leave', employee: emp({ marital_status: 'single' }), dependents: [] }).days).toBe(0);
-  });
 
   it('unknown country falls back to the company template', () => {
     const r = computeLeaveEntitlement({ ...base, countryCode: 'ZZ', leaveTypeName: 'Annual Leave', employee: emp(), dependents: [] });
@@ -42,16 +29,6 @@ describe('SG leave eligibility rules', () => {
     expect(r.computed).toBe(false);
   });
 
-  it('shared parental: 10 weeks for citizen children born from Apr 2026, 6 weeks from Apr 2025, else 0', () => {
-    const spl = (dob: string, citizenship = 'SC') => computeLeaveEntitlement({
-      ...base, leaveTypeName: 'Shared Parental Leave', employee: emp(),
-      dependents: [{ relationship: 'child', citizenship, date_of_birth: dob }],
-    }).days;
-    expect(spl('2026-05-01')).toBe(50);
-    expect(spl('2025-06-01')).toBe(30);
-    expect(spl('2024-06-01')).toBe(0);
-    expect(spl('2026-05-01', 'FOREIGNER')).toBe(0);
-  });
 
   it('built-in SG pack lists maternity, paternity and shared parental leave in days, not weeks', async () => {
     const { COUNTRY_PACKS } = await import('../../data/countries');
@@ -83,5 +60,40 @@ describe('SG leave eligibility rules', () => {
     const r = computeLeaveEntitlement({ countryCode: 'XX', templateDefault: 12, statutoryMin: 10, incrementPerYear: 2, maxDays: 20, asOf: new Date('2026-06-30'),
       leaveTypeName: 'Annual Leave', employee: emp({ join_date: '2023-01-01' }), dependents: [] });
     expect(r.days).toBe(18);
+  });
+
+  const due = (date: string, citizenship = 'SC') => ({ relationship: 'expected_child', date_of_birth: date, citizenship });
+  const baby = (date: string, citizenship = 'SC') => ({ relationship: 'child', date_of_birth: date, citizenship });
+  const ent = (leaveTypeName: string, e: any, dependents: any[] = []) =>
+    computeLeaveEntitlement({ ...base, leaveTypeName, employee: emp(e), dependents });
+
+  it('maternity only for mothers, and only once a due date or newborn is recorded', () => {
+    expect(ent('Maternity Leave', { gender: 'female' }).days).toBe(0);                       // no due date yet
+    expect(ent('Maternity Leave', { gender: 'female' }).basis).toMatch(/expected delivery date/);
+    expect(ent('Maternity Leave', { gender: 'female' }, [due('2026-09-01')]).days).toBe(80);
+    expect(ent('Maternity Leave', { gender: 'female' }, [baby('2026-03-01')]).days).toBe(80);
+    expect(ent('Maternity Leave', { gender: 'female' }, [baby('2020-03-01')]).days).toBe(0);  // child too old
+    expect(ent('Maternity Leave', { gender: 'male' }, [due('2026-09-01')]).days).toBe(0);
+    expect(ent('Maternity Leave', {}, [due('2026-09-01')]).basis).toMatch(/gender/);
+    const pr = ent('Maternity Leave', { gender: 'female', residency_status: 'PR' }, [due('2026-09-01')]);
+    expect(pr.days).toBe(80);
+    expect(pr.statutoryMin).toBe(40);
+    expect(ent('Maternity Leave', { gender: 'female', residency_status: 'FOREIGNER' }, [due('2026-09-01')]).days).toBe(0);
+  });
+
+  it('paternity only for married fathers of a Singapore-citizen baby, once recorded', () => {
+    expect(ent('Paternity Leave', { gender: 'male' }).days).toBe(0);
+    expect(ent('Paternity Leave', { gender: 'male' }, [due('2026-09-01')]).days).toBe(20);
+    expect(ent('Paternity Leave', { gender: 'male', marital_status: 'single' }, [due('2026-09-01')]).days).toBe(0);
+    expect(ent('Paternity Leave', { gender: 'male' }, [due('2026-09-01', 'FOREIGNER')]).days).toBe(0);
+    expect(ent('Paternity Leave', { gender: 'female' }, [due('2026-09-01')]).days).toBe(0);
+  });
+
+  it('shared parental: by the baby\'s due/birth date — 10 weeks from Apr 2026, 6 weeks from Apr 2025', () => {
+    expect(ent('Shared Parental Leave', { gender: 'female' }).days).toBe(0);
+    expect(ent('Shared Parental Leave', { gender: 'male' }, [due('2026-09-01')]).days).toBe(50);
+    expect(computeLeaveEntitlement({ ...base, asOf: new Date('2026-01-31'), leaveTypeName: 'Shared Parental Leave',
+      employee: emp({ gender: 'female' }), dependents: [baby('2025-06-01')] }).days).toBe(30);
+    expect(ent('Shared Parental Leave', { gender: 'female' }, [due('2026-09-01', 'FOREIGNER')]).days).toBe(0);
   });
 });
