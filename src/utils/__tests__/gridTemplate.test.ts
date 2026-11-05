@@ -104,3 +104,27 @@ describe('moving and pasting cells', () => {
     expect(p.cells[key(5, 7)]).toEqual({ v: 'Name', b: true });
   });
 });
+
+describe('lists side by side', () => {
+  it('prints earnings and deductions next to each other, blank where a list runs out', async () => {
+    const { AUTO_REPEAT, listsIn } = await import('../gridTemplate');
+    expect(listsIn('{{earnings.name}} {{line.x}} {{net_pay}} {{deductions.amount}}')).toEqual(['earnings', 'deductions']);
+    let t = blankTemplate(1, 3);
+    t = {
+      ...t, rows: [{ repeat: AUTO_REPEAT }],
+      cells: { [key(0, 0)]: { v: '{{earnings.name}} :' }, [key(0, 1)]: { v: '{{earnings.amount}}' }, [key(0, 2)]: { v: '{{deductions.name}} {{deductions.amount}}' } },
+    };
+    const out = expandTemplate(t, {}, {
+      earnings: [{ name: 'Basic', amount: '3000' }, { name: 'Bonus', amount: '500' }],
+      deductions: [{ name: 'CPF', amount: '600' }],
+    });
+    expect(out.map(r => r.cells.map(c => c.text))).toEqual([['Basic :', '3000', 'CPF 600'], ['Bonus :', '500', '']]);
+  });
+
+  it('older layouts using {{line.…}} still work', () => {
+    let t = blankTemplate(1, 2);
+    t = { ...t, rows: [{ repeat: 'earnings' }], cells: { [key(0, 0)]: { v: '{{line.name}}' }, [key(0, 1)]: { v: '{{line.amount}}' } } };
+    const out = expandTemplate(t, {}, { earnings: [{ name: 'Basic', amount: '1' }] });
+    expect(out[0].cells.map(c => c.text)).toEqual(['Basic', '1']);
+  });
+});

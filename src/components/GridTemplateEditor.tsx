@@ -8,7 +8,7 @@ import {
 } from '@ant-design/icons';
 import {
   key, colName, coveredSet, mergeAt, normRange, expandRange, mergeRange, unmergeRange, insertRow, deleteRow, insertCol, deleteCol,
-  styleRange, outlineRange, isLogoCell, moveRange, copyBlock, pasteBlock, clearArea, type Block, type GridTemplate, type GridCell, type Range,
+  styleRange, outlineRange, isLogoCell, listsIn, AUTO_REPEAT, moveRange, copyBlock, pasteBlock, clearArea, type Block, type GridTemplate, type GridCell, type Range,
 } from '../utils/gridTemplate';
 import { DOC_FIELDS, DOC_LISTS, STARTER_LAYOUTS, sampleData, fieldShortName, LIST_EXAMPLES, type DocKind } from '../data/documentLayouts';
 import { GridDocument, cellStyle, LogoImg, spanHeight } from './GridDocument';
@@ -76,13 +76,18 @@ function FieldGuide({ kind, onInsert, rowRepeat, sample }: {
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Lists — several lines per {kind}</div>
           <p style={{ margin: '0 0 8px' }}>
             Some things have a different number of lines for each person — one employee has only Basic Salary, another also has Overtime and a
-            Bonus. You can't know in advance how many rows to leave, so you design <b>one</b> row and mark it as repeating
-            (<b>Row … repeats for</b> in the toolbar; it turns yellow ↻). When printed, that row is copied once per item.
+            Bonus. You can't know in advance how many rows to leave, so you design <b>one</b> row with a list's fields in it, e.g.
+            <code style={code}> {'{{earnings.name}}'}</code> and <code style={code}>{'{{earnings.amount}}'}</code>. That row turns yellow ↻ and, when
+            printed, is copied once per item.
           </p>
           <p style={{ margin: '0 0 8px' }}>
-            Inside a repeating row, <code style={code}>line.</code> means “this item”: <code style={code}>{'{{line.name}}'}</code> is the item's name and
-            <code style={code}> {'{{line.amount}}'}</code> its amount. They only work in a repeating row.
-            {rowRepeat ? <> The selected row repeats for <b>{lists.find(l => l.name === rowRepeat)?.label.toLowerCase()}</b>.</> : null}
+            <b>Side by side:</b> one repeating row can hold two lists — earnings on the left, deductions on the right. It is printed as many times as
+            the longer list needs; where one list has run out, its cells are left blank.
+          </p>
+          <p style={{ margin: '0 0 8px' }}>
+            <b>Only want certain items?</b> Don't use a list — use a single field instead. For example, for a CPF section put
+            <code style={code}> {'{{cpf_employer}}'}</code>, <code style={code}>{'{{cpf_employee}}'}</code> and <code style={code}>{'{{cpf_total}}'}</code> in
+            ordinary (non-repeating) rows. SDL is a levy the company pays, not CPF; it has its own <code style={code}>{'{{sdl}}'}</code> field.
           </p>
           {lists.map(l => (
             <div key={l.name} style={{ marginBottom: 8 }}>
@@ -159,7 +164,13 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
   const setText = (p: Pos, text: string) => {
     const cell = t.cells[key(p.r, p.c)] || {};
     if ((cell.v || '') === text) return;
-    commit({ ...t, cells: { ...t.cells, [key(p.r, p.c)]: { ...cell, v: text } } });
+    let rows = t.rows;
+    // a list field only makes sense in a repeating row: switch the row to repeat automatically
+    if (listsIn(text).length && !t.rows[p.r]?.repeat) {
+      rows = [...t.rows];
+      rows[p.r] = { ...rows[p.r], repeat: AUTO_REPEAT };
+    }
+    commit({ ...t, rows, cells: { ...t.cells, [key(p.r, p.c)]: { ...cell, v: text } } });
   };
 
   const style = (patch: Partial<GridCell>) => commit(styleRange(t, range, patch));
@@ -291,10 +302,11 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
   };
 
   const lists = DOC_LISTS[kind];
-  const repeatList = lists.find(l => l.name === curRow.repeat);
+  const legacyList = lists.find(l => l.name === curRow.repeat);
   const fieldOptions = [
-    ...(repeatList ? [{ label: `In this ${repeatList.label} row`, options: repeatList.fields.map(f => ({ value: f.name, label: `${f.label}  {{${f.name}}}` })) }] : []),
-    { label: 'Fields', options: DOC_FIELDS[kind].map(f => ({ value: f.name, label: `${f.label}  {{${f.name}}}` })) },
+    ...(legacyList ? [{ label: `This row's item (older layouts)`, options: legacyList.fields.map(f => ({ value: `line.${f.name.split('.')[1]}`, label: `${f.label}  {{line.${f.name.split('.')[1]}}}` })) }] : []),
+    { label: 'Fields — one value', options: DOC_FIELDS[kind].map(f => ({ value: f.name, label: `${f.label}  {{${f.name}}}` })) },
+    ...lists.map(l => ({ label: `List: ${l.label} — row repeats per item`, options: l.fields.map(f => ({ value: f.name, label: `${f.label}  {{${f.name}}}` })) })),
   ];
   const insertField = (name: string) => {
     const txt = `{{${name}}}`;
@@ -325,7 +337,7 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
         <>
           <Collapse size="small" style={{ marginBottom: 8, background: '#151a1e' }} defaultActiveKey={guideOpen ? ['g'] : []}
             onChange={k => { const open = (Array.isArray(k) ? k : [k]).includes('g'); try { localStorage.setItem('qv-layout-guide', open ? '1' : '0'); } catch { /* ignore */ } }}
-            items={[{ key: 'g', label: 'Guide: what can I type in a cell? What is {{line.name}}?', children: <FieldGuide kind={kind} onInsert={insertField} rowRepeat={curRow.repeat} sample={sample} /> }]} />
+            items={[{ key: 'g', label: 'Guide: what can I type in a cell? How do earnings, deductions and CPF work?', children: <FieldGuide kind={kind} onInsert={insertField} rowRepeat={curRow.repeat} sample={sample} /> }]} />
           {/* toolbar */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', padding: 6, background: '#1d2328', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px 6px 0 0' }}>
             {btn('Undo (Ctrl+Z)', <UndoOutlined />, doUndo, false, undo.current.length === 0)}
@@ -378,17 +390,21 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', padding: 6, background: '#1d2328', borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
             <Select size="small" showSearch placeholder="Insert a field into the selected cell…" style={{ width: 300 }} value={null as any}
               options={fieldOptions} onChange={insertField} optionFilterProp="label" />
-            <Tooltip title="A repeating row is printed once for every item in the list (e.g. one row per earning). Put {{line.…}} fields in it.">
+            <Tooltip title="A repeating row is printed once per item of the lists used in it (e.g. one row per earning). Rows with list fields switch to repeating automatically.">
               <Space size={4}>
-                <Text style={{ color: 'rgba(240,237,230,0.7)', fontSize: 12 }}>Row {focus.r + 1} repeats for</Text>
-                <Select size="small" style={{ width: 190 }} value={curRow.repeat || ''}
+                <Text style={{ color: 'rgba(240,237,230,0.7)', fontSize: 12 }}>Row {focus.r + 1}</Text>
+                <Select size="small" style={{ width: 230 }} value={curRow.repeat || ''}
                   onChange={v => {
                     const rows = [...t.rows];
                     rows[focus.r] = { ...rows[focus.r], repeat: v || undefined };
                     if (!v) delete rows[focus.r].repeat;
                     commit({ ...t, rows });
                   }}
-                  options={[{ value: '', label: '— does not repeat —' }, ...lists.map(l => ({ value: l.name, label: `each ${l.label.toLowerCase()} item` }))]} />
+                  options={[
+                    { value: '', label: 'Does not repeat' },
+                    { value: AUTO_REPEAT, label: 'Repeats — one row per list item' },
+                    ...(legacyList ? [{ value: legacyList.name, label: `Repeats per ${legacyList.label.toLowerCase()} item` }] : []),
+                  ]} />
               </Space>
             </Tooltip>
             <Space size={4}>
@@ -444,7 +460,7 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
                     <th
                       onMouseDown={() => { setAnchor({ r, c: 0 }); setFocus({ r, c: t.cols.length - 1 }); }}
                       style={{ background: row.repeat ? '#fff4d6' : (r >= range.r1 && r <= range.r2 ? '#d3e3fd' : HEADER_BG), border: '1px solid #cfd4d9', fontSize: 11, fontWeight: 500, color: '#444', position: 'sticky', left: 0, zIndex: 1, cursor: 'pointer' }}>
-                      <Tooltip title={row.repeat ? `Repeats once per ${lists.find(l => l.name === row.repeat)?.label.toLowerCase() || row.repeat} item` : undefined} placement="right">
+                      <Tooltip title={row.repeat ? (row.repeat === AUTO_REPEAT ? 'Repeats once per item of the lists used in this row' : `Repeats once per ${lists.find(l => l.name === row.repeat)?.label.toLowerCase() || row.repeat} item`) : undefined} placement="right">
                         <span>{r + 1}{row.repeat ? ' ↻' : ''}</span>
                       </Tooltip>
                       <div onMouseDown={e => startResize('row', r, e)} title="Drag to resize"
