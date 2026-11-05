@@ -16,14 +16,14 @@ async function call<T>(action: string, payload: Record<string, unknown> = {}): P
 }
 
 export interface CreatedCompanyUser {
-  user: { id: number; company_id: number; email: string; full_name: string };
+  user: { id: number; company_id: number; username: string; email: string | null; full_name: string };
   /** True when the email already had a Quantivra login; its password was not changed. */
   existing_login: boolean;
 }
 
 export const adminUsersService = {
   createCompanyUser(input: {
-    company_id: number; email: string; password: string; full_name: string;
+    company_id: number; username: string; email?: string; password: string; full_name: string;
     job_title?: string; phone?: string; role_id?: number;
   }) {
     return call<CreatedCompanyUser>('create_company_user', input);

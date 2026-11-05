@@ -31,12 +31,18 @@ for f in scripts/migrations/00*.sql scripts/migrations/010_*.sql; do
   "${PSQL[@]}" -d $DB -f "$f" >/dev/null 2>&1
 done
 "${PSQL[@]}" -d $DB -f scripts/security-tests/seed.sql
-for f in scripts/migrations/01[1-9]_*.sql scripts/migrations/0[2-9][0-9]_*.sql; do
-  [ -e "$f" ] || continue
-  "${PSQL[@]}" -d $DB -f "$f" >/dev/null 2>&1
-done
-# Applying the latest migration twice must be harmless.
-"${PSQL[@]}" -d $DB -f scripts/migrations/011_auth_rls.sql >/dev/null 2>&1
+apply_from_011() {
+  for f in scripts/migrations/01[1-9]_*.sql scripts/migrations/0[2-9][0-9]_*.sql; do
+    [ -e "$f" ] || continue
+    if ! "${PSQL[@]}" -d $DB -f "$f" >/dev/null 2>"$TMPDIR_RUN/err"; then
+      echo "Migration failed: $f"; tail -5 "$TMPDIR_RUN/err"; exit 1
+    fi
+  done
+}
+TMPDIR_RUN=$(mktemp -d)
+apply_from_011
+# Applying every migration from 011 a second time must be harmless.
+apply_from_011
 
 # Link the fixture logins (what the server function does in production).
 "${PSQL[@]}" -d $DB -c "UPDATE company_users u SET auth_user_id = a.id FROM auth.users a

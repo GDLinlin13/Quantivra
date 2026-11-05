@@ -120,7 +120,10 @@ $$;
 -- ------------------------------------------------------------
 -- 3. Sign-in lookups (called right after supabase.auth.signInWithPassword)
 -- ------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.app_sign_in_company(p_company_code text)
+-- Later migrations (017) change this function's columns; drop first so
+-- re-running this file always works (then re-run the later ones too).
+DROP FUNCTION IF EXISTS public.app_sign_in_company(text);
+CREATE FUNCTION public.app_sign_in_company(p_company_code text)
 RETURNS TABLE (id bigint, company_id bigint, email text, full_name text, job_title text)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT u.id, u.company_id, u.email, u.full_name, u.job_title

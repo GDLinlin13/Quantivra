@@ -110,10 +110,10 @@ export function LoginPage() {
               style={{ background: '#0b0f12', border: '1px solid rgba(255,255,255,0.1)', color: '#f0ede6', height: 46, textTransform: 'uppercase' }}
             />
           </Form.Item>
-          <Form.Item name="username" rules={[{ required: true, message: 'Enter your username or email' }]}>
+          <Form.Item name="username" rules={[{ required: true, message: 'Enter your username' }]}>
             <Input
               prefix={<UserOutlined style={{ color: 'rgba(240,237,230,0.3)' }} />}
-              placeholder="USERNAME OR EMAIL"
+              placeholder="USERNAME"
               autoComplete="username"
               size="large"
               style={{ background: '#0b0f12', border: '1px solid rgba(255,255,255,0.1)', color: '#f0ede6', height: 46 }}

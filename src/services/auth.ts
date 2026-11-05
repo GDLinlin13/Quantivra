@@ -1,4 +1,5 @@
 import { supabase, setRememberMe } from '../utils/supabase';
+import { loginEmailFor } from '../utils/loginEmail';
 import type { User } from '../types';
 
 // Who the signed-in person is inside Quantivra (platform admin, or a user of
@@ -49,7 +50,7 @@ function toEmail(identifier: string): string {
 // Plain-language reasons, so a failed sign-in says what to fix.
 function signInMessage(error: { message?: string; status?: number; code?: string } | null): string {
   const msg = error?.message || '';
-  if (/invalid login credentials/i.test(msg) || error?.code === 'invalid_credentials') return 'Wrong username/email or password';
+  if (/invalid login credentials/i.test(msg) || error?.code === 'invalid_credentials') return 'Wrong company code, username or password';
   if (/email not confirmed/i.test(msg)) return 'This login has not been confirmed yet (Supabase → Authentication → Users → Confirm)';
   if (/fetch|network|failed to fetch/i.test(msg) || error?.status === 0) return 'Cannot reach the sign-in service. Check your connection and try again.';
   return msg ? `Sign-in failed: ${msg}` : INVALID;
@@ -89,16 +90,19 @@ export const authService = {
     return session;
   },
 
-  async loginCompany(email: string, password: string, remember = false, companyCode?: string): Promise<Session> {
+  async loginCompany(identifier: string, password: string, remember = false, companyCode?: string): Promise<Session> {
     if (!companyCode) throw new Error('Company code is required');
+    // Usernames map to the company's hidden login address; logins created
+    // before usernames existed can still type their email.
+    const email = identifier.includes('@') ? identifier : loginEmailFor(companyCode, identifier);
     const authUserId = await signIn(email, password, remember);
     const { data, error } = await supabase.rpc('app_sign_in_company', { p_company_code: companyCode });
     const row = Array.isArray(data) ? data[0] : data;
     if (error) await rejectAccess('Signed in, but could not check company access', error);
     if (!row) await rejectAccess(`This login has no active access to company "${companyCode.toUpperCase()}"`);
     const user: User = {
-      id: row.id, company_id: row.company_id, email: row.email, full_name: row.full_name,
-      username: row.email, roles: [], is_super_admin: false, is_active: true, created_at: new Date().toISOString(),
+      id: row.id, company_id: row.company_id, email: row.email || '', full_name: row.full_name,
+      username: row.username || row.email, roles: [], is_super_admin: false, is_active: true, created_at: new Date().toISOString(),
     };
     const session: Session = { type: 'company', user, authUserId, companyId: row.company_id };
     saveSession(session, remember);

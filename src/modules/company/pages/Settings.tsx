@@ -3,6 +3,7 @@ import { Card, Form, Input, Select, Button, Typography, message, Divider, Space,
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { MODULES } from '../../../types';
+import { timezoneOptions } from '../../../utils/timezones';
 import { DocumentNumbersCard } from './settings/DocumentNumbersCard';
 import { WorkWeekHolidaysCard } from './settings/WorkWeekHolidaysCard';
 import { ChangePasswordCard } from '../../../components/ChangePasswordCard';
@@ -58,7 +59,7 @@ export function CompanySettingsPage() {
             <Input placeholder="MM-DD" />
           </Form.Item>
           <Form.Item name="timezone" label={<Text style={{ color: '#f0ede6' }}>Timezone</Text>}>
-            <Input />
+            <Select showSearch optionFilterProp="label" options={timezoneOptions()} />
           </Form.Item>
           <Button type="primary" htmlType="submit" style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
             Save

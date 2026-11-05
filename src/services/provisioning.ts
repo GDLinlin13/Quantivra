@@ -12,7 +12,8 @@ export interface ProvisionInput {
   timezone: string;
   modules: string[];
   owner_full_name: string;
-  owner_email: string;
+  owner_username: string;
+  owner_email?: string;
   owner_mobile?: string;
   owner_password: string;
 }
@@ -168,7 +169,8 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
     const res = await adminUsersService.createCompanyUser({
       company_id: company.id,
       full_name: input.owner_full_name,
-      email: input.owner_email,
+      username: input.owner_username,
+      email: input.owner_email || undefined,
       password: input.owner_password,
       phone: input.owner_mobile || '',
       job_title: 'Owner',
@@ -319,7 +321,7 @@ export async function provisionCompany(input: ProvisionInput, onProgress?: Progr
     await supabase.rpc('hr_upsert_employee', {
       p: {
         company_id: company.id, user_id: String(owner.id), employee_code: 'EMP-001',
-        full_name: input.owner_full_name, email: input.owner_email,
+        full_name: input.owner_full_name, email: input.owner_email || '',
         phone: input.owner_mobile || '', job_title: 'Owner', employment_type: 'full_time',
         status: 'active', join_date: new Date().toISOString().slice(0, 10),
       },
