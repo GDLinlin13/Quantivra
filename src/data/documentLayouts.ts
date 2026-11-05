@@ -50,7 +50,7 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
   ],
 };
 
-const NAME_AMOUNT: FieldDef[] = [{ name: 'line.name', label: 'Item name' }, { name: 'line.amount', label: 'Amount' }];
+const NAME_AMOUNT: FieldDef[] = [{ name: 'line.name', label: 'Item name' }, { name: 'line.amount', label: 'Item amount' }];
 
 export const DOC_LISTS: Record<DocKind, ListDef[]> = {
   payslip: [
@@ -62,10 +62,10 @@ export const DOC_LISTS: Record<DocKind, ListDef[]> = {
     {
       name: 'lines', label: 'Invoice lines', fields: [
         { name: 'line.no', label: 'Line number' },
-        { name: 'line.description', label: 'Description' },
-        { name: 'line.qty', label: 'Quantity' },
-        { name: 'line.unit_price', label: 'Unit price' },
-        { name: 'line.amount', label: 'Amount' },
+        { name: 'line.description', label: 'Line description' },
+        { name: 'line.qty', label: 'Line quantity' },
+        { name: 'line.unit_price', label: 'Line unit price' },
+        { name: 'line.amount', label: 'Line amount' },
       ],
     },
   ],
@@ -193,3 +193,23 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
     },
   };
 }
+
+/** Short, friendly name for a {{field}}, shown on the chips in the designer. */
+export function fieldShortName(kind: DocKind, name: string): string | null {
+  const n = name.toLowerCase();
+  const f = DOC_FIELDS[kind].find(x => x.name === n);
+  if (f) return f.label.replace(/\s*\(.*\)\s*$/, '');
+  for (const l of DOC_LISTS[kind]) {
+    const lf = l.fields.find(x => x.name === n);
+    if (lf) return lf.label;
+  }
+  return null;
+}
+
+/** What each list's {{line.name}} looks like on a real document. */
+export const LIST_EXAMPLES: Record<string, string> = {
+  earnings: 'Basic Salary, Transport allowance, Overtime (10 hrs), Bonus, Reimbursement / claim – Taxi, Unpaid leave (2 days)…',
+  deductions: 'CPF (Employee), CDAC, Loan repayment, Salary advance, Other deduction – Uniform…',
+  employer: 'CPF (Employer), SDL…',
+  lines: 'Whatever is typed on each invoice line, e.g. Consulting services',
+};

@@ -7,6 +7,8 @@ export interface PayslipTemplate {
   showCompanyBlock: boolean;
   showEmployeeId: boolean;
   showBankAccount: boolean;
+  /** Show the full bank account number instead of the masked one. */
+  bankAccountFull?: boolean;
   footerNote: string;
   /** Spreadsheet-style layout; used instead of the standard payslip when enabled. */
   layout?: GridTemplate;
@@ -45,7 +47,7 @@ export interface Branding {
 }
 
 export const DEFAULT_TEMPLATES: Templates = {
-  payslip: { showLogo: true, showCompanyBlock: true, showEmployeeId: true, showBankAccount: false, footerNote: '' },
+  payslip: { showLogo: true, showCompanyBlock: true, showEmployeeId: true, showBankAccount: false, bankAccountFull: false, footerNote: '' },
   invoice: { showLogo: true, showCompanyBlock: true, paymentTermsDays: 30, bankDetails: '', footerNote: '' },
   document: { showLogo: true, showLetterhead: true, footerNote: '' },
 };

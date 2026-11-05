@@ -10,6 +10,7 @@ import { companyFields, money as fmtMoney } from '../../../../data/documentLayou
 import { hrService } from '../../../../services/hr';
 import type { FieldValues, ListValues } from '../../../../utils/gridTemplate';
 import { useAuth } from '../../../../contexts/AuthContext';
+import { PayItemsCard } from './PayItemsCard';
 import { supabase } from '../../../../utils/supabase';
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => ({ label: dayjs().month(i).format('MMMM'), value: i + 1 }));
@@ -82,6 +83,8 @@ export function PayrollTab({ companyId }: { companyId: number }) {
           Calculates gross pay, statutory contributions, tax and net for all active employees using the {company?.country || 'SG'} country pack. Re-runnable while in draft.
         </div>
       </Card>
+
+      <PayItemsCard companyId={companyId} year={year} month={month} currency={cur} />
 
       <Card size="small" style={{ marginBottom: 16, background: 'rgba(255,255,255,0.03)' }}
         title={<span style={{ color: '#f0ede6', fontSize: 13 }}>Self-help group contributions the company absorbs</span>}>
@@ -181,7 +184,9 @@ function PayslipView({ slip, company, branding, period }: { slip: PayslipRow; co
   const bankName: string | null = res.bankName || null;
   const layout = t?.layout;
   const useLayout = !!layout?.enabled;
-  const needsFullBank = useLayout && JSON.stringify(layout?.cells || {}).includes('{{bank_account}}');
+  const needsFullBank = useLayout
+    ? JSON.stringify(layout?.cells || {}).includes('{{bank_account}}')
+    : !!(t?.showBankAccount && t?.bankAccountFull);
   const [bankFull, setBankFull] = useState<string | null>(null);
 
   // The full bank number is only kept encrypted; fetch it (pay-access users only) when the layout asks for it.
@@ -196,7 +201,7 @@ function PayslipView({ slip, company, branding, period }: { slip: PayslipRow; co
   }, [needsFullBank, company?.id, slip.employee_id]);
 
   if (useLayout && layout) {
-    const line = (x: { componentCode: string; amount: number }) => ({ name: componentLabel(x.componentCode), amount: fmtMoney(x.amount, cur) });
+    const line = (x: { componentCode: string; amount: number; label?: string }) => ({ name: x.label || componentLabel(x.componentCode), amount: fmtMoney(x.amount, cur) });
     const onBehalf = stat.filter(s => s.absorbedByEmployer && s.employeeTotal > 0);
     const fields: FieldValues = {
       ...companyFields(company, branding, t?.footerNote),
@@ -237,17 +242,17 @@ function PayslipView({ slip, company, branding, period }: { slip: PayslipRow; co
         <table style={{ width: '100%', fontSize: 13, color: '#111', borderCollapse: 'collapse' }}>
           <tbody>
             <tr><td style={{ color: '#666' }}>Employee</td><td style={{ textAlign: 'right' }}>{slip.employee_name}{(t?.showEmployeeId ?? true) && slip.employee_code ? ` · ${slip.employee_code}` : ''}</td></tr>
-            {t?.showBankAccount && bankMasked && <tr><td style={{ color: '#666' }}>Bank account</td><td style={{ textAlign: 'right' }}>{[bankName, bankMasked].filter(Boolean).join(' ')}</td></tr>}
+            {t?.showBankAccount && bankMasked && <tr><td style={{ color: '#666' }}>Bank account</td><td style={{ textAlign: 'right' }}>{[bankName, (t?.bankAccountFull && bankFull) || bankMasked].filter(Boolean).join(' ')}</td></tr>}
 
             <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Earnings</td></tr>
             {slip.earnings_json.map((e, i) => (
-              <tr key={i}><td style={{ padding: '2px 0' }}>{componentLabel(e.componentCode)}</td><td style={{ textAlign: 'right' }}>{money(e.amount, cur)}</td></tr>
+              <tr key={i}><td style={{ padding: '2px 0' }}>{e.label || componentLabel(e.componentCode)}</td><td style={{ textAlign: 'right' }}>{money(e.amount, cur)}</td></tr>
             ))}
             <tr><td style={{ borderTop: '1px solid #e2e2e2' }}>Gross Pay</td><td style={{ textAlign: 'right', borderTop: '1px solid #e2e2e2' }}>{money(slip.gross_pay, cur)}</td></tr>
 
             <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Deductions</td></tr>
             {slip.deductions_json.map((d, i) => (
-              <tr key={i}><td style={{ padding: '2px 0' }}>{componentLabel(d.componentCode)}</td><td style={{ textAlign: 'right' }}>-{money(d.amount, cur)}</td></tr>
+              <tr key={i}><td style={{ padding: '2px 0' }}>{d.label || componentLabel(d.componentCode)}</td><td style={{ textAlign: 'right' }}>-{money(d.amount, cur)}</td></tr>
             ))}
             {slip.deductions_json.length === 0 && <tr><td colSpan={2} style={{ color: '#999' }}>None</td></tr>}
             <tr><td style={{ borderTop: '1px solid #e2e2e2', fontWeight: 700 }}>Net Pay</td><td style={{ textAlign: 'right', borderTop: '1px solid #e2e2e2', fontWeight: 700, color: branding?.accent_color || '#0369a1' }}>{money(slip.net_pay, cur)}</td></tr>
