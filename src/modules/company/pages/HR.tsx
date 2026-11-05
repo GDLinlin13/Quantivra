@@ -6,11 +6,16 @@ import { ApprovalsTab } from './hr/ApprovalsTab';
 import { LeaveTypesTab } from './hr/LeaveTypesTab';
 import { BalancesTab } from './hr/BalancesTab';
 import { PayrollTab } from './hr/PayrollTab';
+import { useCompanyAccess } from '../../../contexts/CompanyAccess';
 
 const { Title } = Typography;
 
 export function CompanyHRPage() {
   const { companyId } = useAuth();
+  const access = useCompanyAccess();
+  const canViewPay = access.canViewPay;
+  const canManageStaff = access.can('employees', 'edit');
+  const canApprove = access.can('leave', 'approve');
   if (!companyId) return <Alert type="error" message="No company context" />;
 
   return (
@@ -19,11 +24,13 @@ export function CompanyHRPage() {
       <Tabs
         items={[
           { key: 'leave', label: 'My Leave', children: <LeaveTab companyId={companyId} /> },
-          { key: 'approvals', label: 'Approvals', children: <ApprovalsTab companyId={companyId} /> },
-          { key: 'payroll', label: 'Payroll', children: <PayrollTab companyId={companyId} /> },
-          { key: 'employees', label: 'Employees', children: <EmployeesTab companyId={companyId} /> },
-          { key: 'balances', label: 'Leave Balances', children: <BalancesTab companyId={companyId} /> },
-          { key: 'types', label: 'Leave Types', children: <LeaveTypesTab companyId={companyId} /> },
+          ...(canApprove ? [{ key: 'approvals', label: 'Approvals', children: <ApprovalsTab companyId={companyId} /> }] : []),
+          ...(canViewPay ? [{ key: 'payroll', label: 'Payroll', children: <PayrollTab companyId={companyId} /> }] : []),
+          ...(canManageStaff ? [
+            { key: 'employees', label: 'Employees', children: <EmployeesTab companyId={companyId} /> },
+            { key: 'balances', label: 'Leave Balances', children: <BalancesTab companyId={companyId} /> },
+            { key: 'types', label: 'Leave Types', children: <LeaveTypesTab companyId={companyId} /> },
+          ] : []),
         ]}
       />
     </div>

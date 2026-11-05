@@ -72,6 +72,29 @@ function requireCompany(caller: Caller, companyId: number) {
   }
 }
 
+/** Platform admin, or a member of the company whose role has pay access (see migration 020). */
+async function hasPayAccess(admin: SupabaseClient, caller: Caller, companyId: number): Promise<boolean> {
+  if (caller.isPlatformAdmin) return true;
+  if (!caller.companyIds.includes(companyId)) return false;
+  const { data: me } = await admin.from('company_users').select('id')
+    .eq('auth_user_id', caller.authUserId).eq('company_id', companyId).eq('is_active', true).maybeSingle();
+  if (!me) return false;
+  const { data: links } = await admin.from('company_user_roles').select('role_id').eq('user_id', me.id);
+  const roleIds = (links || []).map((l: any) => l.role_id);
+  if (!roleIds.length) return false;
+  const { data: roles } = await admin.from('company_roles').select('id')
+    .eq('company_id', companyId).eq('can_view_pay', true).in('id', roleIds);
+  return (roles || []).length > 0;
+}
+
+/** Managing logins and roles is limited to people with pay access. */
+async function requireUserAdmin(admin: SupabaseClient, caller: Caller, companyId: number) {
+  requireCompany(caller, companyId);
+  if (!(await hasPayAccess(admin, caller, companyId))) {
+    throw new HttpError(403, 'Only people with HR / pay access can manage sign-ins');
+  }
+}
+
 /**
  * Creates a Supabase Auth login, or finds the existing one for that email.
  * An existing login keeps its own password: otherwise an admin of one company
@@ -95,7 +118,7 @@ async function findOrCreateLogin(
 
 async function createCompanyUser(admin: SupabaseClient, caller: Caller, body: Body) {
   const companyId = num(body, 'company_id')!;
-  requireCompany(caller, companyId);
+  await requireUserAdmin(admin, caller, companyId);
   const username = normaliseUsername(str(body, 'username'));
   if (!isValidUsername(username)) throw new HttpError(400, `Username must be ${USERNAME_RULE_TEXT}`);
   const contactEmail = str(body, 'email', false).toLowerCase() || null;
@@ -114,6 +137,7 @@ async function createCompanyUser(admin: SupabaseClient, caller: Caller, body: Bo
     const role = await admin.from('company_roles').select('id').eq('id', roleId).eq('company_id', companyId).maybeSingle();
     if (!role.data) throw new HttpError(400, 'Role does not belong to this company');
   }
+
 
   // Sign-in is by username: the Supabase login uses a hidden internal address
   // unique to this company + username, so it never collides with anyone else.
@@ -183,6 +207,40 @@ async function deleteCompany(admin: SupabaseClient, caller: Caller, body: Body) 
   return { ok: true, removed_logins: removedLogins };
 }
 
+/**
+ * Remove a company user's sign-in. Their employee record (if linked) stays,
+ * just unlinked. The Supabase login is deleted unless used elsewhere.
+ * Refuses to delete yourself or the company's last user with pay access.
+ */
+async function deleteCompanyUser(admin: SupabaseClient, caller: Caller, body: Body) {
+  const targetId = num(body, 'company_user_id')!;
+  const { data: target } = await admin.from('company_users').select('id, company_id, auth_user_id').eq('id', targetId).maybeSingle();
+  if (!target) throw new HttpError(404, 'User not found');
+  const companyId = Number(target.company_id);
+  await requireUserAdmin(admin, caller, companyId);
+  if (target.auth_user_id && target.auth_user_id === caller.authUserId) throw new HttpError(400, "You can't delete your own sign-in");
+
+  // Keep at least one person who can manage the company.
+  const { data: payRoles } = await admin.from('company_roles').select('id').eq('company_id', companyId).eq('can_view_pay', true);
+  const payRoleIds = (payRoles || []).map((r: any) => r.id);
+  if (payRoleIds.length) {
+    const { data: links } = await admin.from('company_user_roles').select('user_id').in('role_id', payRoleIds);
+    const payUsers = new Set((links || []).map((l: any) => l.user_id));
+    if (payUsers.has(targetId) && payUsers.size <= 1) {
+      throw new HttpError(400, 'This is the only person who can see pay and manage users. Give someone else that role first.');
+    }
+  }
+
+  const del = await admin.from('company_users').delete().eq('id', targetId);
+  if (del.error) throw new HttpError(400, del.error.message);
+  let loginRemoved = false;
+  if (target.auth_user_id && !(await loginInUse(admin, target.auth_user_id))) {
+    const { error } = await admin.auth.admin.deleteUser(target.auth_user_id);
+    loginRemoved = !error;
+  }
+  return { ok: true, login_removed: loginRemoved };
+}
+
 async function setPassword(admin: SupabaseClient, caller: Caller, body: Body) {
   const targetId = num(body, 'company_user_id')!;
   const password = str(body, 'password');
@@ -192,6 +250,7 @@ async function setPassword(admin: SupabaseClient, caller: Caller, body: Body) {
     .select('id, company_id, auth_user_id').eq('id', targetId).maybeSingle();
   if (!target?.auth_user_id) throw new HttpError(404, 'User not found');
   requireCompany(caller, Number(target.company_id));
+  if (target.auth_user_id !== caller.authUserId) await requireUserAdmin(admin, caller, Number(target.company_id));
 
   if (!caller.isPlatformAdmin && target.auth_user_id !== caller.authUserId) {
     // A company admin may only reset logins that belong to their company alone.
@@ -266,6 +325,7 @@ export async function handleAdminUsers(request: Request, admin: SupabaseClient):
       case 'create_platform_admin': result = await createPlatformAdmin(admin, caller, body); break;
       case 'migrate_legacy_users':  result = await migrateLegacyUsers(admin, caller); break;
       case 'delete_company':        result = await deleteCompany(admin, caller, body); break;
+      case 'delete_company_user':   result = await deleteCompanyUser(admin, caller, body); break;
       default: throw new HttpError(400, 'Unknown action');
     }
     return Response.json(result);

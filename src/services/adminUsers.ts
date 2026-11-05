@@ -34,6 +34,10 @@ export const adminUsersService = {
   createPlatformAdmin(input: { email: string; password: string; full_name: string }) {
     return call<{ user: any; existing_login: boolean }>('create_platform_admin', input);
   },
+  /** Remove a company user's sign-in (their employee record stays, unlinked). */
+  deleteCompanyUser(companyUserId: number) {
+    return call<{ ok: true; login_removed: boolean }>('delete_company_user', { company_user_id: companyUserId });
+  },
   /** Delete a deactivated company, its data and the logins only it used. */
   deleteCompany(companyId: number) {
     return call<{ ok: true; removed_logins: number }>('delete_company', { company_id: companyId });

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Tag, Tooltip, message, Modal, InputNumber, Space, Alert, Select, Typography } from 'antd';
+import { Table, Button, Tag, Tooltip, message, Modal, InputNumber, Space, Alert, Select, Typography, Drawer } from 'antd';
 import { ReloadOutlined, WarningOutlined, EditOutlined, CalendarOutlined } from '@ant-design/icons';
 import { hrService, leaveService, type Employee, type LeaveType, type LeaveBalance, type LeaveYearRow } from '../../../../services/hr';
 import { supabase } from '../../../../utils/supabase';
@@ -15,6 +15,8 @@ interface Row {
   computed: { days: number; statutoryMin: number; basis: string; warnings: string[]; computed: boolean };
 }
 
+interface EmployeeGroup { employee: Employee; rows: Row[] }
+
 export function BalancesTab({ companyId }: { companyId: number }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,6 +27,7 @@ export function BalancesTab({ companyId }: { companyId: number }) {
   const [editVal, setEditVal] = useState<number>(0);
   const [newYear, setNewYear] = useState<number | null>(null);
   const [preview, setPreview] = useState<LeaveYearRow[] | null>(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,6 +95,15 @@ export function BalancesTab({ companyId }: { companyId: number }) {
     } catch (e: any) { message.error(e.message); }
   };
 
+  // One row per employee; click to see and edit their entitlements.
+  const employeeGroups: EmployeeGroup[] = [];
+  for (const r of rows) {
+    let g = employeeGroups.find(x => x.employee.id === r.employee.id);
+    if (!g) { g = { employee: r.employee, rows: [] }; employeeGroups.push(g); }
+    g.rows.push(r);
+  }
+  const selectedGroup = employeeGroups.find(g => g.employee.id === selectedEmployeeId) || null;
+
   const noBalancesYet = !loading && rows.length > 0 && rows.every(r => !r.balance);
 
   return (
@@ -117,10 +129,43 @@ export function BalancesTab({ companyId }: { companyId: number }) {
           message={`No balances saved for ${year} yet. The numbers below are a preview — click "Start ${year} leave year" or "Recompute ${year}" to save them.`} />
       )}
       <Table
-        dataSource={rows} loading={loading} rowKey="key" size="small" pagination={{ pageSize: 20 }}
+        dataSource={employeeGroups} loading={loading} rowKey={g => g.employee.id} size="small" pagination={{ pageSize: 20 }}
         style={{ background: 'transparent' }} scroll={{ x: true }}
+        onRow={g => ({ onClick: () => setSelectedEmployeeId(g.employee.id), style: { cursor: 'pointer' } })}
         columns={[
-          { title: 'Employee', key: 'e', render: (_, r) => <span style={{ color: '#f0ede6' }}>{r.employee.full_name} <span style={{ color: 'rgba(240,237,230,0.4)' }}>{r.employee.employee_code}</span></span> },
+          { title: 'Employee', key: 'e', render: (_, g) => <span style={{ color: '#f0ede6' }}>{g.employee.full_name} <span style={{ color: 'rgba(240,237,230,0.4)' }}>{g.employee.employee_code}</span></span> },
+          ...['annual', 'sick'].map(kind => ({
+            title: kind === 'annual' ? 'Annual leave left' : 'Sick leave left', key: kind,
+            render: (_: any, g: EmployeeGroup) => {
+              const r = g.rows.find(x => x.leaveType.name.toLowerCase().includes(kind));
+              if (!r) return '–';
+              const b = r.balance;
+              const total = b ? Number(b.entitled_days) + Number(b.carried_days || 0) : r.computed.days;
+              const left = b ? total - Number(b.taken_days || 0) - Number(b.pending_days || 0) : total;
+              return <span><b>{left}</b> <span style={{ color: 'rgba(240,237,230,0.5)' }}>of {total}</span></span>;
+            },
+          })),
+          { title: 'Other leave', key: 'other', render: (_, g) => {
+            const other = g.rows.filter(r => !/annual|sick/i.test(r.leaveType.name) && (r.balance ? Number(r.balance.entitled_days) : r.computed.days) > 0);
+            return other.length ? other.map(r => <Tag key={r.key}>{r.leaveType.name}</Tag>) : <span style={{ color: 'rgba(240,237,230,0.4)' }}>–</span>;
+          } },
+          { title: '', key: 'flags', render: (_, g) => (
+            <Space size={4}>
+              {g.rows.some(r => r.balance?.entitlement_source === 'manual') && <Tag color="gold">manual</Tag>}
+              {g.rows.some(r => r.balance?.below_statutory) && <Tag color="red" icon={<WarningOutlined />}>below minimum</Tag>}
+              {g.rows.every(r => !r.balance) && <Tag>not saved yet</Tag>}
+              <Button size="small" type="link">View / edit</Button>
+            </Space>
+          ) },
+        ]}
+      />
+
+      <Drawer open={!!selectedGroup} onClose={() => setSelectedEmployeeId(null)} width={Math.min(980, window.innerWidth)}
+        title={selectedGroup ? `${selectedGroup.employee.full_name} — ${year} leave` : ''}>
+        {selectedGroup && (
+          <Table
+            dataSource={selectedGroup.rows} rowKey="key" size="small" pagination={false} scroll={{ x: true }}
+            columns={[
           { title: 'Leave type', key: 't', render: (_, r) => r.leaveType.name },
           {
             title: 'Entitled', key: 'ent', render: (_, r) => {
@@ -163,7 +208,9 @@ export function BalancesTab({ companyId }: { companyId: number }) {
             ),
           },
         ]}
-      />
+          />
+        )}
+      </Drawer>
 
       <Modal open={!!edit} onCancel={() => setEdit(null)} footer={null}
         title={edit ? `${edit.employee.full_name} — ${edit.leaveType.name}` : ''}>

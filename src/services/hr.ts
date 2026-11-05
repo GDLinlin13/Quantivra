@@ -159,7 +159,9 @@ export const leaveService = {
 
   async saveType(t: Partial<LeaveType> & { company_id: number; name: string }) {
     if (t.id) {
-      const { error } = await supabase.from('leave_types').update(t).eq('id', t.id);
+      // id / company / created_at are fixed: sending them back makes the update fail.
+      const { id, company_id: _company, created_at: _created, ...changes } = t as any;
+      const { error } = await supabase.from('leave_types').update(changes).eq('id', id);
       if (error) throw new Error(error.message);
     } else {
       const { error } = await supabase.from('leave_types').insert(t);

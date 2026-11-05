@@ -3,6 +3,7 @@ import { Table, Button, Modal, Form, Input, InputNumber, Select, DatePicker, mes
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { hrService, calendarService, type Employee } from '../../../../services/hr';
+import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { WORK_PATTERN_PRESETS, presetKeyOf, describePattern, type WorkPattern } from '../../../../utils/workdays';
 import { supabase } from '../../../../utils/supabase';
 import { residencyOptions, defaultResidency } from '../../../../data/residency-options';
@@ -10,6 +11,7 @@ import { residencyOptions, defaultResidency } from '../../../../data/residency-o
 const EMP_TYPES = ['full_time', 'part_time', 'contract', 'intern', 'casual'];
 
 export function EmployeesTab({ companyId }: { companyId: number }) {
+  const { canViewPay } = useCompanyAccess();
   const [rows, setRows] = useState<Employee[]>([]);
   const [depts, setDepts] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -143,8 +145,9 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
             </Form.Item>
             <Form.Item name="user_id" label="Login Account"
               tooltip="Link the sign-in (created under Users) this person uses, so they can see their own leave and apply for leave. Leave empty if they don't sign in.">
-              <Select allowClear showSearch optionFilterProp="label" placeholder="Not linked"
-                options={users.map(u => ({ label: `${u.full_name} (${u.username || u.email || 'no username'})`, value: u.id }))} />
+              <Select allowClear showSearch optionFilterProp="label" placeholder="Not linked" disabled={!canViewPay}
+                options={users.filter(u => u.id === editing?.user_id || !rows.some(r => r.user_id === u.id))
+                  .map(u => ({ label: `${u.full_name} (${u.username || u.email || 'no username'})`, value: u.id }))} />
             </Form.Item>
             <Form.Item name="employment_type" label="Employment Type">
               <Select options={EMP_TYPES.map(t => ({ label: t.replace('_', ' '), value: t }))} />
@@ -154,7 +157,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
             </Form.Item>
             <Form.Item name="join_date" label="Join Date"><DatePicker style={{ width: '100%' }} /></Form.Item>
             <Form.Item name="exit_date" label="Exit Date"><DatePicker style={{ width: '100%' }} /></Form.Item>
-            <Form.Item name="base_salary" label="Base Salary (monthly)"><InputNumber style={{ width: '100%' }} min={0} /></Form.Item>
+            {canViewPay && <Form.Item name="base_salary" label="Base Salary (monthly)"><InputNumber style={{ width: '100%' }} min={0} /></Form.Item>}
             <Form.Item name="date_of_birth" label="Date of Birth"><DatePicker style={{ width: '100%' }} /></Form.Item>
             <Form.Item name="residency_status" label="Residency (for statutory)">
               <Select options={residencyOptions(country).map(o => ({ label: o.label, value: o.value }))} />
@@ -215,13 +218,15 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
               <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setDeps(x => x.filter((_, xi) => xi !== i))} />
             </div>
           ))}
-          <div style={{ color: 'rgba(240,237,230,0.4)', fontSize: 12, margin: '4px 0 8px' }}>PII below is encrypted at rest.</div>
+          {canViewPay && <div style={{ color: 'rgba(240,237,230,0.4)', fontSize: 12, margin: '4px 0 8px' }}>PII below is encrypted at rest.</div>}
+          {canViewPay && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Form.Item name="national_id" label="National ID / NRIC"><Input /></Form.Item>
             <Form.Item name="tax_id" label="Tax ID"><Input /></Form.Item>
             <Form.Item name="bank_name" label="Bank"><Input /></Form.Item>
             <Form.Item name="bank_account" label="Bank Account No."><Input /></Form.Item>
           </div>
+          )}
         </Form>
       </Modal>
     </div>

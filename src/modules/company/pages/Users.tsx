@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Space } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Space, Popconfirm } from 'antd';
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { adminUsersService, MIN_PASSWORD_LENGTH } from '../../../services/adminUsers';
@@ -62,6 +62,18 @@ export function CompanyUsersPage() {
     { title: 'Job Title', dataIndex: 'job_title', key: 'job_title' },
     { title: 'Status', dataIndex: 'is_active', key: 'status', render: (v: boolean) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Inactive'}</Tag> },
     { title: 'Created', dataIndex: 'created_at', key: 'created', render: (v: string) => new Date(v).toLocaleDateString() },
+    {
+      title: '', key: 'del', render: (_: any, r: any) => (
+        <Popconfirm title={`Delete ${r.full_name}'s sign-in?`}
+          description="They won't be able to sign in. A linked employee record is kept."
+          okText="Delete" okButtonProps={{ danger: true }}
+          onConfirm={() => adminUsersService.deleteCompanyUser(r.id)
+            .then(() => { message.success('User deleted'); load(); })
+            .catch((e: any) => message.error(e.message))}>
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      ),
+    },
   ];
 
   return (
@@ -97,7 +109,7 @@ export function CompanyUsersPage() {
           <Form.Item name="password" label="Temporary Password" rules={[{ required: true, min: MIN_PASSWORD_LENGTH }]}>
             <Input.Password />
           </Form.Item>
-          <Form.Item name="role_id" label="Role">
+          <Form.Item name="role_id" label="Role" rules={[{ required: true, message: 'Choose what this person can access' }]} tooltip="Decides which parts of Quantivra they can open">
             <Select allowClear options={roles.map((r: any) => ({ label: r.name, value: r.id }))} />
           </Form.Item>
           <Button type="primary" htmlType="submit" block style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>

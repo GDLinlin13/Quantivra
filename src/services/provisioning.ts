@@ -285,13 +285,22 @@ async function provisionSteps(input: ProvisionInput, onProgress: ProgressCallbac
     if (error) throw error;
   });
 
-  // 8. Roles
-  const roleNames = ['Admin', 'Manager', 'Employee'];
+  // 8. Roles — what each role can open (permissions) and whether it can see
+  // pay and manage users (can_view_pay, migration 020).
+  const ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export'];
+  const ROLE_SETUP: { name: string; pay: boolean; access: Record<string, string[]> }[] = [
+    { name: 'Director', pay: true, access: Object.fromEntries(input.modules.map(m => [m, ALL_ACTIONS])) },
+    { name: 'HR', pay: true, access: { employees: ALL_ACTIONS, leave: ALL_ACTIONS, attendance: ALL_ACTIONS, claims: ALL_ACTIONS, payroll: ALL_ACTIONS } },
+    { name: 'Finance', pay: false, access: { finance: ALL_ACTIONS, claims: ['view', 'approve', 'export'] } },
+    { name: 'Manager', pay: false, access: { leave: ['view', 'create', 'approve'], claims: ['view', 'create', 'approve'], employees: ['view'] } },
+    { name: 'Employee', pay: false, access: { leave: ['view', 'create'], claims: ['view', 'create'] } },
+  ];
+  const roleNames = ROLE_SETUP.map(r => r.name);
   const roles: any[] = [];
   await run(8, async () => {
-    for (const name of roleNames) {
+    for (const r of ROLE_SETUP) {
       const { data, error } = await supabase.from('company_roles').insert({
-        company_id: company.id, name, is_system: true,
+        company_id: company.id, name: r.name, is_system: true, can_view_pay: r.pay,
       }).select().single();
       if (error) throw error;
       roles.push(data);
@@ -300,29 +309,18 @@ async function provisionSteps(input: ProvisionInput, onProgress: ProgressCallbac
 
   // 9. Permissions
   await run(9, async () => {
-    const ALL_FEATURES = ['view', 'create', 'edit', 'delete', 'approve', 'export'];
     for (const role of roles) {
-      let featureList: string[] = [];
-      if (role.name === 'Admin') featureList = ALL_FEATURES;
-      else if (role.name === 'Manager') featureList = ['view', 'create', 'edit', 'approve'];
-      else featureList = ['view', 'create'];
-
-      const permRows = input.modules.flatMap((mod: string) =>
-        featureList.map((action: string) => ({ role_id: role.id, module: mod, feature: '*', action }))
-      );
-
-      if (permRows.length > 0) {
-        const BATCH_SIZE = 50;
-        for (let i = 0; i < permRows.length; i += BATCH_SIZE) {
-          const batch = permRows.slice(i, i + BATCH_SIZE);
-          const { error } = await supabase.from('company_permissions').insert(batch);
-          if (error) throw error;
-        }
+      const setup = ROLE_SETUP.find(r => r.name === role.name)!;
+      const permRows = Object.entries(setup.access).flatMap(([mod, actions]) =>
+        actions.map(action => ({ role_id: role.id, module: mod, feature: '*', action })));
+      for (let i = 0; i < permRows.length; i += 50) {
+        const { error } = await supabase.from('company_permissions').insert(permRows.slice(i, i + 50));
+        if (error) throw error;
       }
     }
 
-    // Assign owner to Admin role
-    const adminRole = roles.find(r => r.name === 'Admin');
+    // The owner is the company's Director
+    const adminRole = roles.find(r => r.name === 'Director');
     if (adminRole) {
       const { error } = await supabase.from('company_user_roles').insert({
         user_id: owner.id, role_id: adminRole.id,
@@ -348,7 +346,7 @@ async function provisionSteps(input: ProvisionInput, onProgress: ProgressCallbac
     // Owner employee record, linked to the owner login
     await supabase.rpc('hr_upsert_employee', {
       p: {
-        company_id: company.id, user_id: String(owner.id), employee_code: 'EMP-001',
+        company_id: company.id, user_id: String(owner.id), employee_code: 'EMP-001',  // the owner's login is their employee record's sign-in
         full_name: input.owner_full_name, email: input.owner_email || '',
         phone: input.owner_mobile || '', job_title: 'Owner', employment_type: 'full_time',
         status: 'active', join_date: new Date().toISOString().slice(0, 10),
@@ -431,7 +429,7 @@ async function provisionSteps(input: ProvisionInput, onProgress: ProgressCallbac
 
       const { error: wsErr } = await supabase.from('workflow_steps').insert([
         { template_id: wf.id, step_order: 1, assignee_role: 'Manager', action: 'approve', timeout_days: 3 },
-        { template_id: wf.id, step_order: 2, assignee_role: 'Admin', action: 'approve', timeout_days: 2 },
+        { template_id: wf.id, step_order: 2, assignee_role: 'HR', action: 'approve', timeout_days: 2 },
       ]);
       if (wsErr) throw wsErr;
     }
