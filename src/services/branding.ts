@@ -1,6 +1,6 @@
 import { supabase } from '../utils/supabase';
 import { normalizeTemplate, type GridTemplate } from '../utils/gridTemplate';
-import { STARTER_LAYOUTS } from '../data/documentLayouts';
+import { STARTER_LAYOUTS, type AmountFormat } from '../data/documentLayouts';
 
 export interface PayslipTemplate {
   showLogo: boolean;
@@ -15,6 +15,7 @@ export interface PayslipTemplate {
   /** Download file name patterns, e.g. "Payslip - {name} - {month} {year}". */
   fileName?: string;
   combinedFileName?: string;
+  amountFormat?: AmountFormat;
   footerNote: string;
   /** Spreadsheet-style layout; used instead of the standard payslip when enabled. */
   layout?: GridTemplate;
@@ -25,6 +26,7 @@ export interface InvoiceTemplate {
   paymentTermsDays: number;
   bankDetails: string;
   footerNote: string;
+  amountFormat?: AmountFormat;
   layout?: GridTemplate;
 }
 export interface DocumentTemplate {
