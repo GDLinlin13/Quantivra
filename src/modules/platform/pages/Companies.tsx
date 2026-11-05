@@ -5,6 +5,8 @@ import { companyService } from '../../../services';
 import { supabase } from '../../../utils/supabase';
 import { adminUsersService, MIN_PASSWORD_LENGTH } from '../../../services/adminUsers';
 import { USERNAME_PATTERN, USERNAME_RULE_TEXT } from '../../../utils/loginEmail';
+import { timezoneOptions } from '../../../utils/timezones';
+import { packFor2026 } from '../../../data/country-law-2026';
 import type { Company } from '../../../types';
 import { MODULES } from '../../../types';
 import { provisionCompany, getProvisionSteps, type ProvisionInput, type ProvisionResult, type ProvisionStep } from '../../../services/provisioning';
@@ -289,6 +291,16 @@ export function CompaniesPage() {
     },
   ];
 
+  // Picking a country fills in its currency and timezone (both still editable).
+  const handleCountryChange = (code: string) => {
+    const g = packFor2026(code)?.general;
+    if (!g) return;
+    form.setFieldsValue({
+      currency: g.currency || form.getFieldValue('currency'),
+      timezone: g.timezone || form.getFieldValue('timezone'),
+    });
+  };
+
   const countryOptions = [...countries]
     .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)))
     .map((c: any) => ({ label: `${c.name} (${c.code})`, value: c.code }));
@@ -369,7 +381,7 @@ export function CompaniesPage() {
                 <Col span={12}>
                   <Form.Item name="country" label={<Text style={{ color: '#f0ede6' }}>Country</Text>}
                     rules={[{ required: true, message: 'Required' }]}>
-                    <Select placeholder="Select country" showSearch optionFilterProp="label" options={countryOptions} />
+                    <Select placeholder="Select country" showSearch optionFilterProp="label" options={countryOptions} onChange={handleCountryChange} />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
@@ -392,7 +404,7 @@ export function CompaniesPage() {
                 </Col>
                 <Col span={8}>
                   <Form.Item name="timezone" label={<Text style={{ color: '#f0ede6' }}>Timezone</Text>}>
-                    <Input />
+                    <Select showSearch optionFilterProp="label" options={timezoneOptions()} />
                   </Form.Item>
                 </Col>
               </Row>
