@@ -125,7 +125,7 @@ CREATE POLICY pay_admins_write ON company_permissions FOR ALL TO authenticated
 -- ------------------------------------------------------------------
 REVOKE SELECT, INSERT, UPDATE, DELETE ON employees FROM authenticated;
 GRANT SELECT (id, company_id, user_id, manager_id, department_id, employee_code, full_name, email, phone,
-  job_title, employment_type, join_date, exit_date, status, bank_name, created_at, updated_at,
+  job_title, employment_type, join_date, exit_date, status, created_at, updated_at,
   date_of_birth, residency_status, pr_stage, ethnicity, marital_status, gender) ON employees TO authenticated;
 
 DROP FUNCTION IF EXISTS public.hr_list_employees(bigint);
