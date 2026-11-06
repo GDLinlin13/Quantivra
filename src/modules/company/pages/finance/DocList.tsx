@@ -13,7 +13,7 @@ import { lineText, type CatalogItem } from '../../../../data/catalog';
 import { DocEditor } from './DocEditor';
 import { DocumentView } from './DocumentView';
 import { PRINT_CSS } from '../hr/PayslipView';
-import { elementsToPdf, downloadBlob } from '../../../../utils/payslipFiles';
+import { elementsToPdf, downloadBlob, formatDocFileName } from '../../../../utils/payslipFiles';
 
 const { Text } = Typography;
 
@@ -25,7 +25,6 @@ export interface FinanceData {
   reload: () => void;
 }
 
-const safeName = (s: string) => s.replace(/[\\/:*?"<>|]/g, '-');
 
 /** A list of documents of one kind (invoices, quotations, bills…) with everything you do to them. */
 export function DocList({ data, docType }: { data: FinanceData; docType: DocType }) {
@@ -161,7 +160,11 @@ function ViewModal({ id, data, onClose }: { id: number; data: FinanceData; onClo
   const doc = loaded?.doc;
   const contact = data.contacts.find(c => c.id === doc?.contact_id) || null;
   const person = data.people.find(p => p.id === doc?.contact_person_id) || null;
-  const fileName = doc ? `${DOC_LABEL[doc.doc_type]} ${safeName(doc.number)}${contact ? ` - ${safeName(contact.name)}` : ''}` : '';
+  // file name from Profile → Invoice Template → Download file name
+  const fileName = doc ? formatDocFileName(data.branding?.templates.invoice.fileName, {
+    type: DOC_LABEL[doc.doc_type], number: doc.number, customer: contact?.name, reference: doc.reference, date: doc.issue_date,
+    company: data.branding?.legal_name || data.company?.name,
+  }).replace(/\.pdf$/, '') : '';
 
   const print = () => {
     const el = document.getElementById('fin-doc-print');

@@ -9,7 +9,7 @@ import { GridTemplateEditor } from '../../../components/GridTemplateEditor';
 import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, paymentAccounts, DEFAULT_PAYMENT_LABELS, type DocKind, type PaymentAccount, type PaymentLine } from '../../../data/documentLayouts';
 import { CellValue } from '../../../components/GridDocument';
 import type { GridTemplate } from '../../../utils/gridTemplate';
-import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME } from '../../../utils/payslipFiles';
+import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME, formatDocFileName, DOC_FILE_NAME_TOKENS, DEFAULT_DOC_FILE_NAME } from '../../../utils/payslipFiles';
 
 const { Title, Text } = Typography;
 const panel = { background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)' };
@@ -256,6 +256,20 @@ export function CompanyProfilePage() {
         </Form.Item>
         <Form.Item label="Amount format">{amountSelect('invoice')}</Form.Item>
       </div>
+      <Form.Item label="Download file name" style={{ marginBottom: 12 }}>
+        <Input value={tpl.invoice.fileName ?? ''} placeholder={DEFAULT_DOC_FILE_NAME} onChange={e => setTplField('invoice', 'fileName', e.target.value)} />
+        <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
+          e.g. {formatDocFileName(tpl.invoice.fileName, { type: 'Invoice', number: 'INV-0001', customer: 'Argos Solutions Limited', reference: 'PO-123', date: '2026-06-01', company: v.legal_name || company.name })}
+        </Text>
+        <div style={{ marginTop: 6 }}>
+          {DOC_FILE_NAME_TOKENS.map(tk => (
+            <Tag key={tk.token} style={{ cursor: 'pointer', marginBottom: 4 }}
+              onClick={() => setTplField('invoice', 'fileName', `${(tpl.invoice.fileName ?? DEFAULT_DOC_FILE_NAME)}${tk.token}`)}>
+              {tk.token} <span style={{ opacity: 0.6 }}>{tk.label}</span>
+            </Tag>
+          ))}
+        </div>
+      </Form.Item>
       <Form.Item label="Payment details">
         {banks.map((b, bi) => (
           <div key={bi} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: 10, marginBottom: 10 }}>
@@ -402,7 +416,7 @@ export function CompanyProfilePage() {
           {
             key: 'invoice-template', label: 'Invoice Template',
             children: templateTab('invoice', 'Invoices', tpl.invoice.layout?.enabled ? null : invoicePrebuilt,
-              'Good to know: the screen for creating invoices hasn’t been built yet. Your saved template is kept and will be used automatically once invoicing is added.',
+              undefined,
               <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>Invoice settings</span>}>
                 {invoiceSettings}
               </Card>),

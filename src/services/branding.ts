@@ -31,6 +31,8 @@ export interface InvoiceTemplate {
   paymentAccounts?: { title: string; lines: { label: string; value: string }[]; isDefault?: boolean }[];
   footerNote: string;
   amountFormat?: AmountFormat;
+  /** Download file name pattern, e.g. "{type} {number} - {customer}". */
+  fileName?: string;
   layout?: GridTemplate;
 }
 export interface DocumentTemplate {
