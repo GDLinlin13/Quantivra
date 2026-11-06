@@ -80,7 +80,9 @@ export function Bank({ data }: { data: FinanceData }) {
   }, [companyId, accountId]);
   useEffect(() => { load(); }, [load, data.docs]);
 
-  const statementBalance = useMemo(() => Math.round(((Number(foreign ? account?.opening_foreign : account?.opening_balance) || 0) + txns.reduce((s, t) => s + Number(t.amount), 0)) * 100) / 100, [txns, account, foreign]);
+  // opening balance plus the statement lines already matched (lines still to match, or ignored, don't count yet)
+  const statementBalance = useMemo(() => Math.round(((Number(foreign ? account?.opening_foreign : account?.opening_balance) || 0)
+    + txns.filter(t => t.status === 'matched').reduce((s, t) => s + Number(t.amount), 0)) * 100) / 100, [txns, account, foreign]);
   // Recorded in Quantivra for this bank but not on any statement line yet (e.g. a transfer booked from
   // another bank, a payment recorded by hand): shown so the statement line can be matched to it.
   const expected = useMemo(() => accountId ? recordedNotOnStatement(accountId, look, allTxns, data) : [], [accountId, look, allTxns, data]);
