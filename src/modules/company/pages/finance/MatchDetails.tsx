@@ -6,6 +6,7 @@ import { DOC_LABEL, isSalesDoc, type FinDocument } from '../../../../data/financ
 import { lineText } from '../../../../data/catalog';
 import { money } from '../../../../data/documentLayouts';
 import { renderPdf } from '../../../../utils/renderPdf';
+import { FileViewer } from '../../../../components/FileViewer';
 import { DocumentView } from './DocumentView';
 import type { FinanceData } from './DocList';
 
@@ -55,6 +56,7 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged 
   const [busy, setBusy] = useState<number | null>(null);
   // supporting documents of a journal entry (e.g. the share capital agreement)
   const [support, setSupport] = useState<CompanyFile[]>([]);
+  const [viewFile, setViewFile] = useState<{ name: string; load: () => Promise<Blob> } | null>(null);
   const loadSupport = () => { if (journal) companyFileService.list(data.companyId).then(fs => setSupport(fs.filter(f => f.journal_id === journal.id))).catch(() => null); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(loadSupport, [journal?.id]);
@@ -64,18 +66,15 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [txn.id]);
 
-  const openDoc = async (d: FinDocument) => {
-    const w = window.open('', '_blank');
-    setBusy(d.id);
-    try {
+  const openDoc = (d: FinDocument) => setViewFile({
+    name: `${d.number || DOC_LABEL[d.doc_type]}.pdf`,
+    load: async () => {
       const { doc, lines } = await docService.get(d.id);
-      const blob = await renderPdf(<DocumentView doc={doc} lines={lines.map(l => ({ ...l, description: lineText(l, data.items) }))}
+      return renderPdf(<DocumentView doc={doc} lines={lines.map(l => ({ ...l, description: lineText(l, data.items) }))}
         contact={data.contacts.find(c => c.id === doc.contact_id) || null} person={data.people.find(p => p.id === doc.contact_person_id) || null}
         company={data.company} branding={data.branding} settings={data.settings} domId="match-doc" />);
-      if (w) w.location.href = URL.createObjectURL(blob);
-    } catch (e: any) { w?.close(); message.error(e.message); }
-    setBusy(null);
-  };
+    },
+  });
 
   return (
     <Modal open onCancel={onClose} footer={null} width={760} title={label?.title || 'Details'}>
@@ -100,7 +99,7 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged 
               {support.map(f => (
                 <Space key={f.id} size={4}>
                   <PaperClipOutlined />
-                  <a onClick={() => companyFileService.open(f.path).catch(e => message.error(e.message))}>{f.file_name}</a>
+                  <a onClick={() => setViewFile({ name: f.file_name, load: () => companyFileService.blob(f.path) })}>{f.file_name}</a>
                   <Popconfirm title={`Remove ${f.file_name}?`} onConfirm={async () => { try { await companyFileService.remove(f); loadSupport(); onFilesChanged?.(); } catch (e: any) { message.error(e.message); } }}>
                     <Button size="small" type="text" danger icon={<DeleteOutlined />} />
                   </Popconfirm>
@@ -138,13 +137,13 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged 
                   title: 'Files', key: 'f', render: (_, x) => (
                     <Space orientation="vertical" size={2}>
                       {isSalesDoc(x.doc.doc_type) && (
-                        <Button size="small" type="link" icon={<FilePdfOutlined />} loading={busy === x.doc.id} onClick={() => openDoc(x.doc)} style={{ padding: 0 }}>
+                        <Button size="small" type="link" icon={<FilePdfOutlined />} onClick={() => openDoc(x.doc)} style={{ padding: 0 }}>
                           {x.doc.number}.pdf
                         </Button>
                       )}
                       {(files[x.doc.id] || []).map(f => (
                         <Button key={f.id} size="small" type="link" icon={<PaperClipOutlined />} style={{ padding: 0 }}
-                          onClick={() => attachmentService.open(f).catch(e => message.error(e.message))}>{f.file_name}</Button>
+                          onClick={() => setViewFile({ name: f.file_name, load: () => companyFileService.blob(f.path) })}>{f.file_name}</Button>
                       ))}
                       {!isSalesDoc(x.doc.doc_type) && !(files[x.doc.id] || []).length && <Text type="secondary">No files attached</Text>}
                     </Space>
@@ -154,6 +153,7 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged 
           )}
         </>
       )}
+      {viewFile && <FileViewer name={viewFile.name} load={viewFile.load} onClose={() => setViewFile(null)} />}
     </Modal>
   );
 }
