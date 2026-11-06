@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { renderPdf } from '../../../utils/renderPdf';
 import { Typography, Tree, Table, Button, Space, Upload, Empty, Spin, message, Popconfirm, Alert, Breadcrumb, DatePicker, Select, Modal, Input } from 'antd';
 import dayjs from 'dayjs';
-import { FolderOutlined, FolderOpenOutlined, FilePdfOutlined, FileOutlined, DownloadOutlined, EyeOutlined, UploadOutlined, DeleteOutlined, FolderAddOutlined } from '@ant-design/icons';
+import { FolderOutlined, FolderOpenOutlined, FilePdfOutlined, FileOutlined, DownloadOutlined, EyeOutlined, UploadOutlined, DeleteOutlined, FolderAddOutlined, EditOutlined } from '@ant-design/icons';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../utils/supabase';
 import { brandingService, type Branding } from '../../../services/branding';
@@ -54,6 +54,29 @@ export function CompanyDocumentsPage() {
   const [addingFolder, setAddingFolder] = useState(false);
   const [newFolder, setNewFolder] = useState('');
   const [folderParent, setFolderParent] = useState('');
+  // renaming a stored file, an attached file, or one of the company's own folders
+  const [renaming, setRenaming] = useState<{ kind: 'file' | 'att' | 'folder'; id?: number; path?: string; name: string } | null>(null);
+  const doRename = async () => {
+    if (!renaming || !companyId) return;
+    let name = renaming.name.trim();
+    try {
+      if (renaming.kind === 'folder') {
+        const from = renaming.path!, to = [...from.split('/').slice(0, -1), name.replace(/\//g, '-')].join('/');
+        if (to !== from) {
+          await documentFolderService.save(companyId, userFolders.map(p => (p === from || p.startsWith(`${from}/`) ? to + p.slice(from.length) : p)));
+          await companyFileService.moveFolder(files, from, to);
+          setSelected(`other/${to}`);
+        }
+      } else {
+        // keep the file type if it was left off
+        const old = renaming.kind === 'file' ? files.find(f => f.id === renaming.id)?.file_name : attachments.find(a => a.id === renaming.id)?.file_name;
+        const ext = (old || '').match(/\.[A-Za-z0-9]{2,5}$/)?.[0];
+        if (ext && !name.toLowerCase().endsWith(ext.toLowerCase())) name += ext;
+        if (renaming.kind === 'file') await companyFileService.rename(renaming.id!, name); else await attachmentService.rename(renaming.id!, name);
+      }
+      setRenaming(null); load();
+    } catch (e: any) { message.error(e.message); }
+  };
   useEffect(() => { if (companyId) statementPrefService.get(companyId).then(setDupPref).catch(() => null); }, [companyId]);
 
   const load = useCallback(async () => {
@@ -188,6 +211,7 @@ export function CompanyDocumentsPage() {
             )}
             {folder?.upload && (
               <Space wrap>
+                {folder.userPath && <Button icon={<EditOutlined />} onClick={() => setRenaming({ kind: 'folder', path: folder.userPath, name: folder.title })}>Rename</Button>}
                 {folder.userPath && !folder.children.length && !folder.files.length && (
                   <Popconfirm title={`Delete the folder ${folder.title}?`} onConfirm={async () => {
                     try {
@@ -230,10 +254,16 @@ export function CompanyDocumentsPage() {
                 { title: 'Name', key: 'n', render: (_, r: Row) => <Space>{/\.pdf$/i.test(r.name) || r.kind !== 'stored' ? <FilePdfOutlined /> : <FileOutlined />}<a onClick={() => act(r, 'open')}>{r.name}</a></Space> },
                 { title: 'Date', dataIndex: 'date', width: 120 },
                 {
-                  title: '', key: 'a', width: 150, render: (_, r: Row) => (
+                  title: '', key: 'a', width: 190, render: (_, r: Row) => (
                     <Space size={4}>
                       <Button size="small" icon={<EyeOutlined />} loading={busy === r.key} onClick={() => act(r, 'open')} title="Open" />
                       <Button size="small" icon={<DownloadOutlined />} onClick={() => act(r, 'download')} title="Download" />
+                      {r.kind === 'stored' && (r.fileId || r.attachmentId) && (
+                        <Button size="small" icon={<EditOutlined />} title="Rename" onClick={() => {
+                          const cur = r.fileId ? files.find(f => f.id === r.fileId)?.file_name : attachments.find(a => a.id === r.attachmentId)?.file_name;
+                          setRenaming({ kind: r.fileId ? 'file' : 'att', id: (r.fileId || r.attachmentId)!, name: cur || r.name });
+                        }} />
+                      )}
                       {r.kind === 'stored' && r.fileId && (
                         <Popconfirm title={`Delete ${r.name}?`} onConfirm={async () => {
                           const f = files.find(x => x.id === r.fileId);
@@ -260,6 +290,9 @@ export function CompanyDocumentsPage() {
           } catch (e: any) { message.error(e.message); }
         }}>
         <Input autoFocus value={newFolder} onChange={e => setNewFolder(e.target.value)} />
+      </Modal>
+      <Modal open={!!renaming} title="Rename" okText="Save" onCancel={() => setRenaming(null)} okButtonProps={{ disabled: !renaming?.name.trim() }} onOk={doRename}>
+        <Input autoFocus value={renaming?.name || ''} onChange={e => setRenaming(r => (r ? { ...r, name: e.target.value } : r))} onPressEnter={doRename} />
       </Modal>
     </div>
   );

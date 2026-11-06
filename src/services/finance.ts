@@ -91,6 +91,9 @@ export const attachmentService = {
     await supabase.storage.from(ATTACH_BUCKET).remove([a.path]);
     must(await supabase.from('fin_attachments').delete().eq('id', a.id));
   },
+  async rename(id: number, name: string) {
+    must(await supabase.from('fin_attachments').update({ file_name: name }).eq('id', id));
+  },
   async listAll(companyId: number): Promise<Attachment[]> {
     const r = await supabase.from('fin_attachments').select('*').eq('company_id', companyId).order('id');
     return r.error ? [] : r.data || [];
@@ -134,6 +137,15 @@ export const companyFileService = {
   async remove(f: CompanyFile) {
     await supabase.storage.from(ATTACH_BUCKET).remove([f.path]);
     must(await supabase.from('company_files').delete().eq('id', f.id));
+  },
+  async rename(id: number, name: string) {
+    must(await supabase.from('company_files').update({ file_name: name }).eq('id', id));
+  },
+  /** A renamed folder: its files (and those in folders inside it) move with it. */
+  async moveFolder(files: CompanyFile[], from: string, to: string) {
+    for (const f of files.filter(x => x.folder === 'other' && x.subfolder && (x.subfolder === from || x.subfolder.startsWith(`${from}/`)))) {
+      must(await supabase.from('company_files').update({ subfolder: to + f.subfolder!.slice(from.length) }).eq('id', f.id));
+    }
   },
   /** The file itself, e.g. to download it under its own name. */
   async blob(path: string): Promise<Blob> {
