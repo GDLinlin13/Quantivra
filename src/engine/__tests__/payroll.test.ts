@@ -153,15 +153,15 @@ describe('calculatePayroll pipeline', () => {
     expect(r.employees[0].statutoryContributions.find((s) => s.schemeCode === 'SDL')!.employerTotal).toBe(8.3325);
   });
 
-  it('rounds each person\'s CPF total to the nearest dollar; the employee share keeps its cents, the employer pays the rest', () => {
+  it('rounds each person\'s CPF total to the nearest dollar; the employee share is rounded up to the cent, the employer pays the rest', () => {
     const cpfFor = (wage: number) => {
       const r = run([{ employeeId: 'E1', name: 'A', dateOfBirth: '1990-06-15', dateOfJoining: '2020-01-01',
         employmentStatusCode: 'PERMANENT', immigrationStatusCode: 'SC', salaryComponents: [{ componentCode: 'BASIC', amount: wage }] }]);
       const c = r.employees[0].statutoryContributions.find((s) => s.schemeCode === 'CPF')!;
       return [c.employeeTotal, c.employerTotal];
     };
-    // September 2026: 4,181.81 → total 1,547.27 → 1,547; employee 836.36; employer 710.64
-    expect(cpfFor(4181.81)).toEqual([836.36, 710.64]);
+    // September 2026: 4,181.82 → total 1,547.27 → 1,547; employee 836.364 → 836.37; employer 710.63
+    expect(cpfFor(4181.82)).toEqual([836.37, 710.63]);
     // 3,409.09 → total 1,261.36 → 1,261; employee 681.82; employer 579.18
     expect(cpfFor(3409.09)).toEqual([681.82, 579.18]);
     // round wages are unchanged
