@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { matchLabel } from '../MatchDetails';
 
 const data: any = {
-  accounts: [{ id: 1, code: '1001', name: 'DBS - SGD' }, { id: 2, code: '6900', name: 'Bank charges' }, { id: 3, code: '2200', name: 'Net salaries payable' }],
+  accounts: [{ id: 1, code: '1001', name: 'DBS - SGD' }, { id: 2, code: '6900', name: 'Bank charges' }, { id: 3, code: '2200', name: 'Net salaries payable' }, { id: 4, code: '1100', name: 'Accounts receivable', subtype: 'receivable' }],
   contacts: [{ id: 9, name: 'Argos Solutions Limited' }],
 };
 const look: any = {
@@ -18,12 +18,12 @@ const t = (o: any): any => ({ id: 1, account_id: 1, description: 'INWARD TT COMM
 
 describe('what a matched bank line shows', () => {
   it('shows the account it was booked to, not the bank', () => {
-    expect(matchLabel(t({ journal_id: 1 }), data, look)).toEqual({ title: '6900 Bank charges' });
+    expect(matchLabel(t({ journal_id: 1 }), data, look)).toEqual({ title: 'INWARD TT COMM', accounts: 'Bank charges' });
   });
   it('shows the payroll month for salaries / CPF', () => {
-    expect(matchLabel(t({ journal_id: 2, description: 'GIRO PAYROLL' }), data, look)).toEqual({ title: 'Salaries — May 2026', sub: '2200 Net salaries payable' });
+    expect(matchLabel(t({ journal_id: 2, description: 'GIRO PAYROLL' }), data, look)).toEqual({ title: 'Salaries — May 2026', accounts: 'Net salaries payable' });
   });
   it('shows the payment, customer and invoice', () => {
-    expect(matchLabel(t({ payment_id: 5 }), data, look)).toEqual({ title: 'RCT-2026-0001 · Argos Solutions Limited', sub: 'for CCSG2605001' });
+    expect(matchLabel(t({ payment_id: 5 }), data, look)).toEqual({ title: 'RCT-2026-0001 · Argos Solutions Limited · CCSG2605001', accounts: 'Accounts receivable' });
   });
 });

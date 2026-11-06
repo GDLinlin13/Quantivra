@@ -16,27 +16,27 @@ export interface MatchLookup {
 }
 
 /**
- * What a matched bank line is for, in words: the journal's details (e.g. "Salaries — May 2026", "CPF — May 2026")
- * or the accounts it went to ("6900 Bank charges"); for a payment, who paid and which invoices / bills.
+ * A matched bank line in words. `title`: what it was for — the details typed when matching (e.g. "Bank charges
+ * June", "Salaries — May 2026") or, for a payment, "RCT-2026-0001 · Argos Solutions Limited · CCSG2605001".
+ * `accounts`: the account names it went to, without codes ("Bank charges", "Net salaries payable").
  */
-export function matchLabel(t: BankTxn, data: FinanceData, look: MatchLookup): { title: string; sub?: string } | null {
-  const acc = (id: number) => data.accounts.find(a => a.id === id);
+export function matchLabel(t: BankTxn, data: FinanceData, look: MatchLookup): { title: string; accounts: string } | null {
+  const acc = (id: number | undefined) => data.accounts.find(a => a.id === id);
   if (t.payment_id) {
     const p = look.payments.find(x => x.id === t.payment_id);
-    if (!p) return { title: 'Payment' };
+    const sub = p?.direction === 'out' || (!p && t.amount < 0) ? 'payable' : 'receivable';
+    const control = data.accounts.find(a => a.subtype === sub)?.name || '';
+    if (!p) return { title: 'Payment', accounts: control };
     const docs = look.allocations.filter(a => a.payment_id === p.id).map(a => look.docs.find(d => d.id === a.document_id)?.number).filter(Boolean);
-    return { title: `${p.number || 'Payment'} · ${data.contacts.find(c => c.id === p.contact_id)?.name || ''}`, sub: docs.length ? `for ${docs.join(', ')}` : undefined };
+    const who = data.contacts.find(c => c.id === p.contact_id)?.name;
+    return { title: [p.number || 'Payment', who, docs.join(', ')].filter(Boolean).join(' · '), accounts: control };
   }
   if (t.journal_id) {
     const j = look.journals.find(x => x.id === t.journal_id);
-    if (!j) return { title: 'Booked to an account' };
-    const names = j.lines.filter(l => l.account_id !== t.account_id).map(l => acc(l.account_id)).filter(Boolean)
-      .map(a => `${a!.code} ${a!.name}`);
+    if (!j) return { title: t.description || '', accounts: '' };
+    const names = j.lines.filter(l => l.account_id !== t.account_id).map(l => acc(l.account_id)?.name).filter(Boolean) as string[];
     const accounts = [...new Set(names)].join(', ');
-    const memo = (j.memo || '').trim();
-    // the details typed (or made by Pay salaries / CPF) say most; a copy of the bank text doesn't
-    if (memo && memo !== (t.description || '').trim()) return { title: memo, sub: accounts };
-    return { title: accounts || 'Booked to an account' };
+    return { title: (j.memo || '').trim() || t.description || accounts, accounts };
   }
   return null;
 }
