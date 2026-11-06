@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_ACCOUNTS, payrollChartUpgrade, type Account } from '../finance';
+import { DEFAULT_ACCOUNTS, chartUpgrade, type Account } from '../finance';
 import { buildLedger, balances, profitAndLoss, balanceSheet, gstReturn, accountLedger, aged, spread, payrollDue, payrollLines, payrollSplit, splitByShare } from '../ledger';
 
 const accounts: Account[] = DEFAULT_ACCOUNTS.map((a, i) => ({ ...a, id: i + 1, company_id: 1, archived: false, opening_balance: 0 }));
@@ -104,11 +104,11 @@ describe('ledger', () => {
   });
 
   it('upgrades an older chart of accounts once', () => {
-    const old = accounts.filter(a => !['2220', '2230', '6005', '6008', '6015'].includes(a.code))
+    const old = accounts.filter(a => !['2220', '2230', '6005', '6008', '6015', '6810', '6820', '6830'].includes(a.code))
       .map(a => (a.code === '2210' ? { ...a, name: 'CPF and statutory payable' } : a.code === '6000' ? { ...a, name: 'My wages' } : a));
-    const up = payrollChartUpgrade(old);
-    expect(up.add.map(a => a.code)).toEqual(['2220', '2230', '6005', '6008', '6015']);
+    const up = chartUpgrade(old);
+    expect(up.add.map(a => a.code)).toEqual(['2220', '2230', '6005', '6008', '6015', '6810', '6820', '6830']);
     expect(up.rename).toEqual([{ id: id('2210'), name: "Employee's CPF contribution payable" }]);
-    expect(payrollChartUpgrade(accounts)).toEqual({ add: [], rename: [] });
+    expect(chartUpgrade(accounts)).toEqual({ add: [], rename: [] });
   });
 });
