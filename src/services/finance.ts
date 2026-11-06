@@ -1,7 +1,7 @@
 import type { CatalogItem, StockAdjustment } from '../data/catalog';
 import { supabase } from '../utils/supabase';
 import {
-  docTotals, statusAfterPayment, DEFAULT_ACCOUNTS, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
+  docTotals, statusAfterPayment, bankCodePlan, DEFAULT_ACCOUNTS, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
   type Contact, type ContactPerson, type FinDocument, type DocLine, type DocType, type FinanceSettings, type Account,
 } from '../data/finance';
 
@@ -75,7 +75,20 @@ export const accountService = {
         DEFAULT_ACCOUNTS.map(a => ({ ...a, company_id: companyId })), { onConflict: 'company_id,code', ignoreDuplicates: true }));
       rows = must(await supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code')) || [];
     }
+    if (bankCodePlan(rows).length) {
+      try {
+        await this.renumberBanks(rows);
+        rows = must(await supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code')) || [];
+      } catch { /* no edit rights: keep the codes as they are */ }
+    }
     return rows;
+  },
+  /** Close gaps in bank codes so the first bank is 1000 (e.g. after a bank is deleted). Links use ids, so nothing else changes. */
+  async renumberBanks(rows: Account[]) {
+    const plan = bankCodePlan(rows);
+    // move them out of the way first so two banks never hold the same code at once
+    for (const p of plan) must(await supabase.from('fin_accounts').update({ code: `tmp-${p.id}` }).eq('id', p.id));
+    for (const p of plan) must(await supabase.from('fin_accounts').update({ code: p.code }).eq('id', p.id));
   },
   async save(companyId: number, a: Partial<Account>): Promise<number> {
     const row = {
