@@ -130,16 +130,18 @@ export function buildFolders(input: DocumentsInput, opts: { payslips?: boolean; 
     out.push(f);
   }
   {
-    // Other files, with the company's own folders (and folders inside folders)
+    // the company's own folders (folders inside folders too) sit at the top level with the others;
+    // files not put in a folder are under Other files
     const root: Folder = { key: 'other', title: 'Other files', children: [], files: [], upload: 'other', userPath: '' };
-    const byPath = new Map<string, Folder>([['', root]]);
+    const tops: Folder[] = [];
+    const byPath = new Map<string, Folder>();
     const ensure = (path: string): Folder => {
+      if (!path) return root;
       const hit = byPath.get(path);
       if (hit) return hit;
       const parts = path.split('/');
-      const parent = ensure(parts.slice(0, -1).join('/'));
       const f: Folder = { key: `other/${path}`, title: parts[parts.length - 1], children: [], files: [], upload: 'other', userPath: path };
-      parent.children.push(f);
+      if (parts.length === 1) tops.push(f); else ensure(parts.slice(0, -1).join('/')).children.push(f);
       byPath.set(path, f);
       return f;
     };
@@ -149,8 +151,8 @@ export function buildFolders(input: DocumentsInput, opts: { payslips?: boolean; 
       ensure(clean(x.subfolder)).files.push({ key: `file-${x.id}`, name: x.file_name, date: x.created_at.slice(0, 10), kind: 'stored' as const, path: x.path, size: x.size_bytes, fileId: x.id });
     }
     const sortAll = (f: Folder) => { f.children.sort((a, b) => a.title.localeCompare(b.title)); f.children.forEach(sortAll); };
-    sortAll(root);
-    out.push(root);
+    tops.sort((a, b) => a.title.localeCompare(b.title)).forEach(sortAll);
+    out.push(...tops, root);
   }
   return out;
 }

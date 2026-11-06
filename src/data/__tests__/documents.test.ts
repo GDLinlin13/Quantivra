@@ -51,10 +51,10 @@ describe('your own folders', () => {
         { id: 2, folder: 'other', account_id: null, period: null, path: '1/files/b.pdf', file_name: 'Loose.pdf', size_bytes: 1, created_at: '2026-06-01T00:00:00Z' },
       ],
     });
-    const other = f.find(x => x.key === 'other')!;
-    expect(other.children.map(c => c.title)).toEqual(['Contracts', 'Insurance']);
-    expect(other.files.map(x => x.name)).toEqual(['Loose.pdf']);
-    const leases = other.children[0].children[0];
+    // own folders sit at the top level, before Other files (which keeps files not put in a folder)
+    expect(f.map(x => x.title).slice(-3)).toEqual(['Contracts', 'Insurance', 'Other files']);
+    expect(f.find(x => x.key === 'other')!.files.map(x => x.name)).toEqual(['Loose.pdf']);
+    const leases = f.find(x => x.title === 'Contracts')!.children[0];
     expect([leases.key, leases.userPath, leases.files.map(x => x.name)]).toEqual(['other/Contracts/Leases', 'Contracts/Leases', ['Office lease.pdf']]);
   });
 });

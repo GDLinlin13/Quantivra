@@ -53,6 +53,7 @@ export function CompanyDocumentsPage() {
   const [userFolders, setUserFolders] = useState<string[]>([]);
   const [addingFolder, setAddingFolder] = useState(false);
   const [newFolder, setNewFolder] = useState('');
+  const [folderParent, setFolderParent] = useState('');
   useEffect(() => { if (companyId) statementPrefService.get(companyId).then(setDupPref).catch(() => null); }, [companyId]);
 
   const load = useCallback(async () => {
@@ -155,8 +156,11 @@ export function CompanyDocumentsPage() {
     <div>
       <Space style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }} wrap>
         <Title level={4} style={{ color: '#f0ede6', margin: 0 }}>Documents</Title>
+        <Space>
+        <Button icon={<FolderAddOutlined />} onClick={() => { setFolderParent(''); setNewFolder(''); setAddingFolder(true); }}>New folder</Button>
         <Select style={{ width: 140 }} value={by} onChange={v => changeBy(v)}
           options={[{ value: 'date', label: 'Date' }, { value: 'name', label: 'Name' }]} />
+        </Space>
       </Space>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 380px) 1fr', gap: 16, alignItems: 'start' }}>
         <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: 8 }}>
@@ -188,13 +192,13 @@ export function CompanyDocumentsPage() {
                   <Popconfirm title={`Delete the folder ${folder.title}?`} onConfirm={async () => {
                     try {
                       await documentFolderService.save(companyId, userFolders.filter(p => p !== folder.userPath && !p.startsWith(`${folder.userPath}/`)));
-                      setSelected(trail[trail.length - 2]?.key || 'other'); load();
+                      setSelected(trail[trail.length - 2]?.key || 'payslips'); load();
                     } catch (e: any) { message.error(e.message); }
                   }}>
                     <Button danger icon={<DeleteOutlined />}>Delete folder</Button>
                   </Popconfirm>
                 )}
-                <Button icon={<FolderAddOutlined />} onClick={() => { setNewFolder(''); setAddingFolder(true); }}>New folder</Button>
+                {folder.userPath && <Button icon={<FolderAddOutlined />} onClick={() => { setFolderParent(folder.userPath!); setNewFolder(''); setAddingFolder(true); }}>New folder</Button>}
                 <Upload multiple showUploadList={false} beforeUpload={file => {
                   companyFileService.add(companyId, file, { folder: folder.upload!, subfolder: folder.userPath || null })
                     .then(() => { message.success(`${file.name} uploaded`); load(); }).catch(e => message.error(e.message));
@@ -246,10 +250,10 @@ export function CompanyDocumentsPage() {
           {folder && rows.length > 0 && <Text type="secondary" style={{ fontSize: 12 }}>{rows.length} files</Text>}
         </div>
       </div>
-      <Modal open={addingFolder} title={`New folder in ${folder?.title || 'Other files'}`} okText="Create" onCancel={() => setAddingFolder(false)}
+      <Modal open={addingFolder} title={folderParent ? `New folder in ${folderParent.split('/').pop()}` : 'New folder'} okText="Create" onCancel={() => setAddingFolder(false)}
         okButtonProps={{ disabled: !newFolder.trim() || newFolder.includes('/') }}
         onOk={async () => {
-          const path = [folder?.userPath, newFolder.trim()].filter(Boolean).join('/');
+          const path = [folderParent, newFolder.trim()].filter(Boolean).join('/');
           try {
             await documentFolderService.save(companyId, [...userFolders, path]);
             setAddingFolder(false); setSelected(`other/${path}`); load();
