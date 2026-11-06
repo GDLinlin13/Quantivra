@@ -167,6 +167,9 @@ export const DEFAULT_ACCOUNTS: Omit<Account, 'id' | 'company_id' | 'archived'>[]
   { code: '6600', name: 'Marketing and advertising', type: 'expense', subtype: null, is_system: false },
   { code: '6700', name: 'Software and subscriptions', type: 'expense', subtype: null, is_system: false },
   { code: '6800', name: 'Professional fees', type: 'expense', subtype: null, is_system: false },
+  { code: '6810', name: 'Corporate secretarial fees', type: 'expense', subtype: 'fees_secretarial', is_system: false },
+  { code: '6820', name: 'Tax agent / tax filing fees', type: 'expense', subtype: 'fees_tax_agent', is_system: false },
+  { code: '6830', name: 'Accounting and bookkeeping fees', type: 'expense', subtype: 'fees_accounting', is_system: false },
   { code: '6900', name: 'Bank charges', type: 'expense', subtype: null, is_system: false },
   { code: '6990', name: 'General expenses', type: 'expense', subtype: 'general', is_system: true },
 ];
@@ -182,27 +185,34 @@ const PAYROLL_RENAMES: Record<string, [string, string]> = {
   payroll: ['Salaries and wages', 'Employee salaries / wages'],
   payroll_employer: ['CPF and statutory contributions', "Employer's CPF contributions"],
 };
-const PAYROLL_NEW = ['cpf_employer_payable', 'other_payroll_payable', 'payroll_director', 'director_fees', 'payroll_employer_other'];
-
 /**
- * Brings a company set up before the payroll accounts were split (employee / employer CPF, director's
- * salary and fees) up to date, once. Returns accounts to add and names to change; empty when done.
+ * Accounts added to the standard chart after companies were set up. Each group is added once: when its
+ * `marker` account is missing (the payroll split also renames untouched old names).
  */
-export function payrollChartUpgrade(rows: Pick<Account, 'id' | 'code' | 'name' | 'subtype'>[]) {
+const CHART_UPGRADES: { marker: string; subtypes: string[]; renames?: Record<string, [string, string]> }[] = [
+  { marker: 'cpf_employer_payable', subtypes: ['cpf_employer_payable', 'other_payroll_payable', 'payroll_director', 'director_fees', 'payroll_employer_other'], renames: PAYROLL_RENAMES },
+  { marker: 'fees_tax_agent', subtypes: ['fees_secretarial', 'fees_tax_agent', 'fees_accounting'] },
+];
+
+/** Brings an older company's chart of accounts up to date, once per group. Empty when nothing to do. */
+export function chartUpgrade(rows: Pick<Account, 'id' | 'code' | 'name' | 'subtype'>[]) {
   const add: Omit<Account, 'id' | 'company_id' | 'archived'>[] = [];
   const rename: { id: number; name: string }[] = [];
-  if (!rows.length || rows.some(r => r.subtype === 'cpf_employer_payable')) return { add, rename };
+  if (!rows.length) return { add, rename };
   const used = new Set(rows.map(r => r.code));
-  for (const d of DEFAULT_ACCOUNTS.filter(a => PAYROLL_NEW.includes(a.subtype || ''))) {
-    if (rows.some(r => r.subtype === d.subtype)) continue;
-    let c = Number(d.code);
-    while (used.has(String(c))) c++;
-    used.add(String(c));
-    add.push({ ...d, code: String(c) });
-  }
-  for (const r of rows) {
-    const rn = PAYROLL_RENAMES[r.subtype || ''];
-    if (rn && r.name === rn[0]) rename.push({ id: r.id, name: rn[1] });
+  for (const g of CHART_UPGRADES) {
+    if (rows.some(r => r.subtype === g.marker)) continue;
+    for (const d of DEFAULT_ACCOUNTS.filter(a => g.subtypes.includes(a.subtype || ''))) {
+      if (rows.some(r => r.subtype === d.subtype)) continue;
+      let c = Number(d.code);
+      while (used.has(String(c))) c++;
+      used.add(String(c));
+      add.push({ ...d, code: String(c) });
+    }
+    for (const r of rows) {
+      const rn = g.renames?.[r.subtype || ''];
+      if (rn && r.name === rn[0]) rename.push({ id: r.id, name: rn[1] });
+    }
   }
   return { add, rename };
 }

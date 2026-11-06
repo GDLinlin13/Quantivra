@@ -1,7 +1,7 @@
 import type { CatalogItem, StockAdjustment, CustomerPrice } from '../data/catalog';
 import { supabase } from '../utils/supabase';
 import {
-  docTotals, statusAfterPayment, bankCodePlan, payrollChartUpgrade, DEFAULT_ACCOUNTS, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
+  docTotals, statusAfterPayment, bankCodePlan, chartUpgrade, DEFAULT_ACCOUNTS, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
   type Contact, type ContactPerson, type FinDocument, type DocLine, type DocType, type FinanceSettings, type Account,
 } from '../data/finance';
 import { splitByShare, payrollSplit } from '../data/ledger';
@@ -76,7 +76,7 @@ export const accountService = {
         DEFAULT_ACCOUNTS.map(a => ({ ...a, company_id: companyId })), { onConflict: 'company_id,code', ignoreDuplicates: true }));
       rows = must(await supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code')) || [];
     }
-    const up = payrollChartUpgrade(rows);
+    const up = chartUpgrade(rows);
     if (up.add.length || up.rename.length) {
       try {
         if (up.add.length) must(await supabase.from('fin_accounts').insert(up.add.map(a => ({ ...a, company_id: companyId }))));
