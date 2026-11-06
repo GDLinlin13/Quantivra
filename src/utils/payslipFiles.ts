@@ -38,6 +38,43 @@ export function formatFileName(pattern: string | undefined, ctx: FileNameContext
   return `${out || 'Payslip'}.pdf`;
 }
 
+// ---- invoices, quotations, credit notes ------------------------------------------------------
+
+export const DEFAULT_DOC_FILE_NAME = '{type} {number} - {customer}';
+export const DOC_FILE_NAME_TOKENS: { token: string; label: string }[] = [
+  { token: '{type}', label: 'Invoice / Quotation / Credit note' },
+  { token: '{number}', label: 'Number' },
+  { token: '{customer}', label: 'Customer' },
+  { token: '{reference}', label: 'Reference / PO no.' },
+  { token: '{date}', label: 'Date (2026-06-01)' },
+  { token: '{dd}', label: 'Day (01)' },
+  { token: '{mm}', label: 'Month number (06)' },
+  { token: '{month}', label: 'Month name (June)' },
+  { token: '{year}', label: 'Year (2026)' },
+  { token: '{company}', label: 'Company name' },
+];
+export interface DocFileNameContext { type: string; number?: string | null; customer?: string; reference?: string | null; date: string; company?: string }
+
+/** Fill in an invoice file-name pattern, e.g. "{type} {number} - {customer}". Adds ".pdf". */
+export function formatDocFileName(pattern: string | undefined, ctx: DocFileNameContext): string {
+  const p = (pattern || '').trim() || DEFAULT_DOC_FILE_NAME;
+  const [y, m, d] = (ctx.date || '').split('-');
+  const values: Record<string, string> = {
+    type: ctx.type, number: ctx.number || '', customer: ctx.customer || '', reference: ctx.reference || '',
+    date: ctx.date || '', dd: d || '', mm: m || '', month: MONTH_NAMES[Number(m) - 1] || '', year: y || '', company: ctx.company || '',
+  };
+  return `${cleanFileName(p.replace(/\{(\w+)\}/g, (x, k: string) => (k.toLowerCase() in values ? values[k.toLowerCase()] : x))) || ctx.type}.pdf`;
+}
+
+function cleanFileName(s: string): string {
+  return s
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/(\s*-\s*){2,}/g, ' - ')
+    .replace(/^[\s.-]+|[\s.-]+$/g, '')
+    .slice(0, 150);
+}
+
 /** Make names unique inside one zip: "A.pdf", "A (2).pdf", … */
 export function uniqueNames(names: string[]): string[] {
   const seen = new Map<string, number>();
