@@ -116,6 +116,12 @@ export function calculateStatutoryContribution(
   let employerAmount = fixedEr !== undefined
     ? roundByConfig(fixedEr, scheme.rounding.employer)
     : roundByConfig(capResult.totalWageBase * erRateDecimal, scheme.rounding.employer);
+  // Schemes like CPF round the total (to the nearest dollar), drop the cents from the employee's share,
+  // and the employer pays the rest.
+  if (scheme.rounding.total && fixedEmp === undefined && fixedEr === undefined) {
+    const total = roundByConfig(capResult.totalWageBase * (empRateDecimal + erRateDecimal), scheme.rounding.total);
+    employerAmount = Math.round((total - employeeAmount) * 100) / 100;
+  }
 
   allSteps.push({
     id: `${general.code}_CALC_EMP`,

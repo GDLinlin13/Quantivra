@@ -123,7 +123,8 @@
     }
   ],
   "rounding": {
-    "employee": { "method": "round", "decimals": 2 },
+    "total": { "method": "round", "decimals": 0 },
+    "employee": { "method": "floor", "decimals": 0 },
     "employer": { "method": "round", "decimals": 2 }
   },
   "reporting": {

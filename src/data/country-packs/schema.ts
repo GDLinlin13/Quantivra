@@ -214,6 +214,11 @@ export interface StatutorySchemeCalcRuleDef {
 export interface StatutorySchemeRoundingDef {
   employee: { method: 'round' | 'ceil' | 'floor' | 'truncate'; decimals: number };
   employer: { method: 'round' | 'ceil' | 'floor' | 'truncate'; decimals: number };
+  /**
+   * When set (e.g. Singapore CPF): the total is rounded this way, the employee's share with `employee`, and the
+   * employer pays the rest (total − employee's share).
+   */
+  total?: { method: 'round' | 'ceil' | 'floor' | 'truncate'; decimals: number };
 }
 
 export interface StatutorySchemeReportingDef {

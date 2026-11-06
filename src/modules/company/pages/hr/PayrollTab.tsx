@@ -130,6 +130,12 @@ export function PayrollTab({ companyId }: { companyId: number }) {
             title: '', key: 'act', render: (_, r) => (
               <Space>
                 <Button size="small" icon={<FileTextOutlined />} onClick={() => openView(r.id)}>View</Button>
+                {r.status === 'finalised' && (
+                  <Popconfirm title="Reopen this run?" description="It goes back to draft so it can be calculated again. Finance leaves it out until you finalise it again."
+                    onConfirm={async () => { try { await payrollService.reopen(r.id); message.success('Back to draft — run it again, then finalise'); load(); } catch (e: any) { message.error(e.message); } }}>
+                    <Button size="small">Reopen</Button>
+                  </Popconfirm>
+                )}
                 {r.status === 'draft' && (
                   <Popconfirm title="Delete this draft run?" onConfirm={async () => { await payrollService.deleteRun(r.id); load(); }}>
                     <Button size="small" danger icon={<DeleteOutlined />} />

@@ -206,6 +206,12 @@ export const payrollService = {
     if (error) throw new Error(error.message);
   },
 
+  /** Back to draft, so the run can be calculated again (e.g. after a rule fix). */
+  async reopen(runId: number) {
+    const { error } = await supabase.from('payroll_runs').update({ status: 'draft', finalised_at: null }).eq('id', runId);
+    if (error) throw new Error(error.message);
+  },
+
   async deleteRun(runId: number) {
     const { error } = await supabase.from('payroll_runs').delete().eq('id', runId);
     if (error) throw new Error(error.message);

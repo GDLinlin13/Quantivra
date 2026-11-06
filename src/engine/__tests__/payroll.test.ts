@@ -152,4 +152,19 @@ describe('calculatePayroll pipeline', () => {
     }]);
     expect(r.employees[0].statutoryContributions.find((s) => s.schemeCode === 'SDL')!.employerTotal).toBe(8.3325);
   });
+
+  it('rounds CPF like CPF Board: total to the nearest dollar, employee share without cents', () => {
+    const cpfFor = (wage: number) => {
+      const r = run([{ employeeId: 'E1', name: 'A', dateOfBirth: '1990-06-15', dateOfJoining: '2020-01-01',
+        employmentStatusCode: 'PERMANENT', immigrationStatusCode: 'SC', salaryComponents: [{ componentCode: 'BASIC', amount: wage }] }]);
+      const c = r.employees[0].statutoryContributions.find((s) => s.schemeCode === 'CPF')!;
+      return [c.employeeTotal, c.employerTotal];
+    };
+    // 3,333: total 37% = 1,233.21 → 1,233; employee 20% = 666.60 → 666; employer 567
+    expect(cpfFor(3333)).toEqual([666, 567]);
+    // 4,181.82 (e.g. with overtime): total 1,547.27 → 1,547; employee 836.36 → 836; employer 711
+    expect(cpfFor(4181.82)).toEqual([836, 711]);
+    // round wages are unchanged
+    expect(cpfFor(3000)).toEqual([600, 510]);
+  });
 });
