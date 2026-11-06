@@ -486,6 +486,11 @@ BEGIN
   END IF;
   PERFORM set_config('qv.alpha_bank', v_bank::text, false);
   INSERT INTO company_files (company_id, folder, account_id, period, path, file_name) VALUES (1, 'bank', v_bank, '2026-05', '1/files/may.pdf', 'may.pdf');
+  DECLARE v_j bigint;
+  BEGIN
+    INSERT INTO fin_journals (company_id, journal_date, memo) VALUES (1, current_date, 'Share capital') RETURNING id INTO v_j;
+    INSERT INTO company_files (company_id, folder, journal_id, path, file_name) VALUES (1, 'journal', v_j, '1/files/cap.pdf', 'cap.pdf');
+  END;
   BEGIN INSERT INTO company_files (company_id, folder, path, file_name) VALUES (1, 'other', '2/files/x.pdf', 'x.pdf');
     RAISE EXCEPTION 'FAIL: file row pointing into B''s folder';
   EXCEPTION WHEN check_violation THEN NULL; END;
@@ -498,6 +503,16 @@ BEGIN; :as_b
 DO $$
 BEGIN
   ASSERT NOT EXISTS (SELECT 1 FROM company_files WHERE company_id = 1), 'FAIL: B sees A files';
+  -- B can't hang a supporting document on an A journal entry
+  DECLARE v_j bigint;
+  BEGIN
+    SELECT id INTO v_j FROM fin_journals WHERE company_id = 1 LIMIT 1;
+    IF v_j IS NOT NULL THEN
+      BEGIN INSERT INTO company_files (company_id, folder, journal_id, path, file_name) VALUES (2, 'journal', v_j, '2/files/j.pdf', 'j.pdf');
+        RAISE EXCEPTION 'FAIL: B attached a file to an A journal';
+      EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+    END IF;
+  END;
   BEGIN INSERT INTO company_files (company_id, folder, account_id, path, file_name) VALUES (2, 'bank', current_setting('qv.alpha_bank')::bigint, '2/files/z.pdf', 'z.pdf');
     RAISE EXCEPTION 'FAIL: B filed a statement under an A bank';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;

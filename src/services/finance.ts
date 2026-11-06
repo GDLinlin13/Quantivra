@@ -121,7 +121,9 @@ export const attachmentService = {
 // ---- Documents: bank statements and other files (migration 029) -------------------------------
 
 export interface CompanyFile {
-  id: number; company_id: number; folder: 'bank' | 'other'; account_id: number | null; period: string | null;
+  id: number; company_id: number; folder: 'bank' | 'other' | 'journal'; account_id: number | null; period: string | null;
+  /** supporting document of a journal entry (migration 033) */
+  journal_id?: number | null;
   path: string; file_name: string; content_type: string | null; size_bytes: number | null; created_at: string;
   subfolder?: string | null;
 }
@@ -130,7 +132,7 @@ export const companyFileService = {
     const r = await supabase.from('company_files').select('*').eq('company_id', companyId).order('created_at', { ascending: false });
     return r.error ? [] : r.data || [];
   },
-  async add(companyId: number, file: File, meta: { folder: 'bank' | 'other'; account_id?: number | null; period?: string | null; subfolder?: string | null }) {
+  async add(companyId: number, file: File, meta: { folder: 'bank' | 'other' | 'journal'; account_id?: number | null; period?: string | null; subfolder?: string | null; journal_id?: number | null }) {
     if (file.size > ATTACH_MAX_MB * 1024 * 1024) throw new Error(`${file.name} is bigger than ${ATTACH_MAX_MB} MB`);
     const safe = file.name.replace(/[^\w.\- ]+/g, '_').slice(-80);
     const path = `${companyId}/files/${Date.now()}-${safe}`;
@@ -140,6 +142,7 @@ export const companyFileService = {
       company_id: companyId, folder: meta.folder, account_id: meta.account_id ?? null, period: meta.period ?? null,
       path, file_name: file.name, content_type: contentTypeOf(file), size_bytes: file.size,
       ...(meta.subfolder ? { subfolder: meta.subfolder } : {}),
+      ...(meta.journal_id ? { journal_id: meta.journal_id } : {}),
     });
     if (r.error) {
       await supabase.storage.from(ATTACH_BUCKET).remove([path]);
@@ -389,7 +392,12 @@ export const journalService = {
     }))));
     return id!;
   },
-  async remove(id: number) { must(await supabase.from('fin_journals').delete().eq('id', id)); },
+  async remove(id: number) {
+    // its supporting documents go too (the rows cascade; the stored files are removed here)
+    const files = await supabase.from('company_files').select('path').eq('journal_id', id);
+    if (!files.error && files.data?.length) await supabase.storage.from(ATTACH_BUCKET).remove(files.data.map((f: any) => f.path));
+    must(await supabase.from('fin_journals').delete().eq('id', id));
+  },
 };
 
 /** Everything the ledger and reports are worked out from. */

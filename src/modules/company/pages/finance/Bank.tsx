@@ -3,9 +3,9 @@ import {
   Select, Space, Button, Table, Tag, Card, Statistic, Upload, Modal, Form, DatePicker, Input, InputNumber, Segmented, message, Empty,
   Typography, Popconfirm, Tabs, Alert, Checkbox,
 } from 'antd';
-import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined, EditOutlined , PaperClipOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, type BankTxn, type Payment } from '../../../../services/finance';
+import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, companyFileService, type BankTxn, type Payment } from '../../../../services/finance';
 import { statementPeriod } from '../../../../data/documents';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
 import { balanceDue, schemeLabel, type Account, type FinDocument } from '../../../../data/finance';
@@ -31,6 +31,12 @@ export function Bank({ data }: { data: FinanceData }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [look, setLook] = useState<MatchLookup>({ journals: [], payments: [], allocations: [], docs: [] });
   const [details, setDetails] = useState<BankTxn | null>(null);
+  // journals that have supporting documents attached (shown with a paperclip)
+  const [withFiles, setWithFiles] = useState<Set<number>>(new Set());
+  const loadWithFiles = useCallback(() => {
+    companyFileService.list(companyId).then(fs => setWithFiles(new Set(fs.filter(f => f.journal_id).map(f => f.journal_id!)))).catch(() => null);
+  }, [companyId]);
+  useEffect(() => { loadWithFiles(); }, [loadWithFiles]);
   const [allTxns, setAllTxns] = useState<BankTxn[]>([]);
   const [booksBalance, setBooksBalance] = useState(0);
   const [dues, setDues] = useState<PayrollDue[]>([]);
@@ -136,7 +142,7 @@ export function Bank({ data }: { data: FinanceData }) {
   // an unmatched one, the bank's own text
   const describe = (t: BankTxn) => {
     const l = matchLabel(t, data, look);
-    return l ? <a onClick={() => setDetails(t)} title={t.description || ''}>{l.title}</a> : t.description;
+    return l ? <a onClick={() => setDetails(t)} title={t.description || ''}>{l.title}{t.journal_id && withFiles.has(t.journal_id) && <PaperClipOutlined style={{ marginLeft: 6 }} />}</a> : t.description;
   };
 
   return (
@@ -274,7 +280,7 @@ export function Bank({ data }: { data: FinanceData }) {
             showImport(lines);
           }} />
       )}
-      {details && <MatchDetails data={data} txn={details} look={look} accCur={accCur} onClose={() => setDetails(null)} />}
+      {details && <MatchDetails data={data} txn={details} look={look} accCur={accCur} onClose={() => setDetails(null)} onFilesChanged={loadWithFiles} />}
       {matching && <MatchModal data={data} txn={matching} accCur={accCur} dues={dues} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
         recorded={expected}
         onClose={() => setMatching(null)} onDone={() => { setMatching(null); load(); data.reload(); }} />}
