@@ -480,7 +480,7 @@ export const catalogService = {
       income_account_id: i.income_account_id || null, expense_account_id: i.expense_account_id || null,
       track_stock: i.kind === 'service' ? false : !!i.track_stock, opening_qty: Number(i.opening_qty) || 0,
       reorder_level: i.reorder_level == null || (i.reorder_level as any) === '' ? null : Number(i.reorder_level),
-      category: i.category || null, archived: !!i.archived, updated_at: new Date().toISOString(),
+      category: i.category || null, archived: !!i.archived, used_for: i.used_for || 'both', updated_at: new Date().toISOString(),
     };
     if (!row.name) throw new Error('Please enter a name');
     const fix = (e: any) => { if (e && /uq_catalog_items_code|duplicate/i.test(e.message)) throw new Error(`The code "${row.code}" is already used by another item`); return e; };

@@ -66,11 +66,12 @@ function ItemsTab({ companyId, items, stock, accounts, settings, currency, reloa
   companyId: number; items: CatalogItem[]; stock: Map<number, number>; accounts: Account[]; settings: FinanceSettings; currency: string; reload: () => void;
 }) {
   const [kind, setKind] = useState('all');
+  const [use, setUse] = useState('all');
   const [search, setSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<Partial<CatalogItem> | null>(null);
   const q = search.trim().toLowerCase();
-  const shown = items.filter(i => (showArchived || !i.archived) && (kind === 'all' || i.kind === kind)
+  const shown = items.filter(i => (showArchived || !i.archived) && (kind === 'all' || i.kind === kind) && (use === 'all' || (i.used_for || 'both') === 'both' || i.used_for === use)
     && (!q || [i.name, i.code, i.category, i.description].some(v => (v || '').toLowerCase().includes(q))));
   const M = (n: number) => money(n, currency);
   return (
@@ -78,6 +79,7 @@ function ItemsTab({ companyId, items, stock, accounts, settings, currency, reloa
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <Space wrap>
           <Segmented value={kind} onChange={v => setKind(String(v))} options={[{ value: 'all', label: 'All' }, { value: 'product', label: 'Products' }, { value: 'service', label: 'Services' }]} />
+          <Segmented value={use} onChange={v => setUse(String(v))} options={[{ value: 'all', label: 'Sales & purchases' }, { value: 'sales', label: 'Sales' }, { value: 'purchases', label: 'Purchases' }]} />
           <Input allowClear prefix={<SearchOutlined />} placeholder="Search name, code, category" style={{ width: 260 }} value={search} onChange={e => setSearch(e.target.value)} />
           <Space size={6}><Switch size="small" checked={showArchived} onChange={setShowArchived} /><Text type="secondary">Show archived</Text></Space>
         </Space>
@@ -92,8 +94,9 @@ function ItemsTab({ companyId, items, stock, accounts, settings, currency, reloa
           { title: 'Code', dataIndex: 'code', width: 110, render: (v: string | null) => v || '—' },
           { title: 'Name', key: 'n', render: (_, i) => <a onClick={() => setEditing(i)}>{i.name}</a>, sorter: (a, b) => a.name.localeCompare(b.name) },
           { title: 'Type', key: 'k', width: 100, render: (_, i) => <Tag color={i.kind === 'product' ? 'blue' : 'purple'}>{i.kind === 'product' ? 'Product' : 'Service'}</Tag> },
+          { title: 'Used for', key: 'u', width: 110, render: (_, i) => ({ sales: 'Sales', purchases: 'Purchases', both: 'Both' } as Record<string, string>)[i.used_for || 'both'] },
           { title: 'Category', dataIndex: 'category', render: (v: string | null) => v || '—' },
-          { title: 'Selling price', key: 's', align: 'right' as const, render: (_, i) => `${M(i.sale_price)}${i.unit ? ` / ${i.unit}` : ''}` },
+          { title: 'Selling price', key: 's', align: 'right' as const, render: (_, i) => i.used_for === 'purchases' ? '—' : `${M(i.sale_price)}${i.unit ? ` / ${i.unit}` : ''}` },
           { title: 'Cost', key: 'c', align: 'right' as const, render: (_, i) => (Number(i.purchase_price) ? M(i.purchase_price) : '—') },
           {
             title: 'In stock', key: 'st', align: 'right' as const, render: (_, i) => {
@@ -131,6 +134,9 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
   const [saving, setSaving] = useState(false);
   const kind = Form.useWatch('kind', form) ?? item.kind;
   const track = Form.useWatch('track_stock', form);
+  // sold, bought, or both: only the matching prices and accounts are asked for
+  const usedFor = Form.useWatch('used_for', form) ?? item.used_for ?? 'both';
+  const sells = usedFor !== 'purchases', buys = usedFor !== 'sales';
   // special prices for particular customers
   const [customers, setCustomers] = useState<Contact[]>([]);
   const [custPrices, setCustPrices] = useState<{ contact_id: number | null; price: number | null }[]>([]);
@@ -155,8 +161,11 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
   return (
     <Drawer open onClose={onClose} size={640} title={item.id ? item.name : kind === 'service' ? 'New service' : 'New product'}
       extra={<Button type="primary" loading={saving} onClick={submit}>Save</Button>}>
-      <Form form={form} layout="vertical" initialValues={{ kind: 'product', ...item, tax_rate: item.tax_rate == null ? 'default' : Number(item.tax_rate) }}>
-        <Form.Item name="kind"><Segmented options={[{ value: 'product', label: 'Product' }, { value: 'service', label: 'Service' }]} /></Form.Item>
+      <Form form={form} layout="vertical" initialValues={{ kind: 'product', used_for: 'both', ...item, tax_rate: item.tax_rate == null ? 'default' : Number(item.tax_rate) }}>
+        <Space size={16} wrap style={{ marginBottom: 16 }}>
+          <Form.Item name="kind" noStyle><Segmented options={[{ value: 'product', label: 'Product' }, { value: 'service', label: 'Service' }]} /></Form.Item>
+          <Form.Item name="used_for" noStyle><Segmented options={[{ value: 'sales', label: 'Sales' }, { value: 'purchases', label: 'Purchases' }, { value: 'both', label: 'Both' }]} /></Form.Item>
+        </Space>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
           <Form.Item name="code" label="Code / SKU"><Input placeholder="optional" /></Form.Item>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
@@ -165,10 +174,10 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
         {item.description && <Form.Item name="description" label="Extra text after the name on invoices"><Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} /></Form.Item>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
           <Form.Item name="unit" label="Unit"><Input placeholder={kind === 'service' ? 'e.g. hour, project' : 'e.g. pc, box, kg'} /></Form.Item>
-          <Form.Item name="sale_price" label="Selling price"><InputNumber min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>
-          <Form.Item name="purchase_price" label="Cost / buying price"><InputNumber min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>
+          {sells && <Form.Item name="sale_price" label="Selling price"><InputNumber min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>}
+          {buys && <Form.Item name="purchase_price" label="Cost / buying price"><InputNumber min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>}
         </div>
-        <Card size="small" style={{ background: 'transparent', marginBottom: 16 }} title="Customer prices"
+        {sells && <Card size="small" style={{ background: 'transparent', marginBottom: 16 }} title="Customer prices"
           extra={<Button size="small" icon={<PlusOutlined />} onClick={() => setCustPrices(ps => [...ps, { contact_id: null, price: Number(form.getFieldValue('sale_price')) || 0 }])}>Customer</Button>}>
           {!custPrices.length ? <Text type="secondary">Every customer pays the selling price.</Text> : custPrices.map((p, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: 8, marginBottom: 8 }}>
@@ -180,7 +189,7 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
               <Button icon={<DeleteOutlined />} onClick={() => setCustPrices(ps => ps.filter((_, j) => j !== i))} />
             </div>
           ))}
-        </Card>
+        </Card>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Form.Item name="category" label="Category">
             <Select allowClear showSearch mode={undefined} options={categories.map(c => ({ value: c, label: c }))}
@@ -193,12 +202,12 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
               <Select options={[{ value: 'default', label: `Standard (${settings.gstRate}%)` }, { value: 0, label: '0% (zero-rated / exempt)' }]} />
             </Form.Item>
           )}
-          <Form.Item name="income_account_id" label="Sales go to">
+          {sells && <Form.Item name="income_account_id" label="Sales go to">
             <Select allowClear showSearch optionFilterProp="label" placeholder="4000 Sales" options={income.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
-          </Form.Item>
-          <Form.Item name="expense_account_id" label="Purchases go to">
+          </Form.Item>}
+          {buys && <Form.Item name="expense_account_id" label="Purchases go to">
             <Select allowClear showSearch optionFilterProp="label" placeholder={kind === 'product' ? '5000 Cost of sales' : '6990 General expenses'} options={costs.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
-          </Form.Item>
+          </Form.Item>}
         </div>
         {kind === 'product' && (
           <Card size="small" style={{ background: 'transparent' }}>
