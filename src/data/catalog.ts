@@ -5,6 +5,8 @@ export interface CatalogItem {
   description: string | null; unit: string | null; sale_price: number; purchase_price: number;
   tax_rate: number | null; income_account_id: number | null; expense_account_id: number | null;
   track_stock: boolean; opening_qty: number; reorder_level: number | null; category: string | null; archived: boolean;
+  /** sold, bought or both (migration 030) */
+  used_for?: 'sales' | 'purchases' | 'both';
 }
 /** A special selling price of one item for one customer (migration 027). */
 export interface CustomerPrice { id?: number; item_id: number; contact_id: number; price: number }

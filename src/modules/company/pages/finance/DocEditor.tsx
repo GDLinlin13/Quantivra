@@ -73,7 +73,9 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
   // special prices for particular customers (Catalog → item → Customer prices)
   const [custPrices, setCustPrices] = useState<CustomerPrice[]>([]);
   useEffect(() => { if (sales) catalogService.prices(companyId).then(setCustPrices).catch(() => null); }, [companyId, sales]);
-  const catalog = items.filter(it => !it.archived || lines.some(l => l.item_id === it.id));
+  // sales documents offer what we sell, purchases what we buy (plus anything already on the lines)
+  const catalog = items.filter(it => lines.some(l => l.item_id === it.id)
+    || (!it.archived && (it.used_for || 'both') !== (sales ? 'purchases' : 'sales')));
   const pickItem = (i: number, id: number | null) => {
     const it = items.find(x => x.id === id);
     if (!it) { setLine(i, { item_id: null }); return; }
