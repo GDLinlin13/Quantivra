@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, companyFileService, type BankTxn, type Payment } from '../../../../services/finance';
+import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, type BankTxn, type Payment } from '../../../../services/finance';
 import { statementPeriod } from '../../../../data/documents';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
 import { balanceDue, schemeLabel, type Account, type FinDocument } from '../../../../data/finance';
@@ -13,6 +13,7 @@ import { parseBankCsv, type BankLine } from '../../../../data/bankCsv';
 import { parseStatementText, pdfToRows, rowsToLines, parseWithLayout, type PdfRow, type PdfLayout } from '../../../../data/bankPdf';
 import { TeachPdf } from './TeachPdf';
 import { MatchDetails, matchLabel, type MatchLookup } from './MatchDetails';
+import { saveBankStatement } from './saveStatement';
 
 type ImportLine = BankLine & { sure: boolean };
 import { money } from '../../../../data/documentLayouts';
@@ -207,7 +208,7 @@ export function Bank({ data }: { data: FinanceData }) {
             try {
               await bankService.add(companyId, accountId!, importing.map(({ sure: _s, ...l }) => l));
               if (keepStmt && stmtFile) {
-                try { await companyFileService.add(companyId, stmtFile, { folder: 'bank', account_id: accountId, period: (stmtMonth || dayjs()).format('YYYY-MM') }); }
+                try { await saveBankStatement(companyId, stmtFile, accountId!, (stmtMonth || dayjs()).format('YYYY-MM')); }
                 catch (e: any) { message.warning(`Imported, but the statement file wasn't saved in Documents: ${e.message}`); }
               }
               message.success('Imported'); setImporting(null); load();

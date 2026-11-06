@@ -3,7 +3,8 @@ import { buildFolders, statementPeriod } from '../documents';
 
 describe('documents folders', () => {
   const input = {
-    runs: [{ id: 1, period_year: 2026, period_month: 5, status: 'finalised' }, { id: 2, period_year: 2026, period_month: 6, status: 'draft' }],
+    runs: [{ id: 1, period_year: 2026, period_month: 5, status: 'finalised', pay_date: '2026-05-31' }, { id: 2, period_year: 2026, period_month: 6, status: 'draft' }],
+    slips: [{ id: 21, run_id: 1, employee_name: 'Ivan Ong', name: 'Payslip - Ivan Ong - May 2026.pdf' }, { id: 22, run_id: 2, employee_name: 'Ivan Ong', name: 'draft.pdf' }],
     docs: [
       { id: 10, doc_type: 'invoice', number: 'INV-1', issue_date: '2026-06-01', status: 'sent', contact: 'Argos' },
       { id: 11, doc_type: 'invoice', number: null, issue_date: '2026-06-02', status: 'draft' },
@@ -18,9 +19,13 @@ describe('documents folders', () => {
   };
   const f = buildFolders(input);
   const get = (k: string) => f.find(x => x.key === k)!;
-  it('puts finalised payslip runs in year / month folders', () => {
+  it('puts finalised payslips in year / month folders, or one folder per employee', () => {
     expect(get('payslips').children[0].title).toBe('2026');
-    expect(get('payslips').children[0].children.map(m => [m.title, m.runId])).toEqual([['05 May', 1]]);
+    expect(get('payslips').children[0].children.map(m => [m.title, m.files.map(x => x.name)])).toEqual([['05 May', ['Payslip - Ivan Ong - May 2026.pdf']]]);
+    const byName = buildFolders(input, { by: 'name' });
+    expect(byName.find(x => x.key === 'payslips')!.children.map(c => [c.title, c.files.length])).toEqual([['Ivan Ong', 1]]);
+    expect(byName.find(x => x.key === 'invoice')!.children.map(c => c.title)).toEqual(['Argos']);
+    expect(byName.find(x => x.key === 'bills')!.children[0].files.map(x => x.name)).toEqual(['BILL-1 - ACRA - acra.pdf']);
   });
   it('files invoices (not drafts), bills, bank statements and other files', () => {
     expect(get('invoice').children[0].children[0].files.map(x => x.name)).toEqual(['INV-1 - Argos.pdf']);
