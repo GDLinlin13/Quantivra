@@ -91,9 +91,56 @@ export const attachmentService = {
     await supabase.storage.from(ATTACH_BUCKET).remove([a.path]);
     must(await supabase.from('fin_attachments').delete().eq('id', a.id));
   },
+  async listAll(companyId: number): Promise<Attachment[]> {
+    const r = await supabase.from('fin_attachments').select('*').eq('company_id', companyId).order('id');
+    return r.error ? [] : r.data || [];
+  },
   /** A short-lived link to open the file. */
   async open(a: Attachment) {
     const r = await supabase.storage.from(ATTACH_BUCKET).createSignedUrl(a.path, 120);
+    if (r.error || !r.data?.signedUrl) throw new Error(r.error?.message || 'Could not open the file');
+    window.open(r.data.signedUrl, '_blank', 'noopener');
+  },
+};
+
+// ---- Documents: bank statements and other files (migration 029) -------------------------------
+
+export interface CompanyFile {
+  id: number; company_id: number; folder: 'bank' | 'other'; account_id: number | null; period: string | null;
+  path: string; file_name: string; content_type: string | null; size_bytes: number | null; created_at: string;
+}
+export const companyFileService = {
+  async list(companyId: number): Promise<CompanyFile[]> {
+    const r = await supabase.from('company_files').select('*').eq('company_id', companyId).order('created_at', { ascending: false });
+    return r.error ? [] : r.data || [];
+  },
+  async add(companyId: number, file: File, meta: { folder: 'bank' | 'other'; account_id?: number | null; period?: string | null }) {
+    if (file.size > ATTACH_MAX_MB * 1024 * 1024) throw new Error(`${file.name} is bigger than ${ATTACH_MAX_MB} MB`);
+    const safe = file.name.replace(/[^\w.\- ]+/g, '_').slice(-80);
+    const path = `${companyId}/files/${Date.now()}-${safe}`;
+    const up = await supabase.storage.from(ATTACH_BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });
+    if (up.error) throw new Error(up.error.message);
+    const r = await supabase.from('company_files').insert({
+      company_id: companyId, folder: meta.folder, account_id: meta.account_id ?? null, period: meta.period ?? null,
+      path, file_name: file.name, content_type: file.type || null, size_bytes: file.size,
+    });
+    if (r.error) {
+      await supabase.storage.from(ATTACH_BUCKET).remove([path]);
+      throw new Error(/company_files|does not exist/i.test(r.error.message) ? 'Documents need database update 029 — ask your administrator to run it in Supabase.' : r.error.message);
+    }
+  },
+  async remove(f: CompanyFile) {
+    await supabase.storage.from(ATTACH_BUCKET).remove([f.path]);
+    must(await supabase.from('company_files').delete().eq('id', f.id));
+  },
+  /** The file itself, e.g. to download it under its own name. */
+  async blob(path: string): Promise<Blob> {
+    const r = await supabase.storage.from(ATTACH_BUCKET).download(path);
+    if (r.error || !r.data) throw new Error(r.error?.message || 'Could not get the file');
+    return r.data;
+  },
+  async open(path: string) {
+    const r = await supabase.storage.from(ATTACH_BUCKET).createSignedUrl(path, 120);
     if (r.error || !r.data?.signedUrl) throw new Error(r.error?.message || 'Could not open the file');
     window.open(r.data.signedUrl, '_blank', 'noopener');
   },

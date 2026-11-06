@@ -18,6 +18,7 @@ import { CompanySettingsPage } from '../modules/company/pages/Settings';
 import { CompanyHRPage } from '../modules/company/pages/HR';
 import { CompanyFinancePage } from '../modules/company/pages/Finance';
 import { CompanyCatalogPage } from '../modules/company/pages/Catalog';
+import { CompanyDocumentsPage } from '../modules/company/pages/Documents';
 import { CompanyCRMPage } from '../modules/company/pages/CRM';
 import { CompanyReportsPage } from '../modules/company/pages/Reports';
 
@@ -52,7 +53,7 @@ export const router = createBrowserRouter([
       { path: 'roles', element: <CompanyRolesPage /> },
       { path: 'settings', element: <CompanySettingsPage /> },
       { path: 'audit', element: <PlatformAuditPage /> },
-      { path: 'files', element: <div style={{ color: '#f0ede6' }}>Documents</div> },
+      { path: 'files', element: <CompanyDocumentsPage /> },
     ],
   },
   { path: '*', element: <Navigate to="/login" replace /> },
