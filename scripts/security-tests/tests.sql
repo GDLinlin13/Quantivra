@@ -475,6 +475,38 @@ BEGIN
 END $$;
 COMMIT;
 
+\echo '9j. company files (bank statements, other documents) stay inside their company'
+BEGIN; :as_a
+DO $$
+DECLARE v_bank bigint;
+BEGIN
+  SELECT id INTO v_bank FROM fin_accounts WHERE company_id = 1 LIMIT 1;
+  IF v_bank IS NULL THEN
+    INSERT INTO fin_accounts (company_id, code, name, type, subtype) VALUES (1, '1000', 'Bank', 'asset', 'bank') RETURNING id INTO v_bank;
+  END IF;
+  PERFORM set_config('qv.alpha_bank', v_bank::text, false);
+  INSERT INTO company_files (company_id, folder, account_id, period, path, file_name) VALUES (1, 'bank', v_bank, '2026-05', '1/files/may.pdf', 'may.pdf');
+  BEGIN INSERT INTO company_files (company_id, folder, path, file_name) VALUES (1, 'other', '2/files/x.pdf', 'x.pdf');
+    RAISE EXCEPTION 'FAIL: file row pointing into B''s folder';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN INSERT INTO company_files (company_id, folder, path, file_name) VALUES (2, 'other', '2/files/y.pdf', 'y.pdf');
+    RAISE EXCEPTION 'FAIL: A added a file row to B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+COMMIT;
+BEGIN; :as_b
+DO $$
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM company_files WHERE company_id = 1), 'FAIL: B sees A files';
+  BEGIN INSERT INTO company_files (company_id, folder, account_id, path, file_name) VALUES (2, 'bank', current_setting('qv.alpha_bank')::bigint, '2/files/z.pdf', 'z.pdf');
+    RAISE EXCEPTION 'FAIL: B filed a statement under an A bank';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_a
+DELETE FROM company_files;
+COMMIT;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;

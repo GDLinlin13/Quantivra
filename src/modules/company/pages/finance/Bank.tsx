@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Select, Space, Button, Table, Tag, Card, Statistic, Upload, Modal, Form, DatePicker, Input, InputNumber, Segmented, message, Empty,
-  Typography, Popconfirm, Tabs, Alert,
+  Typography, Popconfirm, Tabs, Alert, Checkbox,
 } from 'antd';
 import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, type BankTxn, type Payment } from '../../../../services/finance';
+import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, companyFileService, type BankTxn, type Payment } from '../../../../services/finance';
+import { statementPeriod } from '../../../../data/documents';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
 import { balanceDue, schemeLabel, type Account, type FinDocument } from '../../../../data/finance';
 import { parseBankCsv, type BankLine } from '../../../../data/bankCsv';
@@ -33,6 +34,10 @@ export function Bank({ data }: { data: FinanceData }) {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('unmatched');
   const [importing, setImporting] = useState<ImportLine[] | null>(null);
+  // the statement file itself is kept in Documents → Bank statements, filed under a month
+  const [stmtFile, setStmtFile] = useState<File | null>(null);
+  const [stmtMonth, setStmtMonth] = useState<dayjs.Dayjs | null>(null);
+  const [keepStmt, setKeepStmt] = useState(true);
   const [bankEdit, setBankEdit] = useState<Partial<Account> | null>(null);
   const [pdfRows, setPdfRows] = useState<PdfRow[] | null>(null);
   const [teaching, setTeaching] = useState(false);
@@ -84,6 +89,7 @@ export function Bank({ data }: { data: FinanceData }) {
   }
 
   const onFile = async (file: File) => {
+    setStmtFile(file);
     let r: { lines: ImportLine[]; error?: string };
     setPdfRows(null);
     if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
@@ -111,6 +117,7 @@ export function Bank({ data }: { data: FinanceData }) {
     const seen = new Set(txns.map(t => `${t.txn_date}|${Number(t.amount).toFixed(2)}|${t.description || ''}`));
     const fresh = lines.filter(l => !seen.has(`${l.txn_date}|${l.amount.toFixed(2)}|${l.description}`));
     if (!fresh.length) { message.info('Nothing new in that file'); setImporting(null); return; }
+    setStmtMonth(dayjs(`${statementPeriod(fresh.map(l => l.txn_date)) || dayjs().format('YYYY-MM')}-01`));
     setImporting(fresh);
   }
 
@@ -190,7 +197,22 @@ export function Bank({ data }: { data: FinanceData }) {
       {importing && (
         <Modal open width={860} title={`Import ${importing.length} lines into ${account?.name}`} okText={`Import ${importing.length} lines`}
           onCancel={() => setImporting(null)}
-          onOk={async () => { try { await bankService.add(companyId, accountId!, importing.map(({ sure: _s, ...l }) => l)); message.success('Imported'); setImporting(null); load(); } catch (e: any) { message.error(e.message); } }}>
+          onOk={async () => {
+            try {
+              await bankService.add(companyId, accountId!, importing.map(({ sure: _s, ...l }) => l));
+              if (keepStmt && stmtFile) {
+                try { await companyFileService.add(companyId, stmtFile, { folder: 'bank', account_id: accountId, period: (stmtMonth || dayjs()).format('YYYY-MM') }); }
+                catch (e: any) { message.warning(`Imported, but the statement file wasn't saved in Documents: ${e.message}`); }
+              }
+              message.success('Imported'); setImporting(null); load();
+            } catch (e: any) { message.error(e.message); }
+          }}>
+          {stmtFile && (
+            <Space style={{ marginBottom: 8 }} wrap>
+              <Checkbox checked={keepStmt} onChange={e => setKeepStmt(e.target.checked)}>Save this statement in Documents as</Checkbox>
+              <DatePicker picker="month" format="MMMM YYYY" allowClear={false} disabled={!keepStmt} value={stmtMonth} onChange={d => d && setStmtMonth(d)} />
+            </Space>
+          )}
           {pdfRows && (
             <Space style={{ marginBottom: 8 }} wrap>
               <Text type="secondary">{layouts[String(accountId)] ? 'Read the way you taught Quantivra for this bank.' : 'Read automatically.'} Not right?</Text>
