@@ -179,7 +179,7 @@ export function Bank({ data }: { data: FinanceData }) {
           // as on the bank statement: debit = money out, credit = money in
           { title: 'Debit', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{money(-t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
           { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
-          { title: 'Matched to', key: 'm', render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : matchLabel(t, data, look)?.accounts || '' },
+          { title: 'Matched to', key: 'm', width: 220, render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : matchLabel(t, data, look)?.accounts || '' },
           {
             title: '', key: 'a', width: 170, render: (_, t) => (
               <Space size={4}>
@@ -406,11 +406,10 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, onClose, 
           key: 'account', label: 'Something else',
           children: (
             <div>
-              <Text type="secondary">For money that isn't an invoice or bill — bank charges, interest, owner's capital, a loan…</Text>
-              <Form layout="vertical" style={{ marginTop: 8 }}>
+              <Form layout="vertical">
                 <Form.Item label="Account">
                   <Select showSearch optionFilterProp="label" value={accountId ?? undefined} onChange={setAccountId}
-                    options={bookable.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))} placeholder={inbound ? 'e.g. 4100 Other income' : 'e.g. 6900 Bank charges'} />
+                    options={bookable.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
                 </Form.Item>
                 <Form.Item label="Details"><Input value={memo} onChange={e => setMemo(e.target.value)} /></Form.Item>
               </Form>

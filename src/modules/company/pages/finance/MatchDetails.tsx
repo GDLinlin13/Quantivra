@@ -22,10 +22,11 @@ export interface MatchLookup {
  */
 export function matchLabel(t: BankTxn, data: FinanceData, look: MatchLookup): { title: string; accounts: string } | null {
   const acc = (id: number | undefined) => data.accounts.find(a => a.id === id);
+  const short = (n: string) => n.replace(/\s*\(.*\)\s*$/, '');
   if (t.payment_id) {
     const p = look.payments.find(x => x.id === t.payment_id);
     const sub = p?.direction === 'out' || (!p && t.amount < 0) ? 'payable' : 'receivable';
-    const control = data.accounts.find(a => a.subtype === sub)?.name || '';
+    const control = short(data.accounts.find(a => a.subtype === sub)?.name || '');
     if (!p) return { title: 'Payment', accounts: control };
     const docs = look.allocations.filter(a => a.payment_id === p.id).map(a => look.docs.find(d => d.id === a.document_id)?.number).filter(Boolean);
     const who = data.contacts.find(c => c.id === p.contact_id)?.name;
@@ -34,7 +35,7 @@ export function matchLabel(t: BankTxn, data: FinanceData, look: MatchLookup): { 
   if (t.journal_id) {
     const j = look.journals.find(x => x.id === t.journal_id);
     if (!j) return { title: t.description || '', accounts: '' };
-    const names = j.lines.filter(l => l.account_id !== t.account_id).map(l => acc(l.account_id)?.name).filter(Boolean) as string[];
+    const names = j.lines.filter(l => l.account_id !== t.account_id).map(l => acc(l.account_id)?.name).filter(Boolean).map(n => short(n!));
     const accounts = [...new Set(names)].join(', ');
     return { title: (j.memo || '').trim() || t.description || accounts, accounts };
   }
