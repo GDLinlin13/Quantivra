@@ -35,7 +35,7 @@ export function Bank({ data }: { data: FinanceData }) {
   const [dues, setDues] = useState<PayrollDue[]>([]);
   const [used, setUsed] = useState(true); // has this account any activity (ledger lines or statement lines)?
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('unmatched');
+  const [filter, setFilter] = useState('all');
   const [importing, setImporting] = useState<ImportLine[] | null>(null);
   // the statement file itself is kept in Documents → Bank statements, filed under a month
   const [stmtFile, setStmtFile] = useState<File | null>(null);
@@ -170,7 +170,7 @@ export function Bank({ data }: { data: FinanceData }) {
           title={`The statement and the System Balance differ by ${money(Math.abs(statementBalance - booksBalance), currency)}. Check for payments recorded in Quantivra that aren't on the statement yet, or the account's opening balance.`} />
       )}
       <Segmented value={filter} onChange={v => setFilter(String(v))} style={{ marginBottom: 12 }}
-        options={[{ value: 'unmatched', label: `To match (${unmatched})` }, { value: 'matched', label: 'Matched' }, { value: 'ignored', label: 'Ignored' }, { value: 'all', label: 'All' }]} />
+        options={[{ value: 'all', label: 'All' }, { value: 'unmatched', label: `To match (${unmatched})` }, { value: 'matched', label: 'Matched' }, { value: 'ignored', label: 'Ignored' }]} />
       <Table rowKey="id" size="small" loading={loading} dataSource={shown} pagination={{ pageSize: 100, hideOnSinglePage: true }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={filter === 'unmatched' ? 'All matched' : 'No lines'} /> }}
         columns={[
