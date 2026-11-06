@@ -4,12 +4,13 @@ import dayjs from 'dayjs';
 import { loadLedgerInput, journalService } from '../../../../services/finance';
 import { buildLedger, payrollDue, systemAccount, splitByShare, type PayrollDue } from '../../../../data/ledger';
 import { money } from '../../../../data/documentLayouts';
+import { schemeLabel } from '../../../../data/finance';
 import type { FinanceData } from './DocList';
 
 const { Text } = Typography;
 const period = (r: PayrollDue['run']) => dayjs(`${r.period_year}-${String(r.period_month).padStart(2, '0')}-01`).format('MMM YYYY');
 
-/** Payables → Payroll: net salaries and CPF still to pay for each finalised payroll run. */
+/** Payables → Payroll: net salaries and CPF (or the country's contributions) still to pay for each finalised payroll run. */
 export function PayrollPayables({ data }: { data: FinanceData }) {
   const [input, setInput] = useState<Awaited<ReturnType<typeof loadLedgerInput>> | null>(null);
   const [paying, setPaying] = useState<{ due: PayrollDue; what: 'net' | 'stat' } | null>(null);
@@ -24,6 +25,7 @@ export function PayrollPayables({ data }: { data: FinanceData }) {
   const bank = input.accounts.find(a => a.subtype === 'bank' && !a.archived);
   const netDue = dues.reduce((s, d) => s + d.netDue, 0), statDue = dues.reduce((s, d) => s + d.statDue, 0);
   const M = (n: number) => money(n, data.currency);
+  const X = schemeLabel(data.company?.country); // CPF in Singapore
 
   const markAllNet = async () => {
     if (!sal || !bank) return;
@@ -47,7 +49,7 @@ export function PayrollPayables({ data }: { data: FinanceData }) {
     <div>
       <Space size={16} wrap style={{ marginBottom: 12 }}>
         <Card size="small" style={{ minWidth: 200 }}><Statistic title="Salaries to pay" value={M(netDue)} /></Card>
-        <Card size="small" style={{ minWidth: 200 }}><Statistic title="CPF to pay" value={M(statDue)} /></Card>
+        <Card size="small" style={{ minWidth: 200 }}><Statistic title={`${X} to pay`} value={M(statDue)} /></Card>
         {netDue > 0 && (
           <Popconfirm title="Mark every unpaid salary as paid from the bank on its pay date?"
             description="Use this if salaries were already paid. Don't also match those bank lines in Bank." onConfirm={markAllNet}>
@@ -64,16 +66,16 @@ export function PayrollPayables({ data }: { data: FinanceData }) {
             title: 'Salaries to pay', key: 'nd', align: 'right' as const,
             render: (_, d) => d.netDue > 0 ? <b>{M(d.netDue)}</b> : <Tag color="green">Paid</Tag>,
           },
-          { title: 'CPF (employee + employer)', key: 's', align: 'right' as const, render: (_, d) => M(d.stat) },
+          { title: `${X} (employee + employer)`, key: 's', align: 'right' as const, render: (_, d) => M(d.stat) },
           {
-            title: 'CPF to pay', key: 'sd', align: 'right' as const,
+            title: `${X} to pay`, key: 'sd', align: 'right' as const,
             render: (_, d) => d.statDue > 0 ? <b>{M(d.statDue)}</b> : <Tag color="green">Paid</Tag>,
           },
           {
             title: '', key: 'a', width: 200, render: (_, d) => (
               <Space size={4}>
                 {d.netDue > 0 && <Button size="small" onClick={() => setPaying({ due: d, what: 'net' })}>Pay salaries</Button>}
-                {d.statDue > 0 && <Button size="small" onClick={() => setPaying({ due: d, what: 'stat' })}>Pay CPF</Button>}
+                {d.statDue > 0 && <Button size="small" onClick={() => setPaying({ due: d, what: 'stat' })}>Pay {X}</Button>}
               </Space>
             ),
           },
@@ -82,10 +84,10 @@ export function PayrollPayables({ data }: { data: FinanceData }) {
         When the money leaves the bank, either click Pay here or match the bank statement line in Bank → Match → Payroll — not both.
       </Text>
       {paying && sal && (
-        <PayModal data={data} accounts={input.accounts} title={`${paying.what === 'net' ? 'Pay salaries' : 'Pay CPF'} — ${period(paying.due.run)}`}
+        <PayModal data={data} accounts={input.accounts} title={`${paying.what === 'net' ? 'Pay salaries' : `Pay ${X}`} — ${period(paying.due.run)}`}
           amount={paying.what === 'net' ? paying.due.netDue : paying.due.statDue} date={paying.due.run.pay_date}
           to={paying.what === 'net' ? [{ account_id: sal.id, share: 1 }] : paying.due.statParts}
-          memo={`${paying.what === 'net' ? 'Salaries' : 'CPF'} paid — ${period(paying.due.run)}`}
+          memo={`${paying.what === 'net' ? 'Salaries' : X} paid — ${period(paying.due.run)}`}
           onClose={() => setPaying(null)} onDone={() => { setPaying(null); load(); data.reload(); }} />
       )}
     </div>

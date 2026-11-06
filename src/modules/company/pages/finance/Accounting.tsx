@@ -175,7 +175,7 @@ function Reports({ data, input, entries, reload }: { data: FinanceData; input: L
         </table>
         {report === 'ap' && (
           <>
-            <div style={{ fontWeight: 700, margin: '16px 0 4px' }}>CPF, GST, salaries and other amounts owed</div>
+            <div style={{ fontWeight: 700, margin: '16px 0 4px' }}>Salaries, payroll contributions, tax and other amounts owed</div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>
               {other.map(b => <tr key={b.account.id}><td style={td}>{b.account.code} {b.account.name}</td><td style={num}>{M(b.balance)}</td></tr>)}
               {other.length === 0 && <tr><td style={{ ...td, color: '#999' }}>Nothing owed</td><td style={num} /></tr>}
@@ -225,7 +225,7 @@ function Reports({ data, input, entries, reload }: { data: FinanceData; input: L
       {input.payroll.some(r => r.status === 'draft') && (
         <Alert type="warning" showIcon style={{ marginTop: 12 }}
           title={`Payroll still in draft isn't in the books: ${input.payroll.filter(r => r.status === 'draft').map(r => dayjs(`${r.period_year}-${String(r.period_month).padStart(2, '0')}-01`).format('MMM YYYY')).join(', ')}.`}
-          description="Open HR → Payroll, view the run and click “Finalise Run”. Wages, employer CPF and the CPF owed (account 2210) then appear here." />
+          description="Open HR → Payroll, view the run and click “Finalise Run”. Salaries, employer contributions and what is owed then appear here." />
       )}
       {input.payroll.length === 0 && <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>Payroll isn't included: there are no payroll runs, or you don't have pay access.</Text>}
     </div>
@@ -358,7 +358,7 @@ function Journals({ data, accounts, journals, reload }: { data: FinanceData; acc
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, gap: 12 }}>
-        <Text type="secondary">For anything not covered by invoices, bills, expenses or payroll — e.g. paying CPF, loans, depreciation, year-end adjustments.</Text>
+        <Text type="secondary">For anything not covered by invoices, bills, expenses or payroll — e.g. loans, depreciation, year-end adjustments.</Text>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ journal_date: today(), lines: [] })}>New journal entry</Button>
       </div>
       <Table rowKey="id" size="small" dataSource={journals} pagination={{ pageSize: 50, hideOnSinglePage: true }}
@@ -423,7 +423,7 @@ function JournalModal({ data, accounts, journal, onClose, onSaved }: { data: Fin
   );
 }
 
-/** Pay something the company owes that isn't a supplier bill (CPF, GST, salaries…): a journal from the bank. */
+/** Pay something the company owes that isn't a supplier bill (payroll contributions, tax, salaries…): a journal from the bank. */
 function PayLiability({ data, accounts, account, amount, onClose, onDone }: {
   data: FinanceData; accounts: Account[]; account: Account; amount: number; onClose: () => void; onDone: () => void;
 }) {

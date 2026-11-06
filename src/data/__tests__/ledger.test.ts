@@ -111,4 +111,25 @@ describe('ledger', () => {
     expect(up.rename).toEqual([{ id: id('2210'), name: "Employee's CPF contribution payable" }]);
     expect(chartUpgrade(accounts)).toEqual({ add: [], rename: [] });
   });
+
+  it('names payroll and tax accounts after the country', async () => {
+    const { defaultAccountsFor, schemeLabel } = await import('../finance');
+    const my = defaultAccountsFor('MY'), name = (code: string) => my.find(a => a.code === code)!.name;
+    expect([name('2100'), name('2210'), name('2220'), name('6010')]).toEqual(['SST', "Employee's EPF, SOCSO & EIS contributions payable", "Employer's EPF, SOCSO & EIS contributions payable", "Employer's EPF, SOCSO & EIS contributions"]);
+    expect(defaultAccountsFor('SG').find(a => a.code === '2210')!.name).toBe("Employee's CPF contribution payable");
+    expect([schemeLabel('SG'), schemeLabel('DE')]).toEqual(['CPF', 'Statutory contributions']);
+    // a company outside Singapore that got the Singapore names is renamed, its own names are left alone
+    const rows = accounts.map(a => (a.code === '2220' ? { ...a, name: 'My own name' } : a));
+    const up = chartUpgrade(rows, 'AE');
+    expect(up.add).toEqual([]);
+    expect(up.rename.map(r => r.name)).toEqual(['VAT', "Employee's pension (GPSSA) contributions payable", 'Other payroll deductions payable', "Employer's pension (GPSSA) contributions", 'Other employer payroll costs']);
+    expect(chartUpgrade(accounts, 'SG')).toEqual({ add: [], rename: [] });
+  });
+
+  it('outside Singapore every statutory contribution counts as employee / employer contributions', () => {
+    const split = payrollSplit([{ employee_id: 1, gross_pay: 5000,
+      deductions_json: [{ componentCode: 'DEDUCTION_EPF', amount: 550 }, { componentCode: 'DEDUCTION_SOCSO', amount: 24.75 }],
+      employer_json: [{ componentCode: 'COST_EPF_EMPLOYER', amount: 650 }, { componentCode: 'COST_SOCSO_EMPLOYER', amount: 86.65 }] }], new Set(), 'MY');
+    expect(split).toEqual({ directorGross: 0, eeCpf: 574.75, erCpf: 736.65, sdl: 0 });
+  });
 });

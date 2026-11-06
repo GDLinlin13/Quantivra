@@ -1,7 +1,7 @@
 import type { CatalogItem, StockAdjustment, CustomerPrice } from '../data/catalog';
 import { supabase } from '../utils/supabase';
 import {
-  docTotals, statusAfterPayment, bankCodePlan, chartUpgrade, DEFAULT_ACCOUNTS, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
+  docTotals, statusAfterPayment, bankCodePlan, chartUpgrade, defaultAccountsFor, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
   type Contact, type ContactPerson, type FinDocument, type DocLine, type DocType, type FinanceSettings, type Account,
 } from '../data/finance';
 import { splitByShare, payrollSplit } from '../data/ledger';
@@ -70,13 +70,19 @@ export const financeSettingsService = {
 export const accountService = {
   /** The company's accounts; the standard set is added the first time. */
   async list(companyId: number): Promise<Account[]> {
-    let rows: Account[] = must(await supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code')) || [];
+    const [acc, co] = await Promise.all([
+      supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code'),
+      supabase.from('companies').select('country').eq('id', companyId).maybeSingle(),
+    ]);
+    let rows: Account[] = must(acc) || [];
+    // some account names follow the country (CPF in Singapore, EPF in Malaysia, GST / VAT…)
+    const country = (co.data as any)?.country || 'SG';
     if (!rows.length) {
       must(await supabase.from('fin_accounts').upsert(
-        DEFAULT_ACCOUNTS.map(a => ({ ...a, company_id: companyId })), { onConflict: 'company_id,code', ignoreDuplicates: true }));
+        defaultAccountsFor(country).map(a => ({ ...a, company_id: companyId })), { onConflict: 'company_id,code', ignoreDuplicates: true }));
       rows = must(await supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code')) || [];
     }
-    const up = chartUpgrade(rows);
+    const up = chartUpgrade(rows, country);
     if (up.add.length || up.rename.length) {
       try {
         if (up.add.length) must(await supabase.from('fin_accounts').insert(up.add.map(a => ({ ...a, company_id: companyId }))));
@@ -292,15 +298,17 @@ export async function loadLedgerInput(companyId: number) {
   const runs = (payroll as any[]).filter(r => r.status !== 'draft');
   if (runs.length) {
     // per payslip: CPF employee / employer shares and directors' pay, so each goes to its own account
+    let country = 'SG';
     const [slips, emps] = await Promise.all([
       supabase.from('payslips').select('run_id, employee_id, gross_pay, deductions_json, employer_json').in('run_id', runs.map(r => r.id))
         .then(r => (r.error ? [] : r.data || [])),
       supabase.from('employees').select('id, employment_type').eq('company_id', companyId).then(r => (r.error ? [] : r.data || [])),
+      supabase.from('companies').select('country').eq('id', companyId).maybeSingle().then(r => { country = (r.data as any)?.country || 'SG'; }),
     ]);
     const directors = new Set((emps as any[]).filter(e => e.employment_type === 'director').map(e => e.id));
     for (const r of runs) {
       const mine = (slips as any[]).filter(s => s.run_id === r.id);
-      if (mine.length) r.split = payrollSplit(mine, directors);
+      if (mine.length) r.split = payrollSplit(mine, directors, country);
     }
   }
   const byDoc = new Map<number, any[]>();
