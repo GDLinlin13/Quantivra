@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_ACCOUNTS, type Account } from '../finance';
-import { buildLedger, balances, profitAndLoss, balanceSheet, gstReturn, accountLedger, aged, spread, payrollDue } from '../ledger';
+import { DEFAULT_ACCOUNTS, payrollChartUpgrade, type Account } from '../finance';
+import { buildLedger, balances, profitAndLoss, balanceSheet, gstReturn, accountLedger, aged, spread, payrollDue, payrollLines, payrollSplit, splitByShare } from '../ledger';
 
 const accounts: Account[] = DEFAULT_ACCOUNTS.map((a, i) => ({ ...a, id: i + 1, company_id: 1, archived: false, opening_balance: 0 }));
 const id = (code: string) => accounts.find(a => a.code === code)!.id;
@@ -55,7 +55,8 @@ describe('ledger', () => {
     expect(bal('1000')).toBe(10000 + 1000 - 50 - 10);          // net pay is owed until it's paid
     expect(bal('2200')).toBe(4000);
     expect(bal('2100')).toBe(243 - 9);                        // GST owed
-    expect(bal('2210')).toBe(1850);                           // CPF owed
+    expect(bal('2210')).toBe(1000);                           // employee's CPF owed (no payslips: all deductions)
+    expect(bal('2220')).toBe(850);                            // employer's CPF owed
   });
 
   it('GST return boxes', () => {
@@ -82,5 +83,32 @@ describe('ledger', () => {
 
   it('spreads amounts to the cent', () => {
     expect(spread(100, [1, 1, 1])).toEqual([33.34, 33.33, 33.33]);
+  });
+
+  it('splits payroll into director / employee pay, employee and employer CPF, and SDL', () => {
+    const split = payrollSplit([
+      { employee_id: 1, gross_pay: 3000, deductions_json: [{ componentCode: 'DEDUCTION_CPF', amount: 600 }, { componentCode: 'DEDUCTION_CDAC', amount: 1 }],
+        employer_json: [{ componentCode: 'COST_CPF_EMPLOYER', amount: 510 }, { componentCode: 'COST_SDL_EMPLOYER', amount: 7.5 }] },
+      { employee_id: 2, gross_pay: 2000, deductions_json: [{ componentCode: 'DEDUCTION_CPF', amount: 399 }],
+        employer_json: [{ componentCode: 'COST_CPF_EMPLOYER', amount: 332.5 }] },
+    ], new Set([2]));
+    expect(split).toEqual({ directorGross: 2000, eeCpf: 999, erCpf: 842.5 });
+    const run = { ...input.payroll[0], split };
+    const lines = payrollLines(run as any, accounts);
+    const on = (code: string) => lines.filter(l => l.account_id === id(code)).reduce((t, l) => t + l.debit - l.credit, 0);
+    expect([on('6000'), on('6005'), on('6010'), on('6015')]).toEqual([3000, 2000, 842.5, 7.5]);
+    expect([on('2200'), on('2210'), on('2220'), on('2230')]).toEqual([-4000, -999, -842.5, -8.5]);
+    const due = payrollDue({ accounts, payroll: [run] } as any, buildLedger({ ...input, payroll: [run] } as any));
+    expect(due[0].statDue).toBe(1850);
+    expect(splitByShare(1850, due[0].statParts).map(p => p.amount)).toEqual([999, 842.5, 8.5]);
+  });
+
+  it('upgrades an older chart of accounts once', () => {
+    const old = accounts.filter(a => !['2220', '2230', '6005', '6008', '6015'].includes(a.code))
+      .map(a => (a.code === '2210' ? { ...a, name: 'CPF and statutory payable' } : a.code === '6000' ? { ...a, name: 'My wages' } : a));
+    const up = payrollChartUpgrade(old);
+    expect(up.add.map(a => a.code)).toEqual(['2220', '2230', '6005', '6008', '6015']);
+    expect(up.rename).toEqual([{ id: id('2210'), name: "Employee's CPF contribution payable" }]);
+    expect(payrollChartUpgrade(accounts)).toEqual({ add: [], rename: [] });
   });
 });

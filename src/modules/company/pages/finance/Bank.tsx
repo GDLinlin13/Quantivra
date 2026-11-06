@@ -288,7 +288,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, onClose, 
     .sort((a, b) => Number(Math.abs(balanceDue(a) - amt) > 0.005) - Number(Math.abs(balanceDue(b) - amt) > 0.005));
   const contact = (id: number | null) => data.contacts.find(c => c.id === id)?.name || '';
   const bookable = data.accounts.filter((a: Account) => !a.archived && a.id !== txn.account_id);
-  const salId = systemAccount(data.accounts, 'payroll_payable')?.id, statId = systemAccount(data.accounts, 'statutory_payable')?.id;
+  const salId = systemAccount(data.accounts, 'payroll_payable')?.id;
   // salaries / CPF of exactly this amount: open the Payroll tab first
   const payrollHit = !inbound && dues.some(d => Math.abs(d.netDue - lineAmt) < 0.005 || Math.abs(d.statDue - lineAmt) < 0.005);
 
@@ -365,8 +365,8 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, onClose, 
                 },
                 {
                   title: 'CPF to pay', key: 's', align: 'right' as const, render: (_: any, d: PayrollDue) => d.statDue > 0 ? (
-                    <Button size="small" type={ready && Math.abs(d.statDue - amt) < 0.005 ? 'primary' : 'default'} disabled={!ready || !statId} loading={busy}
-                      onClick={() => run(() => bankService.categorise(data.companyId, txn, statId!, `CPF paid — ${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}`, foreign ? amt : undefined))}>
+                    <Button size="small" type={ready && Math.abs(d.statDue - amt) < 0.005 ? 'primary' : 'default'} disabled={!ready || !d.statParts.length} loading={busy}
+                      onClick={() => run(() => bankService.categorise(data.companyId, txn, d.statParts, `CPF paid — ${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}`, foreign ? amt : undefined))}>
                       {money(d.statDue, data.currency)}
                     </Button>) : <Tag color="green">Paid</Tag>,
                 },
