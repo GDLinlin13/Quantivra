@@ -466,6 +466,13 @@ export const bankService = {
     must(await supabase.from('fin_bank_transactions').insert(lines.map(l => ({ company_id: companyId, account_id: accountId, ...l, status: 'unmatched' }))));
   },
   async update(id: number, patch: Partial<BankTxn>) { must(await supabase.from('fin_bank_transactions').update(patch).eq('id', id)); },
+  /** Something already recorded for this bank (a transfer, a payment) is on the statement: add the line, already matched. */
+  async confirmRecorded(companyId: number, accountId: number, e: { txn_date: string; description: string | null; amount: number; journal_id: number | null; payment_id: number | null }) {
+    must(await supabase.from('fin_bank_transactions').insert({
+      company_id: companyId, account_id: accountId, txn_date: e.txn_date, description: e.description || '', amount: e.amount, status: 'matched',
+      journal_id: e.journal_id, payment_id: e.payment_id, ...(e.journal_id ? { journal_existing: true } : {}),
+    }));
+  },
   async remove(id: number) { must(await supabase.from('fin_bank_transactions').delete().eq('id', id)); },
   /** Match a statement line to a payment that's already recorded. */
   /** Match to something already in the books, e.g. a transfer from another of the company's banks. */
