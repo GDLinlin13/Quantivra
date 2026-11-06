@@ -56,6 +56,7 @@ export function Bank({ data }: { data: FinanceData }) {
   useEffect(() => { pdfLayoutService.get(companyId).then(setLayouts).catch(() => setLayouts({})); }, [companyId]);
   const [adding, setAdding] = useState(false);
   const [amending, setAmending] = useState<BankTxn | null>(null);
+  const [fxMatch, setFxMatch] = useState<BankTxn | null>(null);
   const [matching, setMatching] = useState<BankTxn | null>(null);
   const account = accounts.find(a => a.id === accountId);
   // a bank account can be in another currency; the books stay in the company's currency
@@ -83,8 +84,12 @@ export function Bank({ data }: { data: FinanceData }) {
   useEffect(() => { load(); }, [load, data.docs]);
 
   // opening balance plus the statement lines already matched (lines still to match, or ignored, don't count yet)
+  // opening balance plus the lines that came from the bank's own statement (PDF / CSV); lines keyed in by hand don't count
   const statementBalance = useMemo(() => Math.round(((Number(foreign ? account?.opening_foreign : account?.opening_balance) || 0)
-    + txns.filter(t => t.status === 'matched').reduce((s, t) => s + Number(t.amount), 0)) * 100) / 100, [txns, account, foreign]);
+    + txns.filter(t => t.source === 'statement' && t.status !== 'ignored').reduce((s, t) => s + Number(t.amount), 0)) * 100) / 100, [txns, account, foreign]);
+  // amounts without the currency (it's shown once, at the top)
+  const num = (n: number) => Number(n).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const PURPLE = '#b37feb';
   // Recorded in Quantivra for this bank but not on any statement line yet (e.g. a transfer booked from
   // another bank, a payment recorded by hand): shown so the statement line can be matched to it.
   const expected = useMemo(() => accountId ? recordedNotOnStatement(accountId, look, allTxns, data) : [], [accountId, look, allTxns, data]);
@@ -99,7 +104,7 @@ export function Bank({ data }: { data: FinanceData }) {
   const running = useMemo(() => {
     const m = new Map<number, number>();
     let bal = Number(foreign ? account?.opening_foreign : account?.opening_balance) || 0;
-    [...txns.filter(t => t.status !== 'ignored'), ...expected]
+    [...txns.filter(t => t.status !== 'ignored'), ...(foreign ? [] : expected)]
       .sort(chrono)
       .forEach(t => { bal = Math.round((bal + Number(t.amount)) * 100) / 100; m.set(t.id, bal); });
     return m;
@@ -148,11 +153,11 @@ export function Bank({ data }: { data: FinanceData }) {
   // leave out lines already imported (same date, amount and description)
   // the whole statement is kept, in its order: lines keyed in by hand are taken over (with their match)
   function showImport(lines: ImportLine[]) {
-    if (!lines.length || nothingNew(planImport(lines, txns, expected))) { message.info('Nothing new in that file'); setImporting(null); return; }
+    if (!lines.length || nothingNew(planImport(lines, txns, foreign ? [] : expected))) { message.info('Nothing new in that file'); setImporting(null); return; }
     setStmtMonth(dayjs(`${statementPeriod(lines.map(l => l.txn_date)) || dayjs().format('YYYY-MM')}-01`));
     setImporting(lines);
   }
-  const plan = importing ? planImport(importing, txns, expected) : [];
+  const plan = importing ? planImport(importing, txns, foreign ? [] : expected) : [];
 
   // a matched line shows what it was for (click for the details and the invoices / bills it paid);
   // an unmatched one, the bank's own text
@@ -185,8 +190,9 @@ export function Bank({ data }: { data: FinanceData }) {
         <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>Add a line</Button>
       </Space>
       <Space size={16} wrap style={{ marginBottom: 12 }}>
-        <Card size="small" style={{ minWidth: 200 }}><Statistic title="Balance per statement" value={money(statementBalance, accCur)} /></Card>
-        <Card size="small" style={{ minWidth: 200 }}><Statistic title={foreign ? `System Balance (in ${currency})` : 'System Balance'} value={money(booksBalance, currency)} /></Card>
+        <Card size="small" style={{ minWidth: 110 }}><Statistic title="Currency" value={accCur} /></Card>
+        <Card size="small" style={{ minWidth: 200 }}><Statistic title="Balance per statement" value={num(statementBalance)} styles={{ content: { color: PURPLE } }} /></Card>
+        <Card size="small" style={{ minWidth: 200 }}><Statistic title={foreign ? `System Balance (in ${currency})` : 'System Balance'} value={foreign ? money(booksBalance, currency) : num(booksBalance)} /></Card>
         <Card size="small" style={{ minWidth: 200 }}><Statistic title="Lines to match" value={unmatched} styles={{ content: { color: unmatched ? '#faad14' : undefined } }} /></Card>
       </Space>
       {booksBalance < 0 && !Number(account?.opening_balance) && (
@@ -194,9 +200,9 @@ export function Bank({ data }: { data: FinanceData }) {
           title="The System Balance is negative because this account has no opening balance yet."
           description={<>Payroll net pay, payments and other money out are taken from this account, but the money that was in it when you started isn't recorded. Click <EditOutlined /> next to the account and enter the opening balance and its date (e.g. your bank balance on the day before your first payroll in Quantivra).</>} />
       )}
-      {!foreign && Math.abs(statementBalance - booksBalance) >= 0.01 && unmatched === 0 && txns.length > 0 && (
+      {!foreign && Math.abs(statementBalance - booksBalance) >= 0.01 && unmatched === 0 && txns.length > 0 && txns.every(t => t.source === 'statement') && (
         <Alert type="warning" showIcon style={{ marginBottom: 12 }}
-          title={`The statement and the System Balance differ by ${money(Math.abs(statementBalance - booksBalance), currency)}. Check for payments recorded in Quantivra that aren't on the statement yet, or the account's opening balance.`} />
+          title={`The statement and the System Balance differ by ${num(Math.abs(statementBalance - booksBalance))}. Check for payments recorded in Quantivra that aren't on the statement yet, or the account's opening balance.`} />
       )}
       <Segmented value={filter} onChange={v => setFilter(String(v))} style={{ marginBottom: 12 }}
         options={[{ value: 'all', label: 'All' }, { value: 'unmatched', label: `To match (${unmatched})` }, { value: 'matched', label: 'Matched' },
@@ -204,20 +210,23 @@ export function Bank({ data }: { data: FinanceData }) {
       <Table rowKey="id" size="small" loading={loading} dataSource={shown} pagination={{ pageSize: 100, hideOnSinglePage: true }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={filter === 'unmatched' ? 'All matched' : 'No lines'} /> }}
         columns={[
-          { title: 'Date', dataIndex: 'txn_date', width: 110 },
+          // purple: the line came from the bank's statement (PDF / CSV)
+          { title: 'Date', key: 'dt', width: 110, render: (_, t) => <span style={t.source === 'statement' ? { color: PURPLE, fontWeight: 600 } : undefined}>{t.txn_date}</span> },
           { title: 'Description', key: 'd', render: (_, t) => describe(t) },
           // as on the bank statement: debit = money out, credit = money in
-          { title: 'Debit', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{money(-t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
-          { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
-          { title: 'Balance', key: 'bal', align: 'right' as const, width: 150, render: (_, t) => (running.has(t.id) ? money(running.get(t.id)!, accCur) : '') },
+          { title: 'Debit', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{t.status === ('expected' as any) && foreign ? money(-t.amount, currency) : num(-t.amount)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
+          { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{t.status === ('expected' as any) && foreign ? money(t.amount, currency) : num(t.amount)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
+          { title: 'Balance', key: 'bal', align: 'right' as const, width: 150, render: (_, t) => (running.has(t.id) ? num(running.get(t.id)!) : '') },
           { title: 'Matched to', key: 'm', width: 220, render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : matchLabel(t, data, look)?.accounts || '' },
           {
             title: '', key: 'a', width: 210, render: (_, t) => t.status === ('expected' as any) ? (
               // recorded in Quantivra (e.g. a transfer from another bank): Match = it's on the statement
+              foreign ? <Button size="small" type="primary" icon={<LinkOutlined />} onClick={() => setFxMatch(t)}>Match</Button> : (
               <Popconfirm title="Is this on the bank statement?" okText="Yes, match"
                 onConfirm={async () => { try { await bankService.confirmRecorded(companyId, accountId!, t); message.success('Matched'); load(); } catch (e: any) { message.error(e.message); } }}>
                 <Button size="small" type="primary" icon={<LinkOutlined />}>Match</Button>
               </Popconfirm>
+              )
             ) : (
               <Space size={4}>
                 {t.status === 'unmatched'
@@ -245,7 +254,7 @@ export function Bank({ data }: { data: FinanceData }) {
             try {
               // statement order; keyed-in lines are replaced by the statement's line, keeping their match
               const rows = plan.map(p => {
-                const base = { txn_date: p.line.txn_date, description: p.line.description, amount: p.line.amount };
+                const base = { txn_date: p.line.txn_date, description: p.line.description, amount: p.line.amount, source: 'statement' as const };
                 if (p.kind === 'keyed') {
                   const e = txns.find(t => t.id === p.existing.id)!;
                   return { ...base, status: e.status, payment_id: e.payment_id, journal_id: e.journal_id,
@@ -312,6 +321,11 @@ export function Bank({ data }: { data: FinanceData }) {
             ]} />
         </Modal>
       )}
+      {fxMatch && <FxMatch txn={fxMatch} currency={currency} accCur={accCur} onClose={() => setFxMatch(null)}
+        onMatch={async (received, base) => {
+          try { await bankService.confirmRecorded(companyId, accountId!, { ...fxMatch, amount: received, base_amount: base }); message.success('Matched'); setFxMatch(null); load(); }
+          catch (e: any) { message.error(e.message); }
+        }} />}
       {amending && <AddLine line={amending} onClose={() => setAmending(null)} currency={accCur}
         onAdd={async l => { try { await bankService.update(amending.id, { txn_date: l.txn_date, description: l.description, amount: l.amount }); setAmending(null); load(); } catch (e: any) { message.error(e.message); } }} />}
       {adding && <AddLine onClose={() => setAdding(false)} currency={accCur}
@@ -331,6 +345,34 @@ export function Bank({ data }: { data: FinanceData }) {
         recorded={expected}
         onClose={() => setMatching(null)} onDone={() => { setMatching(null); load(); data.reload(); }} />}
     </div>
+  );
+}
+
+/**
+ * A transfer recorded in the company's currency (e.g. SGD 1,419.88 from the SGD account) arriving in a bank in
+ * another currency: enter what arrived (or the rate) and the line is stored in that currency, matched.
+ */
+function FxMatch({ txn, currency, accCur, onClose, onMatch }: {
+  txn: BankTxn; currency: string; accCur: string; onClose: () => void; onMatch: (received: number, base: number) => Promise<void>;
+}) {
+  const base = Math.abs(Number(txn.amount)), sign = Math.sign(Number(txn.amount));
+  const [received, setReceived] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const rate = received ? base / received : null;
+  return (
+    <Modal open title={`${sign > 0 ? 'Received' : 'Paid'} in ${accCur}`} okText="Match" confirmLoading={busy} okButtonProps={{ disabled: !received }} onCancel={onClose}
+      onOk={async () => { setBusy(true); await onMatch(sign * received!, sign * base); setBusy(false); }}>
+      <Space orientation="vertical" style={{ width: '100%' }}>
+        <Text>{txn.description} · {txn.txn_date} · {money(base, currency)}</Text>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div><Text type="secondary">Amount in {accCur}</Text>
+            <InputNumber style={{ width: '100%' }} min={0.01} precision={2} prefix={accCur} value={received ?? undefined} onChange={v => setReceived(v == null ? null : Number(v))} /></div>
+          <div><Text type="secondary">Rate (1 {accCur} = ? {currency})</Text>
+            <InputNumber style={{ width: '100%' }} min={0} precision={6} value={rate ? Math.round(rate * 1e6) / 1e6 : undefined}
+              onChange={r => setReceived(r ? Math.round((base / Number(r)) * 100) / 100 : null)} /></div>
+        </div>
+      </Space>
+    </Modal>
   );
 }
 
