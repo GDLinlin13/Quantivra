@@ -137,7 +137,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
   const dateLabel = docType === 'quote' ? 'Valid until' : docType === 'expense' ? 'Paid on' : 'Due date';
   const issued = doc.status && doc.status !== 'draft';
   return (
-    <Drawer open onClose={onClose} size={1000} loading={loading}
+    <Drawer open onClose={onClose} size={Math.min(1440, window.innerWidth - 24)} loading={loading}
       title={<Space>{docId ? `${DOC_LABEL[docType]} ${doc.number || ''}` : `New ${DOC_LABEL[docType].toLowerCase()}`}{doc.status && <Tag color={STATUS_COLOR[doc.status]}>{STATUS_LABEL[doc.status]}</Tag>}</Space>}
       extra={
         <Space>
@@ -202,12 +202,12 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
       <Table rowKey="_row" size="small" pagination={false} dataSource={lines.map((l, i) => ({ ...l, _row: i }))}
         columns={[
           { title: '', width: 24, render: () => <HolderOutlined style={{ color: '#666' }} /> },
-          ...(catalog.length ? [{ title: 'Item', width: 190, render: (_: any, l: DocLine, i: number) => (
+          ...(catalog.length ? [{ title: 'Item', width: 240, render: (_: any, l: DocLine, i: number) => (
             <Select style={{ width: '100%' }} allowClear showSearch optionFilterProp="label" value={l.item_id ?? undefined} placeholder="From the catalog"
               onChange={v => pickItem(i, v ?? null)}
               options={catalog.map(it => ({ value: it.id, label: `${it.code ? `${it.code} · ` : ''}${it.name}` }))} />
           ) }] : []),
-          { title: 'Description', render: (_, l, i) => <Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} value={l.description} onChange={e => setLine(i, { description: e.target.value })} /> },
+          { title: 'Description', render: (_, l, i) => <Input.TextArea style={{ minWidth: 280 }} autoSize={{ minRows: 1, maxRows: 6 }} value={l.description} onChange={e => setLine(i, { description: e.target.value })} /> },
           ...(lineAccounts.length && !sales ? [{ title: 'Account', width: 180, render: (_: any, l: DocLine, i: number) => (
             <Select style={{ width: '100%' }} showSearch optionFilterProp="label" value={l.account_id ?? undefined} onChange={v => setLine(i, { account_id: v })}
               options={accountOptions as any} placeholder="General expenses" />
