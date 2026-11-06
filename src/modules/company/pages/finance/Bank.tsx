@@ -88,10 +88,10 @@ export function Bank({ data }: { data: FinanceData }) {
   // another bank, a payment recorded by hand): shown so the statement line can be matched to it.
   const expected = useMemo(() => accountId ? recordedNotOnStatement(accountId, look, allTxns, data) : [], [accountId, look, allTxns, data]);
   const shown: BankTxn[] = [
-    ...(filter === 'all' || filter === 'expected' ? expected : []),
+    ...(filter === 'all' || filter === 'unmatched' ? expected : []),
     ...txns.filter(t => filter === 'all' || t.status === filter),
   ].sort((a, b) => b.txn_date.localeCompare(a.txn_date));
-  const unmatched = txns.filter(t => t.status === 'unmatched').length;
+  const unmatched = txns.filter(t => t.status === 'unmatched').length + expected.length;
 
   const bankModal = bankEdit && (
     <BankAccountModal data={data} account={bankEdit} onClose={() => setBankEdit(null)}
@@ -187,7 +187,7 @@ export function Bank({ data }: { data: FinanceData }) {
       )}
       <Segmented value={filter} onChange={v => setFilter(String(v))} style={{ marginBottom: 12 }}
         options={[{ value: 'all', label: 'All' }, { value: 'unmatched', label: `To match (${unmatched})` }, { value: 'matched', label: 'Matched' },
-          ...(expected.length ? [{ value: 'expected', label: `Not on a statement yet (${expected.length})` }] : []), { value: 'ignored', label: 'Ignored' }]} />
+          { value: 'ignored', label: 'Ignored' }]} />
       <Table rowKey="id" size="small" loading={loading} dataSource={shown} pagination={{ pageSize: 100, hideOnSinglePage: true }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={filter === 'unmatched' ? 'All matched' : 'No lines'} /> }}
         columns={[
@@ -198,7 +198,13 @@ export function Bank({ data }: { data: FinanceData }) {
           { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
           { title: 'Matched to', key: 'm', width: 220, render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : matchLabel(t, data, look)?.accounts || '' },
           {
-            title: '', key: 'a', width: 210, render: (_, t) => t.status === ('expected' as any) ? <Tag color="gold">Not on a statement yet</Tag> : (
+            title: '', key: 'a', width: 210, render: (_, t) => t.status === ('expected' as any) ? (
+              // recorded in Quantivra (e.g. a transfer from another bank): Match = it's on the statement
+              <Popconfirm title="Is this on the bank statement?" okText="Yes, match"
+                onConfirm={async () => { try { await bankService.confirmRecorded(companyId, accountId!, t); message.success('Matched'); load(); } catch (e: any) { message.error(e.message); } }}>
+                <Button size="small" type="primary" icon={<LinkOutlined />}>Match</Button>
+              </Popconfirm>
+            ) : (
               <Space size={4}>
                 {t.status === 'unmatched'
                   ? <Button size="small" type="primary" icon={<LinkOutlined />} onClick={() => setMatching(t)}>Match</Button>
