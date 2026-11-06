@@ -393,6 +393,12 @@ BEGIN
   INSERT INTO catalog_items (company_id, name, code, sale_price, track_stock, opening_qty) VALUES (1, 'Tote bag', 'TOTE', 25, true, 100) RETURNING id INTO v_i;
   INSERT INTO catalog_stock_adjustments (company_id, item_id, quantity, reason) VALUES (1, v_i, -2, 'damaged');
   PERFORM set_config('qv.alpha_item', v_i::text, false);
+  -- a special price for one of A's customers
+  DECLARE v_c bigint;
+  BEGIN
+    INSERT INTO contacts (company_id, name, is_customer) VALUES (1, 'Price customer', true) RETURNING id INTO v_c;
+    INSERT INTO catalog_customer_prices (company_id, item_id, contact_id, price) VALUES (1, v_i, v_c, 20);
+  END;
   BEGIN INSERT INTO catalog_items (company_id, name) VALUES (2, 'Planted'); RAISE EXCEPTION 'FAIL: A added an item to B';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   BEGIN INSERT INTO catalog_items (company_id, name, code) VALUES (1, 'Dup', 'tote'); RAISE EXCEPTION 'FAIL: duplicate item code allowed';
@@ -404,6 +410,14 @@ DO $$
 BEGIN
   ASSERT NOT EXISTS (SELECT 1 FROM catalog_items WHERE company_id = 1), 'FAIL: B sees A catalog';
   ASSERT NOT EXISTS (SELECT 1 FROM catalog_stock_adjustments WHERE company_id = 1), 'FAIL: B sees A stock';
+  ASSERT NOT EXISTS (SELECT 1 FROM catalog_customer_prices WHERE company_id = 1), 'FAIL: B sees A customer prices';
+  DECLARE v_c bigint;
+  BEGIN
+    INSERT INTO contacts (company_id, name) VALUES (2, 'Beta buyer') RETURNING id INTO v_c;
+    BEGIN INSERT INTO catalog_customer_prices (company_id, item_id, contact_id, price) VALUES (2, current_setting('qv.alpha_item')::bigint, v_c, 1);
+      RAISE EXCEPTION 'FAIL: B set a price on an A item';
+    EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  END;
   BEGIN INSERT INTO catalog_stock_adjustments (company_id, item_id, quantity) VALUES (2, current_setting('qv.alpha_item')::bigint, 5);
     RAISE EXCEPTION 'FAIL: B adjusted stock of an A item';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
@@ -411,6 +425,7 @@ END $$;
 ROLLBACK;
 BEGIN; :as_a
 DELETE FROM catalog_items;
+DELETE FROM contacts WHERE name = 'Price customer';
 COMMIT;
 
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
