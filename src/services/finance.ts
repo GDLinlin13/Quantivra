@@ -157,6 +157,10 @@ export const companyFileService = {
     must(await supabase.from('company_files').update({ file_name: name }).eq('id', id));
   },
   /** A renamed folder: its files (and those in folders inside it) move with it. */
+  /** Put a file in one of the company's own folders ('' = Other files). */
+  async moveFile(id: number, subfolder: string) {
+    must(await supabase.from('company_files').update({ subfolder: subfolder || null }).eq('id', id));
+  },
   async moveFolder(files: CompanyFile[], from: string, to: string) {
     for (const f of files.filter(x => x.folder === 'other' && x.subfolder && (x.subfolder === from || x.subfolder.startsWith(`${from}/`)))) {
       must(await supabase.from('company_files').update({ subfolder: to + f.subfolder!.slice(from.length) }).eq('id', f.id));
