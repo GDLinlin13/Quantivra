@@ -167,4 +167,14 @@ describe('calculatePayroll pipeline', () => {
     // round wages are unchanged
     expect(cpfFor(3000)).toEqual([600, 510]);
   });
+
+  it('counts overtime as ordinary wages (no extra CPF above the $8,000 ceiling)', () => {
+    const r = run([{ employeeId: 'E1', name: 'A', dateOfBirth: '1990-06-15', dateOfJoining: '2020-01-01',
+      employmentStatusCode: 'PERMANENT', immigrationStatusCode: 'SC',
+      salaryComponents: [{ componentCode: 'BASIC', amount: 8000 }, { componentCode: 'OVERTIME', amount: 600 }] }]);
+    const c = r.employees[0].statutoryContributions.find((s) => s.schemeCode === 'CPF')!;
+    expect([c.employeeTotal, c.employerTotal]).toEqual([1600, 1360]);
+    // SDL still counts the overtime: 0.25% of 8,600 is above the 11.25 cap
+    expect(r.employees[0].statutoryContributions.find((s) => s.schemeCode === 'SDL')!.employerTotal).toBe(11.25);
+  });
 });

@@ -45,7 +45,7 @@
   "caps": [],
   "salaryComponents": [
     { "componentCode": "BASIC", "classification": "ordinary_wage", "included": true },
-    { "componentCode": "OVERTIME", "classification": "additional_wage", "included": true },
+    { "componentCode": "OVERTIME", "classification": "ordinary_wage", "included": true },
     { "componentCode": "BONUS", "classification": "additional_wage", "included": true },
     { "componentCode": "COMMISSION", "classification": "additional_wage", "included": true },
     { "componentCode": "AWS", "classification": "additional_wage", "included": true }

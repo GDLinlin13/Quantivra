@@ -79,7 +79,7 @@
     },
     {
       "componentCode": "OVERTIME",
-      "classification": "additional_wage",
+      "classification": "ordinary_wage",
       "included": true
     },
     {
