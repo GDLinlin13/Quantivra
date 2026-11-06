@@ -187,7 +187,7 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
               onChange={v => pickItem(i, v ?? null)}
               options={catalog.map(it => ({ value: it.id, label: `${it.code ? `${it.code} · ` : ''}${it.name}` }))} />
           ) }] : []),
-          { title: 'Description', render: (_, l, i) => <Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} value={l.description} placeholder={l.item_id ? 'Added after the item name, e.g. (June 2026)' : ''} onChange={e => setLine(i, { description: e.target.value })} /> },
+          { title: 'Description', render: (_, l, i) => <Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} value={l.description} onChange={e => setLine(i, { description: e.target.value })} /> },
           ...(lineAccounts.length && !sales ? [{ title: 'Account', width: 180, render: (_: any, l: DocLine, i: number) => (
             <Select style={{ width: '100%' }} showSearch optionFilterProp="label" value={l.account_id ?? undefined} onChange={v => setLine(i, { account_id: v })}
               options={accountOptions as any} placeholder="General expenses" />
