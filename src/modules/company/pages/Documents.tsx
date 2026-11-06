@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { renderPdf } from '../../../utils/renderPdf';
-import { Typography, Tree, Table, Button, Space, Upload, Empty, Spin, message, Popconfirm, Alert, Breadcrumb, DatePicker } from 'antd';
+import { Typography, Tree, Table, Button, Space, Upload, Empty, Spin, message, Popconfirm, Alert, Breadcrumb, DatePicker, Select, Segmented } from 'antd';
 import dayjs from 'dayjs';
 import { FolderOutlined, FolderOpenOutlined, FilePdfOutlined, FileOutlined, DownloadOutlined, EyeOutlined, UploadOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -9,8 +9,8 @@ import { brandingService, type Branding } from '../../../services/branding';
 import { payrollService, type PayrollRunRow, type PayslipRow } from '../../../services/payroll';
 import { hrService, type Employee } from '../../../services/hr';
 import {
-  docService, contactService, accountService, financeSettingsService, catalogService, attachmentService, companyFileService,
-  type Attachment, type CompanyFile,
+  docService, contactService, accountService, financeSettingsService, catalogService, attachmentService, companyFileService, statementPrefService,
+  type Attachment, type CompanyFile, type DuplicateStatement,
 } from '../../../services/finance';
 import { DEFAULT_FINANCE_SETTINGS, DOC_LABEL, type FinDocument, type FinanceSettings, type Contact, type ContactPerson } from '../../../data/finance';
 import { lineText, type CatalogItem } from '../../../data/catalog';
@@ -18,10 +18,11 @@ import { buildFolders, type Folder, type DocFile } from '../../../data/documents
 import { downloadBlob, formatFileName, formatDocFileName } from '../../../utils/payslipFiles';
 import { PayslipView } from './hr/PayslipView';
 import { DocumentView } from './finance/DocumentView';
+import { saveBankStatement } from './finance/saveStatement';
 
 const { Title, Text } = Typography;
 
-type Row = DocFile | { kind: 'payslip'; key: string; name: string; date: string; slip: PayslipRow; run: PayrollRunRow };
+type Row = DocFile;
 
 /** Documents: payslips, invoices, bills' files, bank statements and other files, in folders. */
 export function CompanyDocumentsPage() {
@@ -40,10 +41,15 @@ export function CompanyDocumentsPage() {
   const [banks, setBanks] = useState<{ id: number; name: string }[]>([]);
   const [employees, setEmployees] = useState<Map<number, Employee>>(new Map());
   const [selected, setSelected] = useState<string>('payslips');
-  const [slips, setSlips] = useState<{ run: PayrollRunRow; payslips: PayslipRow[] } | null>(null);
+  const [slips, setSlips] = useState<PayslipRow[]>([]);
+  // folders by date (year / month) or by name (employee, customer, supplier)
+  const [by, setBy] = useState<'date' | 'name'>(() => { try { return localStorage.getItem('qv-docs-by') === 'name' ? 'name' : 'date'; } catch { return 'date'; } });
+  const changeBy = (v: 'date' | 'name') => { setBy(v); setSelected(trail[0]?.key || 'payslips'); try { localStorage.setItem('qv-docs-by', v); } catch { /* ignore */ } };
   const [busy, setBusy] = useState<string | null>(null);
   const [month, setMonth] = useState(dayjs().subtract(1, 'month'));
   const [expanded, setExpanded] = useState<string[]>([]);
+  const [dupPref, setDupPref] = useState<DuplicateStatement>('ask');
+  useEffect(() => { if (companyId) statementPrefService.get(companyId).then(setDupPref).catch(() => null); }, [companyId]);
 
   const load = useCallback(async () => {
     if (!companyId) return;
@@ -66,14 +72,29 @@ export function CompanyDocumentsPage() {
     setCompany(co); setBranding(b); setSettings(s); setContacts(cs); setPeople(pp); setItems(it); setDocs(ds); setRuns(rs);
     setAttachments(at); setFiles(fs); setBanks(acc.filter(a => a.subtype === 'bank').map(a => ({ id: a.id, name: a.name })));
     setEmployees(new Map(emps.map(e => [Number(e.id), e])));
+    // every payslip of the finalised runs (pay data: empty without pay access)
+    const done = rs.filter(r => r.status !== 'draft').map(r => r.id);
+    setSlips(done.length ? await supabase.from('payslips').select('*').in('run_id', done).then(r => (r.error ? [] : r.data || [])) : []);
     setLoading(false);
   }, [companyId]);
   useEffect(() => { load(); }, [load]);
 
+  const coName = branding?.legal_name || company?.name || '';
+  const runById = useMemo(() => new Map(runs.map(r => [r.id, r])), [runs]);
+  const slipName = (p: PayslipRow) => {
+    const r = runById.get(p.run_id)!;
+    return formatFileName(branding?.templates.payslip.fileName, {
+      name: p.employee_name, id: p.employee_code || '', designation: p.result_json?.designation || employees.get(Number(p.employee_id))?.job_title || '',
+      year: r.period_year, month: r.period_month, company: coName,
+    });
+  };
   const folders = useMemo(() => buildFolders({
     runs, attachments, files, banks,
+    slips: slips.filter(p => runById.has(p.run_id)).map(p => ({ id: p.id, run_id: p.run_id, employee_name: p.employee_name, name: slipName(p) })),
     docs: docs.map(d => ({ ...d, contact: contacts.find(c => c.id === d.contact_id)?.name })),
-  }), [runs, docs, attachments, files, banks, contacts]);
+  }, { by }),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [runs, slips, docs, attachments, files, banks, contacts, by, branding, employees]);
 
   // find the selected folder and the path to it
   const trail = useMemo(() => {
@@ -91,27 +112,13 @@ export function CompanyDocumentsPage() {
   // inside Bank statements → <bank>: statements can be uploaded for a chosen month
   const bankId = trail[0]?.key === 'bank' && trail[1] ? Number(trail[1].key.split('/')[1]) || null : null;
 
-  // a month of payslips: load that run's payslips
-  useEffect(() => {
-    setSlips(null);
-    if (folder?.runId) payrollService.getRun(folder.runId).then(setSlips).catch(() => setSlips(null));
-  }, [folder?.runId]);
-
-  const coName = branding?.legal_name || company?.name || '';
-  const rows: Row[] = folder?.runId
-    ? (slips?.payslips || []).map(p => ({
-      kind: 'payslip' as const, key: `slip-${p.id}`, slip: p, run: slips!.run, date: slips!.run.pay_date,
-      name: formatFileName(branding?.templates.payslip.fileName, {
-        name: p.employee_name, id: p.employee_code || '', designation: p.result_json?.designation || employees.get(Number(p.employee_id))?.job_title || '',
-        year: slips!.run.period_year, month: slips!.run.period_month, company: coName,
-      }),
-    }))
-    : folder?.files || [];
+  const rows: Row[] = folder?.files || [];
 
   /** The file's contents and the name to save it under. */
   const fileOf = async (r: Row): Promise<{ blob: Blob; name: string }> => {
     if (r.kind === 'payslip') {
-      return { name: r.name, blob: await renderPdf(<PayslipView slip={r.slip} company={company} branding={branding} period={r.run} employee={employees.get(Number(r.slip.employee_id)) || null} domId="doc-render" />) };
+      const slip = slips.find(p => p.id === r.slipId)!, run = runById.get(r.runId)!;
+      return { name: r.name, blob: await renderPdf(<PayslipView slip={slip} company={company} branding={branding} period={run} employee={employees.get(Number(slip.employee_id)) || null} domId="doc-render" />) };
     }
     if (r.kind === 'doc') {
       const { doc, lines } = await docService.get(r.docId);
@@ -141,7 +148,11 @@ export function CompanyDocumentsPage() {
   const toTree = (list: Folder[]): any[] => list.map(f => ({ key: f.key, title: f.title, children: toTree(f.children), isLeaf: !f.children.length }));
   return (
     <div>
-      <Title level={4} style={{ color: '#f0ede6' }}>Documents</Title>
+      <Space style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }} wrap>
+        <Title level={4} style={{ color: '#f0ede6', margin: 0 }}>Documents</Title>
+        <Segmented value={by} onChange={v => changeBy(v as 'date' | 'name')}
+          options={[{ value: 'date', label: 'By date' }, { value: 'name', label: 'By employee / customer / supplier' }]} />
+      </Space>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 280px) 1fr', gap: 16, alignItems: 'start' }}>
         <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: 8 }}>
           <Tree.DirectoryTree treeData={toTree(folders)} selectedKeys={[folder?.key]}
@@ -157,8 +168,9 @@ export function CompanyDocumentsPage() {
                 <Text type="secondary">Statement for</Text>
                 <DatePicker picker="month" format="MMMM YYYY" allowClear={false} value={month} onChange={d => d && setMonth(d)} />
                 <Upload showUploadList={false} beforeUpload={file => {
-                  companyFileService.add(companyId, file, { folder: 'bank', account_id: bankId, period: month.format('YYYY-MM') })
-                    .then(() => { message.success(`${file.name} saved as the ${month.format('MMMM YYYY')} statement`); load(); }).catch(e => message.error(e.message));
+                  saveBankStatement(companyId, file, bankId, month.format('YYYY-MM'))
+                    .then(r => { message.success(r === 'kept-old' ? 'Kept the statement that was already there' : `${file.name} saved as the ${month.format('MMMM YYYY')} statement`); load(); })
+                    .catch(e => message.error(e.message));
                   return false;
                 }}>
                   <Button icon={<UploadOutlined />}>Upload statement</Button>
@@ -174,6 +186,13 @@ export function CompanyDocumentsPage() {
               </Upload>
             )}
           </div>
+          {trail[0]?.key === 'bank' && (
+            <Space style={{ marginBottom: 12 }} wrap>
+              <Text type="secondary">If a month already has a statement</Text>
+              <Select style={{ width: 200 }} value={dupPref} onChange={v => { setDupPref(v); statementPrefService.set(companyId, v).catch(e => message.error(e.message)); }}
+                options={[{ value: 'ask', label: 'Ask me' }, { value: 'new', label: 'Keep the new one' }, { value: 'old', label: 'Keep the old one' }, { value: 'both', label: 'Keep both' }]} />
+            </Space>
+          )}
           {folder?.key === 'bank' && !folder.children.length && (
             <Alert type="info" showIcon style={{ marginBottom: 12 }} title="Bank statements you import in Finance → Bank are kept here, in a folder for each bank." />
           )}
@@ -181,7 +200,7 @@ export function CompanyDocumentsPage() {
             <Table rowKey="key" size="small" pagination={false} showHeader={false} dataSource={folder.children.map(f => ({ key: f.key, title: f.title }))}
               onRow={f => ({ onClick: () => setSelected(f.key), style: { cursor: 'pointer' } })}
               columns={[{ key: 'n', render: (_, f: { key: string; title: string }) => <Space><FolderOutlined />{f.title}</Space> }]} />
-          ) : folder?.runId && !slips ? <Spin /> : !rows.length ? (
+          ) : !rows.length ? (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing here yet" />
           ) : (
             <Table rowKey="key" size="small" dataSource={rows} pagination={{ pageSize: 50, hideOnSinglePage: true }}
@@ -206,7 +225,7 @@ export function CompanyDocumentsPage() {
                 },
               ]} />
           )}
-          {folder && !folder.runId && rows.length > 0 && <Text type="secondary" style={{ fontSize: 12 }}>{rows.length} files</Text>}
+          {folder && rows.length > 0 && <Text type="secondary" style={{ fontSize: 12 }}>{rows.length} files</Text>}
         </div>
       </div>
     </div>

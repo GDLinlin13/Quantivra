@@ -465,6 +465,22 @@ export const pdfLayoutService = {
   },
 };
 
+// ---- what to do when a month already has a bank statement ---------------------------------
+
+export type DuplicateStatement = 'ask' | 'new' | 'old' | 'both';
+export const statementPrefService = {
+  async get(companyId: number): Promise<DuplicateStatement> {
+    const { data } = await supabase.from('company_settings').select('value')
+      .eq('company_id', companyId).eq('category', 'company').eq('key', 'bank_statement_duplicates').maybeSingle();
+    const v = (data?.value as any)?.choice;
+    return v === 'new' || v === 'old' || v === 'both' ? v : 'ask';
+  },
+  async set(companyId: number, choice: DuplicateStatement) {
+    must(await supabase.from('company_settings').upsert(
+      { company_id: companyId, category: 'company', key: 'bank_statement_duplicates', value: { choice } }, { onConflict: 'company_id,category,key' }));
+  },
+};
+
 // ---- catalog (products and services) ---------------------------------------------------------
 
 
