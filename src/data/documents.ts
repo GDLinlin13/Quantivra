@@ -11,6 +11,8 @@ export interface Folder {
   key: string; title: string; children: Folder[]; files: DocFile[];
   /** files can be uploaded here */
   upload?: 'other';
+  /** your own folder inside Other files, e.g. 'Contracts/Leases' ('' = Other files itself) */
+  userPath?: string;
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -22,7 +24,9 @@ export interface DocumentsInput {
   slips?: { id: number; run_id: number; employee_name: string; name: string }[];
   docs: { id: number; doc_type: string; number: string | null; issue_date: string; status: string; contact?: string }[];
   attachments: { id: number; document_id: number; file_name: string; path: string; size_bytes: number | null; created_at?: string }[];
-  files: { id: number; folder: string; account_id: number | null; period: string | null; path: string; file_name: string; size_bytes: number | null; created_at: string }[];
+  files: { id: number; folder: string; account_id: number | null; period: string | null; path: string; file_name: string; size_bytes: number | null; created_at: string; subfolder?: string | null }[];
+  /** folders the company made inside Other files, e.g. ['Contracts', 'Contracts/Leases'] */
+  userFolders?: string[];
   banks: { id: number; name: string }[];
 }
 
@@ -125,10 +129,29 @@ export function buildFolders(input: DocumentsInput, opts: { payslips?: boolean; 
     }
     out.push(f);
   }
-  out.push({
-    key: 'other', title: 'Other files', children: [], upload: 'other',
-    files: input.files.filter(x => x.folder === 'other').map(x => ({ key: `file-${x.id}`, name: x.file_name, date: x.created_at.slice(0, 10), kind: 'stored' as const, path: x.path, size: x.size_bytes, fileId: x.id })),
-  });
+  {
+    // Other files, with the company's own folders (and folders inside folders)
+    const root: Folder = { key: 'other', title: 'Other files', children: [], files: [], upload: 'other', userPath: '' };
+    const byPath = new Map<string, Folder>([['', root]]);
+    const ensure = (path: string): Folder => {
+      const hit = byPath.get(path);
+      if (hit) return hit;
+      const parts = path.split('/');
+      const parent = ensure(parts.slice(0, -1).join('/'));
+      const f: Folder = { key: `other/${path}`, title: parts[parts.length - 1], children: [], files: [], upload: 'other', userPath: path };
+      parent.children.push(f);
+      byPath.set(path, f);
+      return f;
+    };
+    const clean = (p?: string | null) => (p || '').split('/').map(x => x.trim()).filter(Boolean).join('/');
+    for (const p of input.userFolders || []) if (clean(p)) ensure(clean(p));
+    for (const x of input.files.filter(x => x.folder === 'other')) {
+      ensure(clean(x.subfolder)).files.push({ key: `file-${x.id}`, name: x.file_name, date: x.created_at.slice(0, 10), kind: 'stored' as const, path: x.path, size: x.size_bytes, fileId: x.id });
+    }
+    const sortAll = (f: Folder) => { f.children.sort((a, b) => a.title.localeCompare(b.title)); f.children.forEach(sortAll); };
+    sortAll(root);
+    out.push(root);
+  }
   return out;
 }
 

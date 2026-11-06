@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { renderPdf } from '../../../utils/renderPdf';
-import { Typography, Tree, Table, Button, Space, Upload, Empty, Spin, message, Popconfirm, Alert, Breadcrumb, DatePicker, Select, Segmented } from 'antd';
+import { Typography, Tree, Table, Button, Space, Upload, Empty, Spin, message, Popconfirm, Alert, Breadcrumb, DatePicker, Select, Modal, Input } from 'antd';
 import dayjs from 'dayjs';
-import { FolderOutlined, FolderOpenOutlined, FilePdfOutlined, FileOutlined, DownloadOutlined, EyeOutlined, UploadOutlined, DeleteOutlined } from '@ant-design/icons';
+import { FolderOutlined, FolderOpenOutlined, FilePdfOutlined, FileOutlined, DownloadOutlined, EyeOutlined, UploadOutlined, DeleteOutlined, FolderAddOutlined } from '@ant-design/icons';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../utils/supabase';
 import { brandingService, type Branding } from '../../../services/branding';
 import { payrollService, type PayrollRunRow, type PayslipRow } from '../../../services/payroll';
 import { hrService, type Employee } from '../../../services/hr';
 import {
-  docService, contactService, accountService, financeSettingsService, catalogService, attachmentService, companyFileService, statementPrefService,
+  docService, contactService, accountService, financeSettingsService, catalogService, attachmentService, companyFileService, statementPrefService, documentFolderService,
   type Attachment, type CompanyFile, type DuplicateStatement,
 } from '../../../services/finance';
 import { DEFAULT_FINANCE_SETTINGS, DOC_LABEL, type FinDocument, type FinanceSettings, type Contact, type ContactPerson } from '../../../data/finance';
@@ -49,13 +49,17 @@ export function CompanyDocumentsPage() {
   const [month, setMonth] = useState(dayjs().subtract(1, 'month'));
   const [expanded, setExpanded] = useState<string[]>([]);
   const [dupPref, setDupPref] = useState<DuplicateStatement>('ask');
+  // the company's own folders inside Other files
+  const [userFolders, setUserFolders] = useState<string[]>([]);
+  const [addingFolder, setAddingFolder] = useState(false);
+  const [newFolder, setNewFolder] = useState('');
   useEffect(() => { if (companyId) statementPrefService.get(companyId).then(setDupPref).catch(() => null); }, [companyId]);
 
   const load = useCallback(async () => {
     if (!companyId) return;
     setLoading(true);
     const safe = <T,>(p: Promise<T>, d: T) => p.catch(() => d);
-    const [co, b, s, cs, pp, it, ds, rs, at, fs, acc, emps] = await Promise.all([
+    const [co, b, s, cs, pp, it, ds, rs, at, fs, acc, emps, uf] = await Promise.all([
       supabase.from('companies').select('*').eq('id', companyId).maybeSingle().then(r => r.data),
       safe(brandingService.get(companyId), null as Branding | null),
       safe(financeSettingsService.get(companyId), DEFAULT_FINANCE_SETTINGS),
@@ -68,10 +72,11 @@ export function CompanyDocumentsPage() {
       safe(companyFileService.list(companyId), [] as CompanyFile[]),
       safe(accountService.list(companyId), []),
       safe(hrService.listEmployees(companyId), [] as Employee[]),
+      safe(documentFolderService.list(companyId), [] as string[]),
     ]);
     setCompany(co); setBranding(b); setSettings(s); setContacts(cs); setPeople(pp); setItems(it); setDocs(ds); setRuns(rs);
     setAttachments(at); setFiles(fs); setBanks(acc.filter(a => a.subtype === 'bank').map(a => ({ id: a.id, name: a.name })));
-    setEmployees(new Map(emps.map(e => [Number(e.id), e])));
+    setEmployees(new Map(emps.map(e => [Number(e.id), e]))); setUserFolders(uf);
     // every payslip of the finalised runs (pay data: empty without pay access)
     const done = rs.filter(r => r.status !== 'draft').map(r => r.id);
     setSlips(done.length ? await supabase.from('payslips').select('*').in('run_id', done).then(r => (r.error ? [] : r.data || [])) : []);
@@ -89,12 +94,12 @@ export function CompanyDocumentsPage() {
     });
   };
   const folders = useMemo(() => buildFolders({
-    runs, attachments, files, banks,
+    runs, attachments, files, banks, userFolders,
     slips: slips.filter(p => runById.has(p.run_id)).map(p => ({ id: p.id, run_id: p.run_id, employee_name: p.employee_name, name: slipName(p) })),
     docs: docs.map(d => ({ ...d, contact: contacts.find(c => c.id === d.contact_id)?.name })),
   }, { by }),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [runs, slips, docs, attachments, files, banks, contacts, by, branding, employees]);
+  [runs, slips, docs, attachments, files, banks, contacts, by, branding, employees, userFolders]);
 
   // find the selected folder and the path to it
   const trail = useMemo(() => {
@@ -150,10 +155,10 @@ export function CompanyDocumentsPage() {
     <div>
       <Space style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }} wrap>
         <Title level={4} style={{ color: '#f0ede6', margin: 0 }}>Documents</Title>
-        <Segmented value={by} onChange={v => changeBy(v as 'date' | 'name')}
-          options={[{ value: 'date', label: 'By date' }, { value: 'name', label: 'By employee / customer / supplier' }]} />
+        <Select style={{ width: 140 }} value={by} onChange={v => changeBy(v)}
+          options={[{ value: 'date', label: 'Date' }, { value: 'name', label: 'Name' }]} />
       </Space>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 280px) 1fr', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 380px) 1fr', gap: 16, alignItems: 'start' }}>
         <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: 8 }}>
           <Tree.DirectoryTree treeData={toTree(folders)} selectedKeys={[folder?.key]}
             expandedKeys={[...new Set([...expanded, ...trail.slice(0, -1).map(f => f.key)])]} onExpand={keys => setExpanded(keys.map(String))}
@@ -178,12 +183,26 @@ export function CompanyDocumentsPage() {
               </Space>
             )}
             {folder?.upload && (
-              <Upload multiple showUploadList={false} beforeUpload={file => {
-                companyFileService.add(companyId, file, { folder: folder.upload! }).then(() => { message.success(`${file.name} uploaded`); load(); }).catch(e => message.error(e.message));
-                return false;
-              }}>
-                <Button icon={<UploadOutlined />}>Upload</Button>
-              </Upload>
+              <Space wrap>
+                {folder.userPath && !folder.children.length && !folder.files.length && (
+                  <Popconfirm title={`Delete the folder ${folder.title}?`} onConfirm={async () => {
+                    try {
+                      await documentFolderService.save(companyId, userFolders.filter(p => p !== folder.userPath && !p.startsWith(`${folder.userPath}/`)));
+                      setSelected(trail[trail.length - 2]?.key || 'other'); load();
+                    } catch (e: any) { message.error(e.message); }
+                  }}>
+                    <Button danger icon={<DeleteOutlined />}>Delete folder</Button>
+                  </Popconfirm>
+                )}
+                <Button icon={<FolderAddOutlined />} onClick={() => { setNewFolder(''); setAddingFolder(true); }}>New folder</Button>
+                <Upload multiple showUploadList={false} beforeUpload={file => {
+                  companyFileService.add(companyId, file, { folder: folder.upload!, subfolder: folder.userPath || null })
+                    .then(() => { message.success(`${file.name} uploaded`); load(); }).catch(e => message.error(e.message));
+                  return false;
+                }}>
+                  <Button icon={<UploadOutlined />}>Upload</Button>
+                </Upload>
+              </Space>
             )}
           </div>
           {trail[0]?.key === 'bank' && (
@@ -197,12 +216,11 @@ export function CompanyDocumentsPage() {
             <Alert type="info" showIcon style={{ marginBottom: 12 }} title="Bank statements you import in Finance → Bank are kept here, in a folder for each bank." />
           )}
           {folder?.children.length ? (
-            <Table rowKey="key" size="small" pagination={false} showHeader={false} dataSource={folder.children.map(f => ({ key: f.key, title: f.title }))}
+            <Table rowKey="key" size="small" pagination={false} showHeader={false} style={{ marginBottom: rows.length ? 12 : 0 }} dataSource={folder.children.map(f => ({ key: f.key, title: f.title }))}
               onRow={f => ({ onClick: () => setSelected(f.key), style: { cursor: 'pointer' } })}
               columns={[{ key: 'n', render: (_, f: { key: string; title: string }) => <Space><FolderOutlined />{f.title}</Space> }]} />
-          ) : !rows.length ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing here yet" />
-          ) : (
+          ) : null}
+          {!rows.length ? (!folder?.children.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing here yet" />) : (
             <Table rowKey="key" size="small" dataSource={rows} pagination={{ pageSize: 50, hideOnSinglePage: true }}
               columns={[
                 { title: 'Name', key: 'n', render: (_, r: Row) => <Space>{/\.pdf$/i.test(r.name) || r.kind !== 'stored' ? <FilePdfOutlined /> : <FileOutlined />}<a onClick={() => act(r, 'open')}>{r.name}</a></Space> },
@@ -228,6 +246,17 @@ export function CompanyDocumentsPage() {
           {folder && rows.length > 0 && <Text type="secondary" style={{ fontSize: 12 }}>{rows.length} files</Text>}
         </div>
       </div>
+      <Modal open={addingFolder} title={`New folder in ${folder?.title || 'Other files'}`} okText="Create" onCancel={() => setAddingFolder(false)}
+        okButtonProps={{ disabled: !newFolder.trim() || newFolder.includes('/') }}
+        onOk={async () => {
+          const path = [folder?.userPath, newFolder.trim()].filter(Boolean).join('/');
+          try {
+            await documentFolderService.save(companyId, [...userFolders, path]);
+            setAddingFolder(false); setSelected(`other/${path}`); load();
+          } catch (e: any) { message.error(e.message); }
+        }}>
+        <Input autoFocus value={newFolder} onChange={e => setNewFolder(e.target.value)} />
+      </Modal>
     </div>
   );
 }

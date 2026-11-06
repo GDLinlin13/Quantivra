@@ -40,3 +40,21 @@ describe('documents folders', () => {
     expect(statementPeriod([])).toBeNull();
   });
 });
+
+describe('your own folders', () => {
+  it('nests folders inside Other files and puts files in them', () => {
+    const f = buildFolders({
+      runs: [], docs: [], attachments: [], banks: [],
+      userFolders: ['Contracts/Leases', 'Insurance'],
+      files: [
+        { id: 1, folder: 'other', account_id: null, period: null, path: '1/files/a.pdf', file_name: 'Office lease.pdf', size_bytes: 1, created_at: '2026-06-01T00:00:00Z', subfolder: 'Contracts/Leases' },
+        { id: 2, folder: 'other', account_id: null, period: null, path: '1/files/b.pdf', file_name: 'Loose.pdf', size_bytes: 1, created_at: '2026-06-01T00:00:00Z' },
+      ],
+    });
+    const other = f.find(x => x.key === 'other')!;
+    expect(other.children.map(c => c.title)).toEqual(['Contracts', 'Insurance']);
+    expect(other.files.map(x => x.name)).toEqual(['Loose.pdf']);
+    const leases = other.children[0].children[0];
+    expect([leases.key, leases.userPath, leases.files.map(x => x.name)]).toEqual(['other/Contracts/Leases', 'Contracts/Leases', ['Office lease.pdf']]);
+  });
+});
