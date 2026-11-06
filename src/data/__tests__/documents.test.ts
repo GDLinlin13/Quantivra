@@ -58,3 +58,12 @@ describe('your own folders', () => {
     expect([leases.key, leases.userPath, leases.files.map(x => x.name)]).toEqual(['other/Contracts/Leases', 'Contracts/Leases', ['Office lease.pdf']]);
   });
 });
+
+describe('file order', () => {
+  it('sorts own folders\' files by name, numbers in number order', () => {
+    const file = (id: number, name: string) => ({ id, folder: 'other', account_id: null, period: null, path: `1/files/${id}`, file_name: name, size_bytes: 1, created_at: `2026-11-0${id}T00:00:00Z`, subfolder: 'CPF' });
+    const f = buildFolders({ runs: [], docs: [], attachments: [], banks: [], userFolders: ['CPF'],
+      files: [file(1, '202607 ($11,722).pdf'), file(2, '202608 ($12,278).pdf'), file(3, '202606 ($11,348.50).pdf'), file(4, '202605 ($11,348.50).pdf'), file(5, 'Note 10.pdf'), file(6, 'Note 2.pdf')] });
+    expect(f.find(x => x.title === 'CPF')!.files.map(x => x.name)).toEqual(['202605 ($11,348.50).pdf', '202606 ($11,348.50).pdf', '202607 ($11,722).pdf', '202608 ($12,278).pdf', 'Note 2.pdf', 'Note 10.pdf']);
+  });
+});
