@@ -150,8 +150,11 @@ export function buildFolders(input: DocumentsInput, opts: { payslips?: boolean; 
     for (const x of input.files.filter(x => x.folder === 'other')) {
       ensure(clean(x.subfolder)).files.push({ key: `file-${x.id}`, name: x.file_name, date: x.created_at.slice(0, 10), kind: 'stored' as const, path: x.path, size: x.size_bytes, fileId: x.id });
     }
-    const sortAll = (f: Folder) => { f.children.sort((a, b) => a.title.localeCompare(b.title)); f.children.forEach(sortAll); };
-    tops.sort((a, b) => a.title.localeCompare(b.title)).forEach(sortAll);
+    // own folders and their files: by name, numbers in number order (202605, 202606 … / 2, 10)
+    const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    const sortAll = (f: Folder) => { f.children.sort((a, b) => byName(a.title, b.title)); f.files.sort((a, b) => byName(a.name, b.name)); f.children.forEach(sortAll); };
+    tops.sort((a, b) => byName(a.title, b.title)).forEach(sortAll);
+    sortAll(root);
     out.push(...tops, root);
   }
   return out;
