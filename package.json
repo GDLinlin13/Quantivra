@@ -23,13 +23,15 @@
     "@supabase/supabase-js": "^2.110.1",
     "antd": "^6.5.0",
     "dayjs": "^1.11.21",
+    "docx-preview": "^0.4.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
     "pdfjs-dist": "^6.4.299",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.18.1"
+    "react-router-dom": "^7.18.1",
+    "read-excel-file": "^9.3.12"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",

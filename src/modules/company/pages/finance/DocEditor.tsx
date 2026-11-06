@@ -3,6 +3,8 @@ import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Ta
 import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { docService, paymentService, catalogService, attachmentService, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
+import { companyFileService } from '../../../../services/finance';
+import { FileViewer } from '../../../../components/FileViewer';
 import {
   docTotals, addDays, today, DOC_LABEL, STATUS_LABEL, STATUS_COLOR,
   type DocType, type FinDocument, type DocLine, type DocDiscount, type Contact, type ContactPerson, type FinanceSettings, type Account,
@@ -34,6 +36,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
   const [loading, setLoading] = useState(!!docId);
   const [files, setFiles] = useState<Attachment[]>([]);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [viewFile, setViewFile] = useState<Attachment | null>(null);
   const loadFiles = () => { if (docId) attachmentService.list(docId).then(setFiles).catch(() => setFiles([])); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(loadFiles, [docId]);
@@ -257,7 +260,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
                 {files.map(f => (
                   <Space key={f.id} size={4}>
                     <PaperClipOutlined />
-                    <a onClick={() => attachmentService.open(f).catch(e => message.error(e.message))}>{f.file_name}</a>
+                    <a onClick={() => setViewFile(f)}>{f.file_name}</a>
                     <Popconfirm title={`Remove ${f.file_name}?`} onConfirm={async () => { try { await attachmentService.remove(f); loadFiles(); } catch (e: any) { message.error(e.message); } }}>
                       <Button size="small" type="text" danger icon={<DeleteOutlined />} />
                     </Popconfirm>
@@ -309,6 +312,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
           </Popconfirm>
         </div>
       )}
+      {viewFile && <FileViewer name={viewFile.file_name} load={() => companyFileService.blob(viewFile.path)} onClose={() => setViewFile(null)} />}
     </Drawer>
   );
 }

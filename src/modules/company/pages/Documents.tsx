@@ -18,6 +18,7 @@ import { buildFolders, type Folder, type DocFile } from '../../../data/documents
 import { downloadBlob, formatFileName, formatDocFileName } from '../../../utils/payslipFiles';
 import { PayslipView } from './hr/PayslipView';
 import { DocumentView } from './finance/DocumentView';
+import { FileViewer } from '../../../components/FileViewer';
 import { saveBankStatement } from './finance/saveStatement';
 
 const { Title, Text } = Typography;
@@ -179,15 +180,12 @@ export function CompanyDocumentsPage() {
     }
     return { name: r.name, blob: await companyFileService.blob(r.path) };
   };
+  // open: show it in the viewer popup; download: save it
+  const [viewing, setViewing] = useState<Row | null>(null);
   const act = async (r: Row, how: 'open' | 'download') => {
-    // open the tab straight away so the browser doesn't block it
-    const w = how === 'open' ? window.open('', '_blank') : null;
+    if (how === 'open') { setViewing(r); return; }
     setBusy(r.key);
-    try {
-      const { blob, name } = await fileOf(r);
-      if (w) w.location.href = URL.createObjectURL(blob);
-      else downloadBlob(blob, name);
-    } catch (e: any) { w?.close(); message.error(e.message); }
+    try { const { blob, name } = await fileOf(r); downloadBlob(blob, name); } catch (e: any) { message.error(e.message); }
     setBusy(null);
   };
 
@@ -330,6 +328,7 @@ export function CompanyDocumentsPage() {
               .map(p => ({ value: p, label: p.split('/').join(' › ') })),
           ]} />
       </Modal>
+      {viewing && <FileViewer name={viewing.kind === 'stored' ? viewing.name : viewing.name.replace(/(\.pdf)?$/i, '.pdf')} load={() => fileOf(viewing).then(x => x.blob)} onClose={() => setViewing(null)} />}
     </div>
   );
 }
