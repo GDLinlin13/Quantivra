@@ -75,7 +75,13 @@ export function Bank({ data }: { data: FinanceData }) {
   useEffect(() => { load(); }, [load, data.docs]);
 
   const statementBalance = useMemo(() => Math.round(((Number(foreign ? account?.opening_foreign : account?.opening_balance) || 0) + txns.reduce((s, t) => s + Number(t.amount), 0)) * 100) / 100, [txns, account, foreign]);
-  const shown = txns.filter(t => filter === 'all' || t.status === filter);
+  // Recorded in Quantivra for this bank but not on any statement line yet (e.g. a transfer booked from
+  // another bank, a payment recorded by hand): shown so the statement line can be matched to it.
+  const expected = useMemo(() => accountId ? recordedNotOnStatement(accountId, look, allTxns, data) : [], [accountId, look, allTxns, data]);
+  const shown: BankTxn[] = [
+    ...(filter === 'all' || filter === 'expected' ? expected : []),
+    ...txns.filter(t => filter === 'all' || t.status === filter),
+  ].sort((a, b) => b.txn_date.localeCompare(a.txn_date));
   const unmatched = txns.filter(t => t.status === 'unmatched').length;
 
   const bankModal = bankEdit && (
@@ -171,7 +177,8 @@ export function Bank({ data }: { data: FinanceData }) {
           title={`The statement and the System Balance differ by ${money(Math.abs(statementBalance - booksBalance), currency)}. Check for payments recorded in Quantivra that aren't on the statement yet, or the account's opening balance.`} />
       )}
       <Segmented value={filter} onChange={v => setFilter(String(v))} style={{ marginBottom: 12 }}
-        options={[{ value: 'all', label: 'All' }, { value: 'unmatched', label: `To match (${unmatched})` }, { value: 'matched', label: 'Matched' }, { value: 'ignored', label: 'Ignored' }]} />
+        options={[{ value: 'all', label: 'All' }, { value: 'unmatched', label: `To match (${unmatched})` }, { value: 'matched', label: 'Matched' },
+          ...(expected.length ? [{ value: 'expected', label: `Not on a statement yet (${expected.length})` }] : []), { value: 'ignored', label: 'Ignored' }]} />
       <Table rowKey="id" size="small" loading={loading} dataSource={shown} pagination={{ pageSize: 100, hideOnSinglePage: true }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={filter === 'unmatched' ? 'All matched' : 'No lines'} /> }}
         columns={[
@@ -182,13 +189,13 @@ export function Bank({ data }: { data: FinanceData }) {
           { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
           { title: 'Matched to', key: 'm', width: 220, render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : matchLabel(t, data, look)?.accounts || '' },
           {
-            title: '', key: 'a', width: 170, render: (_, t) => (
+            title: '', key: 'a', width: 170, render: (_, t) => t.status === ('expected' as any) ? <Tag color="gold">Not on a statement yet</Tag> : (
               <Space size={4}>
                 {t.status === 'unmatched'
                   ? <Button size="small" type="primary" icon={<LinkOutlined />} onClick={() => setMatching(t)}>Match</Button>
                   : (
-                    <Popconfirm title="Undo this match?" description={t.journal_id ? 'The journal entry made for it is deleted too.' : 'The payment itself stays recorded.'}
-                      onConfirm={async () => { await bankService.unmatch(t, !!t.journal_id); load(); data.reload(); }}>
+                    <Popconfirm title="Undo this match?"
+                      onConfirm={async () => { try { await bankService.unmatch(t, allTxns); load(); data.reload(); } catch (e: any) { message.error(e.message); } }}>
                       <Button size="small" icon={<DisconnectOutlined />}>Undo</Button>
                     </Popconfirm>
                   )}
@@ -269,6 +276,7 @@ export function Bank({ data }: { data: FinanceData }) {
       )}
       {details && <MatchDetails data={data} txn={details} look={look} accCur={accCur} onClose={() => setDetails(null)} />}
       {matching && <MatchModal data={data} txn={matching} accCur={accCur} dues={dues} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
+        recorded={expected}
         onClose={() => setMatching(null)} onDone={() => { setMatching(null); load(); data.reload(); }} />}
     </div>
   );
@@ -294,8 +302,10 @@ function AddLine({ onClose, onAdd, currency }: { onClose: () => void; onAdd: (l:
 }
 
 /** Decide what a statement line is: a payment already recorded, an invoice / bill being paid, or money for an account. */
-function MatchModal({ data, txn, accCur, dues, payments, usedPayments, onClose, onDone }: {
-  data: FinanceData; txn: BankTxn; accCur: string; dues: PayrollDue[]; payments: Payment[]; usedPayments: Set<number>; onClose: () => void; onDone: () => void;
+function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded, onClose, onDone }: {
+  data: FinanceData; txn: BankTxn; accCur: string; dues: PayrollDue[]; payments: Payment[]; usedPayments: Set<number>;
+  /** journals on this bank not on a statement yet (e.g. the other side of a transfer) */
+  recorded: BankTxn[]; onClose: () => void; onDone: () => void;
 }) {
   const inbound = txn.amount > 0;
   const foreign = accCur !== data.currency;
@@ -313,6 +323,8 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, onClose, 
 
   const suggestions = !ready ? [] : payments.filter(p => p.direction === (inbound ? 'in' : 'out') && !usedPayments.has(p.id)
     && Math.abs(Number(p.amount) - amt) < 0.005 && near(p.payment_date) && (!p.account_id || p.account_id === txn.account_id));
+  const journalHits = !ready ? [] : recorded.filter(r => r.journal_id && Math.sign(r.amount) === Math.sign(Number(txn.amount))
+    && Math.abs(Math.abs(r.amount) - amt) < 0.005 && near(r.txn_date));
   const openDocs: FinDocument[] = data.docs.filter(d => (inbound ? d.doc_type === 'invoice' : ['bill', 'expense'].includes(d.doc_type))
     && !['draft', 'void', 'paid'].includes(d.status) && balanceDue(d) > 0)
     .sort((a, b) => Number(Math.abs(balanceDue(a) - amt) > 0.005) - Number(Math.abs(balanceDue(b) - amt) > 0.005));
@@ -350,7 +362,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, onClose, 
           {!ready && <div style={{ marginTop: 6 }}><Tag color="gold">Enter the exchange rate or the {data.currency} amount first</Tag></div>}
         </div>
       )}
-      <Tabs defaultActiveKey={suggestions.length ? 'existing' : payrollHit ? 'payroll' : openDocs.length ? 'doc' : 'account'} items={[
+      <Tabs defaultActiveKey={suggestions.length || journalHits.length ? 'existing' : payrollHit ? 'payroll' : openDocs.length ? 'doc' : 'account'} items={[
         {
           key: 'doc', label: inbound ? 'Payment for an invoice' : 'Payment of a bill / expense',
           children: (
@@ -369,16 +381,25 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, onClose, 
           ),
         },
         {
-          key: 'existing', label: `Payment already recorded (${suggestions.length})`,
-          children: suggestions.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No recorded payment of this amount within two weeks" /> : (
-            <Table rowKey="id" size="small" pagination={false} dataSource={suggestions}
+          key: 'existing', label: `Already recorded (${suggestions.length + journalHits.length})`,
+          children: suggestions.length + journalHits.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing of this amount recorded within two weeks" /> : (<>
+            {journalHits.length > 0 && (
+              <Table rowKey="id" size="small" pagination={false} dataSource={journalHits} style={{ marginBottom: suggestions.length ? 12 : 0 }}
+                columns={[
+                  { title: 'Date', dataIndex: 'txn_date' },
+                  { title: 'Recorded as', key: 'd', render: (_, r) => r.description },
+                  { title: 'Amount', key: 'a', align: 'right' as const, render: (_, r) => money(Math.abs(r.amount), data.currency) },
+                  { title: '', key: 'x', render: (_, r) => <Button size="small" type="primary" loading={busy} onClick={() => run(() => bankService.matchJournal(txn.id, r.journal_id!, signedBase))}>Match</Button> },
+                ]} />
+            )}
+            {suggestions.length > 0 && <Table rowKey="id" size="small" pagination={false} dataSource={suggestions}
               columns={[
                 { title: 'Date', dataIndex: 'payment_date' }, { title: 'Number', dataIndex: 'number' },
                 { title: inbound ? 'From' : 'To', key: 'c', render: (_, p) => contact(p.contact_id) },
                 { title: 'Amount', key: 'a', align: 'right' as const, render: (_, p) => money(p.amount, data.currency) },
                 { title: '', key: 'x', render: (_, p) => <Button size="small" type="primary" loading={busy} onClick={() => run(() => bankService.matchPayment(txn.id, p.id, signedBase))}>Match</Button> },
-              ]} />
-          ),
+              ]} />}
+          </>),
         },
         ...(!inbound ? [{
           key: 'payroll', label: `Payroll (${dues.length})`,
@@ -471,4 +492,29 @@ function BankAccountModal({ data, account, onClose, onSaved }: { data: FinanceDa
       </Form>
     </Modal>
   );
+}
+
+/**
+ * Entries in the books for this bank account that no statement line is matched to yet: journals (a transfer
+ * from another bank, a payment booked in Accounting…) and payments recorded against this bank. Shown as
+ * pseudo statement lines (status 'expected', negative ids) so the real line can be matched to them.
+ */
+function recordedNotOnStatement(accountId: number, look: MatchLookup, allTxns: BankTxn[], data: FinanceData): BankTxn[] {
+  const usedJ = new Set(allTxns.filter(t => t.account_id === accountId && t.journal_id).map(t => t.journal_id));
+  const usedP = new Set(allTxns.filter(t => t.payment_id).map(t => t.payment_id));
+  const out: BankTxn[] = [];
+  for (const j of look.journals) {
+    if (usedJ.has(j.id)) continue;
+    const amount = Math.round(j.lines.filter(l => l.account_id === accountId).reduce((s, l) => s + Number(l.debit) - Number(l.credit), 0) * 100) / 100;
+    if (!amount) continue;
+    out.push({ id: -j.id, company_id: data.companyId, account_id: accountId, txn_date: j.journal_date, description: j.memo || j.number || 'Journal',
+      amount, payment_id: null, journal_id: j.id, status: 'expected' as any });
+  }
+  for (const p of look.payments) {
+    if (p.account_id !== accountId || usedP.has(p.id)) continue;
+    out.push({ id: -1e9 - p.id, company_id: data.companyId, account_id: accountId, txn_date: p.payment_date,
+      description: [p.number, data.contacts.find(c => c.id === p.contact_id)?.name].filter(Boolean).join(' · ') || 'Payment',
+      amount: (p.direction === 'in' ? 1 : -1) * Number(p.amount), payment_id: p.id, journal_id: null, status: 'expected' as any });
+  }
+  return out;
 }

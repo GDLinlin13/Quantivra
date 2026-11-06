@@ -108,13 +108,14 @@ export const attachmentService = {
 export interface CompanyFile {
   id: number; company_id: number; folder: 'bank' | 'other'; account_id: number | null; period: string | null;
   path: string; file_name: string; content_type: string | null; size_bytes: number | null; created_at: string;
+  subfolder?: string | null;
 }
 export const companyFileService = {
   async list(companyId: number): Promise<CompanyFile[]> {
     const r = await supabase.from('company_files').select('*').eq('company_id', companyId).order('created_at', { ascending: false });
     return r.error ? [] : r.data || [];
   },
-  async add(companyId: number, file: File, meta: { folder: 'bank' | 'other'; account_id?: number | null; period?: string | null }) {
+  async add(companyId: number, file: File, meta: { folder: 'bank' | 'other'; account_id?: number | null; period?: string | null; subfolder?: string | null }) {
     if (file.size > ATTACH_MAX_MB * 1024 * 1024) throw new Error(`${file.name} is bigger than ${ATTACH_MAX_MB} MB`);
     const safe = file.name.replace(/[^\w.\- ]+/g, '_').slice(-80);
     const path = `${companyId}/files/${Date.now()}-${safe}`;
@@ -123,6 +124,7 @@ export const companyFileService = {
     const r = await supabase.from('company_files').insert({
       company_id: companyId, folder: meta.folder, account_id: meta.account_id ?? null, period: meta.period ?? null,
       path, file_name: file.name, content_type: file.type || null, size_bytes: file.size,
+      ...(meta.subfolder ? { subfolder: meta.subfolder } : {}),
     });
     if (r.error) {
       await supabase.storage.from(ATTACH_BUCKET).remove([path]);
@@ -411,6 +413,8 @@ export interface BankTxn {
   payment_id: number | null; journal_id: number | null; status: 'unmatched' | 'matched' | 'ignored';
   /** the line in the company's currency, for bank accounts in another currency */
   base_amount?: number | null;
+  /** matched to a journal that was already recorded (e.g. the other side of a transfer), not made by the match */
+  journal_existing?: boolean;
 }
 
 export const bankService = {
@@ -428,6 +432,11 @@ export const bankService = {
   async update(id: number, patch: Partial<BankTxn>) { must(await supabase.from('fin_bank_transactions').update(patch).eq('id', id)); },
   async remove(id: number) { must(await supabase.from('fin_bank_transactions').delete().eq('id', id)); },
   /** Match a statement line to a payment that's already recorded. */
+  /** Match to something already in the books, e.g. a transfer from another of the company's banks. */
+  async matchJournal(txnId: number, journalId: number, baseAmount?: number) {
+    const r = await supabase.from('fin_bank_transactions').update({ journal_id: journalId, payment_id: null, status: 'matched', journal_existing: true, ...(baseAmount != null ? { base_amount: baseAmount } : {}) }).eq('id', txnId);
+    if (r.error) throw new Error(/journal_existing/i.test(r.error.message) ? 'This needs database update 031 — ask your administrator to run it in Supabase.' : r.error.message);
+  },
   async matchPayment(txnId: number, paymentId: number, baseAmount?: number) {
     await this.update(txnId, { payment_id: paymentId, journal_id: null, status: 'matched', ...(baseAmount != null ? { base_amount: baseAmount } : {}) });
   },
@@ -443,9 +452,14 @@ export const bankService = {
     const jid = await journalService.save(companyId, { journal_date: txn.txn_date, memo: memo || txn.description || 'Bank' }, lines);
     await this.update(txn.id, { journal_id: jid, payment_id: null, status: 'matched', ...(baseAmount != null ? { base_amount: Math.sign(Number(txn.amount)) * amt } : {}) });
   },
-  async unmatch(txn: BankTxn, deleteJournal: boolean) {
-    if (deleteJournal && txn.journal_id) await journalService.remove(txn.journal_id);
-    await this.update(txn.id, { payment_id: null, journal_id: null, status: 'unmatched' });
+  /**
+   * Undo a match. A journal the match made is removed too — unless it was already recorded before
+   * (journal_existing) or another statement line (e.g. the other bank of a transfer) is matched to it.
+   */
+  async unmatch(txn: BankTxn, others: BankTxn[] = []) {
+    const shared = others.some(o => o.id !== txn.id && o.journal_id === txn.journal_id);
+    await this.update(txn.id, { payment_id: null, journal_id: null, status: 'unmatched', ...(txn.journal_existing ? { journal_existing: false } : {}) });
+    if (txn.journal_id && !txn.journal_existing && !shared) await journalService.remove(txn.journal_id);
   },
 };
 
@@ -462,6 +476,20 @@ export const pdfLayoutService = {
     if (layout) all[String(accountId)] = layout; else delete all[String(accountId)];
     must(await supabase.from('company_settings').upsert(
       { company_id: companyId, category: 'company', key: 'bank_pdf_layouts', value: all }, { onConflict: 'company_id,category,key' }));
+  },
+};
+
+// ---- the company's own folders in Documents → Other files (migration 031 for files in them) --------
+
+export const documentFolderService = {
+  async list(companyId: number): Promise<string[]> {
+    const { data } = await supabase.from('company_settings').select('value')
+      .eq('company_id', companyId).eq('category', 'company').eq('key', 'document_folders').maybeSingle();
+    return Array.isArray((data?.value as any)?.folders) ? (data!.value as any).folders : [];
+  },
+  async save(companyId: number, folders: string[]) {
+    must(await supabase.from('company_settings').upsert(
+      { company_id: companyId, category: 'company', key: 'document_folders', value: { folders: [...new Set(folders)].sort() } }, { onConflict: 'company_id,category,key' }));
   },
 };
 
