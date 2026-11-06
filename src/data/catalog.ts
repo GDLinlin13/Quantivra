@@ -15,6 +15,19 @@ export function priceFor(item: Pick<CatalogItem, 'id' | 'sale_price'>, contactId
   return Number(own ? own.price : item.sale_price) || 0;
 }
 
+/**
+ * What a document line says on the printed quotation / invoice: the item's name followed by what was typed in
+ * Description, on one line — e.g. "Sales and Customer Service support (June 2026)". Lines without an item, and
+ * older lines whose description already starts with the name, print as typed.
+ */
+export function lineText(line: { item_id?: number | null; description?: string | null }, items: Pick<CatalogItem, 'id' | 'name'>[]): string {
+  const typed = (line.description || '').trim();
+  const it = line.item_id ? items.find(i => i.id === line.item_id) : undefined;
+  if (!it) return typed;
+  if (!typed) return it.name;
+  return typed.toLowerCase().startsWith(it.name.toLowerCase()) ? typed : `${it.name} ${typed}`;
+}
+
 export interface StockAdjustment { id: number; item_id: number; adj_date: string; quantity: number; reason: string | null }
 export interface StockMove { date: string; ref: string; kind: 'opening' | 'sold' | 'bought' | 'returned' | 'adjusted'; quantity: number; note?: string }
 

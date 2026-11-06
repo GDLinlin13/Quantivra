@@ -9,7 +9,7 @@ import {
 } from '../../../../data/finance';
 import { money } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
-import type { CatalogItem } from '../../../../data/catalog';
+import { lineText, type CatalogItem } from '../../../../data/catalog';
 import { DocEditor } from './DocEditor';
 import { DocumentView } from './DocumentView';
 import { PRINT_CSS } from '../hr/PayslipView';
@@ -184,7 +184,7 @@ function ViewModal({ id, data, onClose }: { id: number; data: FinanceData; onClo
         <Button type="primary" icon={<DownloadOutlined />} loading={busy} onClick={download} disabled={!loaded}>Download PDF</Button></Space>}>
       {loaded && doc && (
         <div style={{ width: 760, maxWidth: '100%' }}>
-          <DocumentView doc={doc} lines={loaded.lines} contact={contact} person={person} company={data.company} branding={data.branding} settings={data.settings} />
+          <DocumentView doc={doc} lines={loaded.lines.map(l => ({ ...l, description: lineText(l, data.items) }))} contact={contact} person={person} company={data.company} branding={data.branding} settings={data.settings} />
         </div>
       )}
     </Modal>

@@ -162,7 +162,7 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
         </div>
         {/* the name is what goes on invoices; an older extra description can still be edited or cleared */}
-        {item.description && <Form.Item name="description" label="Extra line on invoices"><Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} /></Form.Item>}
+        {item.description && <Form.Item name="description" label="Extra text after the name on invoices"><Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} /></Form.Item>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
           <Form.Item name="unit" label="Unit"><Input placeholder={kind === 'service' ? 'e.g. hour, project' : 'e.g. pc, box, kg'} /></Form.Item>
           <Form.Item name="sale_price" label="Selling price"><InputNumber min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>

@@ -71,7 +71,7 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
     const it = items.find(x => x.id === id);
     if (!it) { setLine(i, { item_id: null }); return; }
     setLine(i, {
-      item_id: it.id, description: it.description ? `${it.name}\n${it.description}` : it.name,
+      item_id: it.id, description: it.description || '', // the name prints first; Description is anything extra
       unit_price: sales ? priceFor(it, doc.contact_id, custPrices) : Number(it.purchase_price) || 0,
       tax_rate: settings.gstRegistered ? (it.tax_rate == null ? gstRate : Number(it.tax_rate)) : 0,
       account_id: (sales ? it.income_account_id : it.expense_account_id) || null,
@@ -102,7 +102,7 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
 
   const save = async (status?: string) => {
     if (docType !== 'expense' && !doc.contact_id) { message.error(sales ? 'Choose a customer' : 'Choose a supplier'); return; }
-    if (!lines.some(l => (l.description || '').trim() || Number(l.unit_price))) { message.error('Add at least one line'); return; }
+    if (!lines.some(l => (l.description || '').trim() || l.item_id || Number(l.unit_price))) { message.error('Add at least one line'); return; }
     setSaving(true);
     try {
       const id = await docService.save(companyId, { ...doc, doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines);
@@ -180,7 +180,7 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
               onChange={v => pickItem(i, v ?? null)}
               options={catalog.map(it => ({ value: it.id, label: `${it.code ? `${it.code} · ` : ''}${it.name}` }))} />
           ) }] : []),
-          { title: 'Description', render: (_, l, i) => <Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} value={l.description} onChange={e => setLine(i, { description: e.target.value })} /> },
+          { title: 'Description', render: (_, l, i) => <Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} value={l.description} placeholder={l.item_id ? 'Added after the item name, e.g. (June 2026)' : ''} onChange={e => setLine(i, { description: e.target.value })} /> },
           ...(lineAccounts.length && !sales ? [{ title: 'Account', width: 180, render: (_: any, l: DocLine, i: number) => (
             <Select style={{ width: '100%' }} showSearch optionFilterProp="label" value={l.account_id ?? undefined} onChange={v => setLine(i, { account_id: v })}
               options={accountOptions as any} placeholder="General expenses" />

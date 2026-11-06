@@ -28,3 +28,14 @@ describe('customer prices', () => {
     expect(priceFor(item, null, prices)).toBe(67750);
   });
 });
+
+describe('invoice line text', () => {
+  it('prints the item name, then the description, on one line', async () => {
+    const { lineText } = await import('../catalog');
+    const items = [{ id: 1, name: 'Sales and Customer Service support' }];
+    expect(lineText({ item_id: 1, description: '(June 2026)' }, items)).toBe('Sales and Customer Service support (June 2026)');
+    expect(lineText({ item_id: 1, description: '' }, items)).toBe('Sales and Customer Service support');
+    expect(lineText({ item_id: 1, description: 'Sales and Customer Service support' }, items)).toBe('Sales and Customer Service support');
+    expect(lineText({ item_id: null, description: 'Travel' }, items)).toBe('Travel');
+  });
+});
