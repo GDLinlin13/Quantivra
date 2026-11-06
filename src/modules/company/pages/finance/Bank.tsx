@@ -296,7 +296,11 @@ function AddLine({ onClose, onAdd, currency }: { onClose: () => void; onAdd: (l:
       await onAdd({ txn_date: v.date.format('YYYY-MM-DD'), description: v.description || '', amount: v.direction === 'in' ? v.amount : -v.amount });
     }}>
       <Form form={form} layout="vertical" initialValues={{ date: dayjs(), direction: 'in' }}>
-        <Form.Item name="direction"><Segmented options={[{ value: 'in', label: 'Money in' }, { value: 'out', label: 'Money out' }]} /></Form.Item>
+        {/* as on the bank statement: debit = money out (red), credit = money in (green) */}
+        <Form.Item name="direction"><Segmented options={[
+          { value: 'out', label: <span style={{ color: '#ff7875' }}>Debit</span> },
+          { value: 'in', label: <span style={{ color: '#73d13d' }}>Credit</span> },
+        ]} /></Form.Item>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Form.Item name="date" label="Date" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="amount" label="Amount" rules={[{ required: true }]}><InputNumber min={0.01} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>
