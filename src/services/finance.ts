@@ -466,6 +466,14 @@ export const bankService = {
     must(await supabase.from('fin_bank_transactions').insert(lines.map(l => ({ company_id: companyId, account_id: accountId, ...l, status: 'unmatched' }))));
   },
   async update(id: number, patch: Partial<BankTxn>) { must(await supabase.from('fin_bank_transactions').update(patch).eq('id', id)); },
+  /**
+   * Store an imported statement in its own order: `rows` (already carrying any match taken over from a line keyed
+   * in by hand) are added, then the keyed-in lines they replace (`replaced`) are removed.
+   */
+  async importInOrder(companyId: number, accountId: number, rows: Partial<BankTxn>[], replaced: number[]) {
+    if (rows.length) must(await supabase.from('fin_bank_transactions').insert(rows.map(r => ({ ...r, company_id: companyId, account_id: accountId }))));
+    if (replaced.length) must(await supabase.from('fin_bank_transactions').delete().in('id', replaced));
+  },
   /** Something already recorded for this bank (a transfer, a payment) is on the statement: add the line, already matched. */
   async confirmRecorded(companyId: number, accountId: number, e: { txn_date: string; description: string | null; amount: number; journal_id: number | null; payment_id: number | null }) {
     must(await supabase.from('fin_bank_transactions').insert({

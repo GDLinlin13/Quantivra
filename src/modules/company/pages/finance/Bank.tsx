@@ -7,6 +7,7 @@ import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteO
 import dayjs from 'dayjs';
 import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, companyFileService, type BankTxn, type Payment } from '../../../../services/finance';
 import { statementPeriod } from '../../../../data/documents';
+import { planImport, nothingNew } from '../../../../data/bankImport';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
 import { balanceDue, schemeLabel, type Account, type FinDocument } from '../../../../data/finance';
 import { parseBankCsv, type BankLine } from '../../../../data/bankCsv';
@@ -142,13 +143,13 @@ export function Bank({ data }: { data: FinanceData }) {
     return false;
   };
   // leave out lines already imported (same date, amount and description)
+  // the whole statement is kept, in its order: lines keyed in by hand are taken over (with their match)
   function showImport(lines: ImportLine[]) {
-    const seen = new Set(txns.map(t => `${t.txn_date}|${Number(t.amount).toFixed(2)}|${t.description || ''}`));
-    const fresh = lines.filter(l => !seen.has(`${l.txn_date}|${l.amount.toFixed(2)}|${l.description}`));
-    if (!fresh.length) { message.info('Nothing new in that file'); setImporting(null); return; }
-    setStmtMonth(dayjs(`${statementPeriod(fresh.map(l => l.txn_date)) || dayjs().format('YYYY-MM')}-01`));
-    setImporting(fresh);
+    if (!lines.length || nothingNew(planImport(lines, txns, expected))) { message.info('Nothing new in that file'); setImporting(null); return; }
+    setStmtMonth(dayjs(`${statementPeriod(lines.map(l => l.txn_date)) || dayjs().format('YYYY-MM')}-01`));
+    setImporting(lines);
   }
+  const plan = importing ? planImport(importing, txns, expected) : [];
 
   // a matched line shows what it was for (click for the details and the invoices / bills it paid);
   // an unmatched one, the bank's own text
@@ -235,11 +236,24 @@ export function Bank({ data }: { data: FinanceData }) {
         ]} />
 
       {importing && (
-        <Modal open width={860} title={`Import ${importing.length} lines into ${account?.name}`} okText={`Import ${importing.length} lines`}
+        <Modal open width={980} title={`Import ${importing.length} lines into ${account?.name}`} okText={`Import ${importing.length} lines`}
           onCancel={() => setImporting(null)}
           onOk={async () => {
             try {
-              await bankService.add(companyId, accountId!, importing.map(({ sure: _s, ...l }) => l));
+              // statement order; keyed-in lines are replaced by the statement's line, keeping their match
+              const rows = plan.map(p => {
+                const base = { txn_date: p.line.txn_date, description: p.line.description, amount: p.line.amount };
+                if (p.kind === 'keyed') {
+                  const e = txns.find(t => t.id === p.existing.id)!;
+                  return { ...base, status: e.status, payment_id: e.payment_id, journal_id: e.journal_id,
+                    ...(e.journal_existing ? { journal_existing: true } : {}), ...(e.base_amount != null ? { base_amount: e.base_amount } : {}) };
+                }
+                if (p.kind === 'recorded') {
+                  return { ...base, status: 'matched' as const, journal_id: p.recorded.journal_id, payment_id: p.recorded.payment_id, ...(p.recorded.journal_id ? { journal_existing: true } : {}) };
+                }
+                return { ...base, status: 'unmatched' as const };
+              });
+              await bankService.importInOrder(companyId, accountId!, rows, plan.flatMap(p => (p.kind === 'keyed' ? [p.existing.id] : [])));
               if (keepStmt && stmtFile) {
                 try { await saveBankStatement(companyId, stmtFile, accountId!, (stmtMonth || dayjs()).format('YYYY-MM')); }
                 catch (e: any) { message.warning(`Imported, but the statement file wasn't saved in Documents: ${e.message}`); }
@@ -275,6 +289,13 @@ export function Bank({ data }: { data: FinanceData }) {
               { title: 'Date', dataIndex: 'txn_date', width: 110 },
               { title: 'Description', dataIndex: 'description' },
               { title: 'Amount', key: 'a', align: 'right' as const, width: 140, render: (_: any, l: ImportLine) => <span style={{ color: l.amount > 0 ? '#73d13d' : '#ff7875' }}>{money(l.amount, accCur)}</span> },
+              {
+                title: 'Matches', key: 'm', width: 170, render: (_: any, l: ImportLine) => {
+                  const p = plan[importing.indexOf(l)];
+                  return p?.kind === 'keyed' ? <Tag color="blue">Your line: {p.existing.description || '—'}</Tag>
+                    : p?.kind === 'recorded' ? <Tag color="green">Recorded transfer</Tag> : '';
+                },
+              },
               {
                 title: 'In / out', key: 'f', width: 190, render: (_: any, l: ImportLine) => (
                   <Space size={4}>
