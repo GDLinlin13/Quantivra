@@ -54,6 +54,7 @@ export function Bank({ data }: { data: FinanceData }) {
   const [layouts, setLayouts] = useState<Record<string, PdfLayout>>({});
   useEffect(() => { pdfLayoutService.get(companyId).then(setLayouts).catch(() => setLayouts({})); }, [companyId]);
   const [adding, setAdding] = useState(false);
+  const [amending, setAmending] = useState<BankTxn | null>(null);
   const [matching, setMatching] = useState<BankTxn | null>(null);
   const account = accounts.find(a => a.id === accountId);
   // a bank account can be in another currency; the books stay in the company's currency
@@ -197,7 +198,7 @@ export function Bank({ data }: { data: FinanceData }) {
           { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
           { title: 'Matched to', key: 'm', width: 220, render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : matchLabel(t, data, look)?.accounts || '' },
           {
-            title: '', key: 'a', width: 170, render: (_, t) => t.status === ('expected' as any) ? <Tag color="gold">Not on a statement yet</Tag> : (
+            title: '', key: 'a', width: 210, render: (_, t) => t.status === ('expected' as any) ? <Tag color="gold">Not on a statement yet</Tag> : (
               <Space size={4}>
                 {t.status === 'unmatched'
                   ? <Button size="small" type="primary" icon={<LinkOutlined />} onClick={() => setMatching(t)}>Match</Button>
@@ -207,6 +208,7 @@ export function Bank({ data }: { data: FinanceData }) {
                       <Button size="small" icon={<DisconnectOutlined />}>Undo</Button>
                     </Popconfirm>
                   )}
+                {t.status !== 'matched' && <Button size="small" icon={<EditOutlined />} title="Amend" onClick={() => setAmending(t)} />}
                 {t.status === 'unmatched' && <Button size="small" onClick={async () => { await bankService.update(t.id, { status: 'ignored' }); load(); }}>Ignore</Button>}
                 <Popconfirm title="Delete this statement line?" onConfirm={async () => { await bankService.remove(t.id); load(); }}>
                   <Button size="small" danger icon={<DeleteOutlined />} />
@@ -270,6 +272,8 @@ export function Bank({ data }: { data: FinanceData }) {
             ]} />
         </Modal>
       )}
+      {amending && <AddLine line={amending} onClose={() => setAmending(null)} currency={accCur}
+        onAdd={async l => { try { await bankService.update(amending.id, { txn_date: l.txn_date, description: l.description, amount: l.amount }); setAmending(null); load(); } catch (e: any) { message.error(e.message); } }} />}
       {adding && <AddLine onClose={() => setAdding(false)} currency={accCur}
         onAdd={async l => { await bankService.add(companyId, accountId!, [l]); setAdding(false); load(); }} />}
       {bankModal}
@@ -290,14 +294,17 @@ export function Bank({ data }: { data: FinanceData }) {
   );
 }
 
-function AddLine({ onClose, onAdd, currency }: { onClose: () => void; onAdd: (l: BankLine) => Promise<void>; currency: string }) {
+/** Add a statement line by hand, or amend one that isn't matched yet (`line`). */
+function AddLine({ onClose, onAdd, currency, line }: { onClose: () => void; onAdd: (l: BankLine) => Promise<void>; currency: string; line?: BankTxn }) {
   const [form] = Form.useForm();
   return (
-    <Modal open title="Add a statement line" onCancel={onClose} onOk={async () => {
+    <Modal open title={line ? 'Amend statement line' : 'Add a statement line'} onCancel={onClose} onOk={async () => {
       const v = await form.validateFields();
       await onAdd({ txn_date: v.date.format('YYYY-MM-DD'), description: v.description || '', amount: v.direction === 'in' ? v.amount : -v.amount });
     }}>
-      <Form form={form} layout="vertical" initialValues={{ date: dayjs(), direction: 'in' }}>
+      <Form form={form} layout="vertical" initialValues={line
+        ? { date: dayjs(line.txn_date), direction: line.amount < 0 ? 'out' : 'in', amount: Math.abs(Number(line.amount)), description: line.description || '' }
+        : { date: dayjs(), direction: 'in' }}>
         {/* as on the bank statement: debit = money out (red), credit = money in (green) */}
         <Form.Item name="direction"><Segmented options={[
           { value: 'out', label: <span style={{ color: '#ff7875' }}>Debit</span> },
