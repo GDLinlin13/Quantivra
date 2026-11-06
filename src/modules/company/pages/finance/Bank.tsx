@@ -56,6 +56,7 @@ export function Bank({ data }: { data: FinanceData }) {
   useEffect(() => { pdfLayoutService.get(companyId).then(setLayouts).catch(() => setLayouts({})); }, [companyId]);
   const [adding, setAdding] = useState(false);
   const [amending, setAmending] = useState<BankTxn | null>(null);
+  const [fxMatch, setFxMatch] = useState<BankTxn | null>(null);
   const [matching, setMatching] = useState<BankTxn | null>(null);
   const account = accounts.find(a => a.id === accountId);
   // a bank account can be in another currency; the books stay in the company's currency
@@ -99,7 +100,7 @@ export function Bank({ data }: { data: FinanceData }) {
   const running = useMemo(() => {
     const m = new Map<number, number>();
     let bal = Number(foreign ? account?.opening_foreign : account?.opening_balance) || 0;
-    [...txns.filter(t => t.status !== 'ignored'), ...expected]
+    [...txns.filter(t => t.status !== 'ignored'), ...(foreign ? [] : expected)]
       .sort(chrono)
       .forEach(t => { bal = Math.round((bal + Number(t.amount)) * 100) / 100; m.set(t.id, bal); });
     return m;
@@ -148,11 +149,11 @@ export function Bank({ data }: { data: FinanceData }) {
   // leave out lines already imported (same date, amount and description)
   // the whole statement is kept, in its order: lines keyed in by hand are taken over (with their match)
   function showImport(lines: ImportLine[]) {
-    if (!lines.length || nothingNew(planImport(lines, txns, expected))) { message.info('Nothing new in that file'); setImporting(null); return; }
+    if (!lines.length || nothingNew(planImport(lines, txns, foreign ? [] : expected))) { message.info('Nothing new in that file'); setImporting(null); return; }
     setStmtMonth(dayjs(`${statementPeriod(lines.map(l => l.txn_date)) || dayjs().format('YYYY-MM')}-01`));
     setImporting(lines);
   }
-  const plan = importing ? planImport(importing, txns, expected) : [];
+  const plan = importing ? planImport(importing, txns, foreign ? [] : expected) : [];
 
   // a matched line shows what it was for (click for the details and the invoices / bills it paid);
   // an unmatched one, the bank's own text
@@ -207,17 +208,19 @@ export function Bank({ data }: { data: FinanceData }) {
           { title: 'Date', dataIndex: 'txn_date', width: 110 },
           { title: 'Description', key: 'd', render: (_, t) => describe(t) },
           // as on the bank statement: debit = money out, credit = money in
-          { title: 'Debit', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{money(-t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
-          { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
+          { title: 'Debit', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{money(-t.amount, t.status === ('expected' as any) ? currency : accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
+          { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, t.status === ('expected' as any) ? currency : accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
           { title: 'Balance', key: 'bal', align: 'right' as const, width: 150, render: (_, t) => (running.has(t.id) ? money(running.get(t.id)!, accCur) : '') },
           { title: 'Matched to', key: 'm', width: 220, render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : matchLabel(t, data, look)?.accounts || '' },
           {
             title: '', key: 'a', width: 210, render: (_, t) => t.status === ('expected' as any) ? (
               // recorded in Quantivra (e.g. a transfer from another bank): Match = it's on the statement
+              foreign ? <Button size="small" type="primary" icon={<LinkOutlined />} onClick={() => setFxMatch(t)}>Match</Button> : (
               <Popconfirm title="Is this on the bank statement?" okText="Yes, match"
                 onConfirm={async () => { try { await bankService.confirmRecorded(companyId, accountId!, t); message.success('Matched'); load(); } catch (e: any) { message.error(e.message); } }}>
                 <Button size="small" type="primary" icon={<LinkOutlined />}>Match</Button>
               </Popconfirm>
+              )
             ) : (
               <Space size={4}>
                 {t.status === 'unmatched'
@@ -312,6 +315,11 @@ export function Bank({ data }: { data: FinanceData }) {
             ]} />
         </Modal>
       )}
+      {fxMatch && <FxMatch txn={fxMatch} currency={currency} accCur={accCur} onClose={() => setFxMatch(null)}
+        onMatch={async (received, base) => {
+          try { await bankService.confirmRecorded(companyId, accountId!, { ...fxMatch, amount: received, base_amount: base }); message.success('Matched'); setFxMatch(null); load(); }
+          catch (e: any) { message.error(e.message); }
+        }} />}
       {amending && <AddLine line={amending} onClose={() => setAmending(null)} currency={accCur}
         onAdd={async l => { try { await bankService.update(amending.id, { txn_date: l.txn_date, description: l.description, amount: l.amount }); setAmending(null); load(); } catch (e: any) { message.error(e.message); } }} />}
       {adding && <AddLine onClose={() => setAdding(false)} currency={accCur}
@@ -331,6 +339,34 @@ export function Bank({ data }: { data: FinanceData }) {
         recorded={expected}
         onClose={() => setMatching(null)} onDone={() => { setMatching(null); load(); data.reload(); }} />}
     </div>
+  );
+}
+
+/**
+ * A transfer recorded in the company's currency (e.g. SGD 1,419.88 from the SGD account) arriving in a bank in
+ * another currency: enter what arrived (or the rate) and the line is stored in that currency, matched.
+ */
+function FxMatch({ txn, currency, accCur, onClose, onMatch }: {
+  txn: BankTxn; currency: string; accCur: string; onClose: () => void; onMatch: (received: number, base: number) => Promise<void>;
+}) {
+  const base = Math.abs(Number(txn.amount)), sign = Math.sign(Number(txn.amount));
+  const [received, setReceived] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const rate = received ? base / received : null;
+  return (
+    <Modal open title={`${sign > 0 ? 'Received' : 'Paid'} in ${accCur}`} okText="Match" confirmLoading={busy} okButtonProps={{ disabled: !received }} onCancel={onClose}
+      onOk={async () => { setBusy(true); await onMatch(sign * received!, sign * base); setBusy(false); }}>
+      <Space orientation="vertical" style={{ width: '100%' }}>
+        <Text>{txn.description} · {txn.txn_date} · {money(base, currency)}</Text>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div><Text type="secondary">Amount in {accCur}</Text>
+            <InputNumber style={{ width: '100%' }} min={0.01} precision={2} prefix={accCur} value={received ?? undefined} onChange={v => setReceived(v == null ? null : Number(v))} /></div>
+          <div><Text type="secondary">Rate (1 {accCur} = ? {currency})</Text>
+            <InputNumber style={{ width: '100%' }} min={0} precision={6} value={rate ? Math.round(rate * 1e6) / 1e6 : undefined}
+              onChange={r => setReceived(r ? Math.round((base / Number(r)) * 100) / 100 : null)} /></div>
+        </div>
+      </Space>
+    </Modal>
   );
 }
 

@@ -475,10 +475,12 @@ export const bankService = {
     if (replaced.length) must(await supabase.from('fin_bank_transactions').delete().in('id', replaced));
   },
   /** Something already recorded for this bank (a transfer, a payment) is on the statement: add the line, already matched. */
-  async confirmRecorded(companyId: number, accountId: number, e: { txn_date: string; description: string | null; amount: number; journal_id: number | null; payment_id: number | null }) {
+  async confirmRecorded(companyId: number, accountId: number, e: { txn_date: string; description: string | null; amount: number; journal_id: number | null; payment_id: number | null; base_amount?: number | null }) {
+    // for a bank in another currency, `amount` is what arrived in that currency and `base_amount` the books' amount
     must(await supabase.from('fin_bank_transactions').insert({
       company_id: companyId, account_id: accountId, txn_date: e.txn_date, description: e.description || '', amount: e.amount, status: 'matched',
       journal_id: e.journal_id, payment_id: e.payment_id, ...(e.journal_id ? { journal_existing: true } : {}),
+      ...(e.base_amount != null ? { base_amount: e.base_amount } : {}),
     }));
   },
   async remove(id: number) { must(await supabase.from('fin_bank_transactions').delete().eq('id', id)); },
