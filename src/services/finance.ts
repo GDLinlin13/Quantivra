@@ -65,6 +65,40 @@ export const financeSettingsService = {
   },
 };
 
+// ---- files attached to documents (migration 028) --------------------------------------------
+
+const ATTACH_BUCKET = 'fin-attachments';
+export interface Attachment { id: number; document_id: number; path: string; file_name: string; content_type: string | null; size_bytes: number | null }
+export const ATTACH_TYPES = '.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif';
+export const ATTACH_MAX_MB = 10;
+
+export const attachmentService = {
+  async list(documentId: number): Promise<Attachment[]> {
+    const r = await supabase.from('fin_attachments').select('*').eq('document_id', documentId).order('id');
+    return r.error ? [] : r.data || [];
+  },
+  /** Upload a file into "<company>/<document>/…" and record it. */
+  async add(companyId: number, documentId: number, file: File): Promise<void> {
+    if (file.size > ATTACH_MAX_MB * 1024 * 1024) throw new Error(`${file.name} is bigger than ${ATTACH_MAX_MB} MB`);
+    const safe = file.name.replace(/[^\w.\- ]+/g, '_').slice(-80);
+    const path = `${companyId}/${documentId}/${Date.now()}-${safe}`;
+    const up = await supabase.storage.from(ATTACH_BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });
+    if (up.error) throw new Error(/bucket|not found/i.test(up.error.message) ? 'Attachments need database update 028 — ask your administrator to run it in Supabase.' : up.error.message);
+    const r = await supabase.from('fin_attachments').insert({ company_id: companyId, document_id: documentId, path, file_name: file.name, content_type: file.type || null, size_bytes: file.size });
+    if (r.error) { await supabase.storage.from(ATTACH_BUCKET).remove([path]); throw new Error(r.error.message); }
+  },
+  async remove(a: Attachment) {
+    await supabase.storage.from(ATTACH_BUCKET).remove([a.path]);
+    must(await supabase.from('fin_attachments').delete().eq('id', a.id));
+  },
+  /** A short-lived link to open the file. */
+  async open(a: Attachment) {
+    const r = await supabase.storage.from(ATTACH_BUCKET).createSignedUrl(a.path, 120);
+    if (r.error || !r.data?.signedUrl) throw new Error(r.error?.message || 'Could not open the file');
+    window.open(r.data.signedUrl, '_blank', 'noopener');
+  },
+};
+
 // ---- chart of accounts -------------------------------------------------------------
 
 export const accountService = {
@@ -179,6 +213,9 @@ export const docService = {
   async remove(id: number) {
     const paid = must(await supabase.from('fin_payment_allocations').select('id').eq('document_id', id).limit(1)) || [];
     if (paid.length) throw new Error('This document has payments recorded. Delete the payments first, or void it.');
+    // its attached files go too
+    const files = await attachmentService.list(id);
+    if (files.length) await supabase.storage.from(ATTACH_BUCKET).remove(files.map(f => f.path));
     must(await supabase.from('fin_documents').delete().eq('id', id));
   },
   /** Turn a quotation into a new draft invoice (keeps the lines and discounts). */

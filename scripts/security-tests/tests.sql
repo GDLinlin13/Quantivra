@@ -428,6 +428,53 @@ DELETE FROM catalog_items;
 DELETE FROM contacts WHERE name = 'Price customer';
 COMMIT;
 
+\echo '9i. attachments (files on bills / invoices) stay inside their company'
+BEGIN; :as_a
+DO $$
+DECLARE v_d bigint;
+BEGIN
+  INSERT INTO fin_documents (company_id, doc_type, number, status, issue_date) VALUES (1, 'bill', 'ATT-1', 'draft', current_date) RETURNING id INTO v_d;
+  PERFORM set_config('qv.alpha_bill', v_d::text, false);
+  INSERT INTO storage.objects (bucket_id, name) VALUES ('fin-attachments', '1/' || v_d || '/supplier-invoice.pdf');
+  INSERT INTO fin_attachments (company_id, document_id, path, file_name) VALUES (1, v_d, '1/' || v_d || '/supplier-invoice.pdf', 'supplier-invoice.pdf');
+  BEGIN INSERT INTO storage.objects (bucket_id, name) VALUES ('fin-attachments', '2/1/planted.pdf'); RAISE EXCEPTION 'FAIL: A stored a file in B''s folder';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO fin_attachments (company_id, document_id, path, file_name) VALUES (1, v_d, '2/' || v_d || '/x.pdf', 'x.pdf');
+    RAISE EXCEPTION 'FAIL: attachment row pointing into B''s folder';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+END $$;
+COMMIT;
+BEGIN; :as_b
+DO $$
+DECLARE v_d bigint;
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM storage.objects WHERE bucket_id = 'fin-attachments' AND name LIKE '1/%'), 'FAIL: B sees A files';
+  ASSERT NOT EXISTS (SELECT 1 FROM fin_attachments WHERE company_id = 1), 'FAIL: B sees A attachments';
+  BEGIN INSERT INTO storage.objects (bucket_id, name) VALUES ('fin-attachments', '1/9/planted.pdf'); RAISE EXCEPTION 'FAIL: B stored a file in A''s folder';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  INSERT INTO fin_documents (company_id, doc_type, number, status, issue_date) VALUES (2, 'bill', 'ATT-B', 'draft', current_date) RETURNING id INTO v_d;
+  BEGIN INSERT INTO fin_attachments (company_id, document_id, path, file_name) VALUES (2, current_setting('qv.alpha_bill')::bigint, '2/x/y.pdf', 'y.pdf');
+    RAISE EXCEPTION 'FAIL: B attached a file to an A bill';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  UPDATE storage.objects SET name = '2/stolen.pdf' WHERE name LIKE '1/%';
+  DELETE FROM storage.objects WHERE name LIKE '1/%';
+END $$;
+ROLLBACK;
+BEGIN; :as_anon
+DO $$
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM storage.objects WHERE bucket_id = 'fin-attachments'), 'FAIL: anon sees attachments';
+END $$;
+ROLLBACK;
+BEGIN; :as_a
+DO $$
+BEGIN
+  ASSERT (SELECT count(*) FROM storage.objects WHERE name LIKE '1/%') = 1, 'FAIL: B changed or removed A''s file';
+  DELETE FROM storage.objects WHERE bucket_id = 'fin-attachments';
+  DELETE FROM fin_documents WHERE number = 'ATT-1';
+END $$;
+COMMIT;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;

@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Table, Divider, Typography, message, Switch, Popconfirm, Alert, Tag } from 'antd';
-import { PlusOutlined, DeleteOutlined, HolderOutlined } from '@ant-design/icons';
+import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Table, Divider, Typography, message, Switch, Popconfirm, Alert, Tag, Segmented, Upload } from 'antd';
+import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { docService, paymentService, catalogService } from '../../../../services/finance';
+import { docService, paymentService, catalogService, attachmentService, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
 import {
   docTotals, addDays, today, DOC_LABEL, STATUS_LABEL, STATUS_COLOR,
   type DocType, type FinDocument, type DocLine, type DocDiscount, type Contact, type ContactPerson, type FinanceSettings, type Account,
@@ -16,13 +16,15 @@ const { Text } = Typography;
 const blankLine = (rate: number): DocLine => ({ description: '', quantity: 1, unit_price: 0, discount_pct: 0, tax_rate: rate });
 
 /** Create or edit a quotation, invoice, credit note, bill or expense. */
-export function DocEditor({ companyId, docType, docId, contacts, people, accounts, settings, branding, currency, employees = [], items = [], onClose, onSaved }: {
+export function DocEditor({ companyId, docType: startType, docId, contacts, people, accounts, settings, branding, currency, employees = [], items = [], onClose, onSaved }: {
   companyId: number; docType: DocType; docId?: number | null;
   contacts: Contact[]; people: ContactPerson[]; accounts: Account[]; settings: FinanceSettings; branding: Branding | null; currency: string;
   employees?: { id: number; full_name: string }[];
   items?: CatalogItem[];
   onClose: () => void; onSaved: (id: number) => void;
 }) {
+  // a purchase can switch between a bill (pay later) and an expense (already paid / staff claim) until it's saved
+  const [docType, setDocType] = useState<DocType>(startType);
   const sales = docType === 'quote' || docType === 'invoice' || docType === 'credit_note';
   const gstRate = settings.gstRegistered ? Number(settings.gstRate) || 0 : 0;
   const [doc, setDoc] = useState<Partial<FinDocument>>({});
@@ -30,11 +32,16 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
   const [discounts, setDiscounts] = useState<DocDiscount[]>([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(!!docId);
+  const [files, setFiles] = useState<Attachment[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const loadFiles = () => { if (docId) attachmentService.list(docId).then(setFiles).catch(() => setFiles([])); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(loadFiles, [docId]);
 
   useEffect(() => {
     if (docId) {
       docService.get(docId).then(({ doc: d, lines: ls }) => {
-        setDoc(d); setLines(ls.length ? ls.map(l => ({ ...l, quantity: Number(l.quantity), unit_price: Number(l.unit_price), discount_pct: Number(l.discount_pct), tax_rate: Number(l.tax_rate) })) : [blankLine(gstRate)]);
+        setDoc(d); setDocType(d.doc_type); setLines(ls.length ? ls.map(l => ({ ...l, quantity: Number(l.quantity), unit_price: Number(l.unit_price), discount_pct: Number(l.discount_pct), tax_rate: Number(l.tax_rate) })) : [blankLine(gstRate)]);
         setDiscounts(d.discounts || []); setLoading(false);
       }).catch(e => { message.error(e.message); onClose(); });
     } else {
@@ -117,6 +124,8 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
           }, [{ document_id: id, amount: owed }]);
         }
       }
+      // files picked before the first save are uploaded now
+      for (const f of pendingFiles) { try { await attachmentService.add(companyId, id, f); } catch (e: any) { message.error(e.message); } }
       message.success(`${DOC_LABEL[docType]} saved`);
       onSaved(id);
     } catch (e: any) { message.error(e.message); }
@@ -140,6 +149,15 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
         </Space>
       }>
       {Number(doc.amount_paid) > 0 && <Alert type="info" showIcon style={{ marginBottom: 12 }} title={`${M(Number(doc.amount_paid))} has been paid on this ${DOC_LABEL[docType].toLowerCase()}.`} />}
+      {!sales && !docId && (
+        <Segmented style={{ marginBottom: 12 }} value={docType} onChange={v => {
+          const t = v as DocType;
+          setDocType(t);
+          const c = contacts.find(x => x.id === doc.contact_id);
+          const days = c?.payment_terms_days ?? (branding?.templates.invoice.paymentTermsDays ?? 30);
+          set(t === 'expense' ? { due_date: null } : { due_date: doc.issue_date ? addDays(doc.issue_date, days) : null, paid_from_account_id: null, employee_id: null });
+        }} options={[{ value: 'bill', label: 'To pay later' }, { value: 'expense', label: 'Already paid' }]} />
+      )}
       <Form layout="vertical">
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr', gap: 12 }}>
           <Form.Item label={sales ? 'Customer' : 'Supplier'} required={docType !== 'expense'}>
@@ -232,6 +250,33 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
               </Form.Item>
             )}
             <Form.Item label="Notes"><Input.TextArea autoSize={{ minRows: 2, maxRows: 6 }} value={doc.notes || ''} onChange={e => set({ notes: e.target.value })} /></Form.Item>
+            <Form.Item label="Attachments">
+              <Space orientation="vertical" size={4} style={{ width: "100%" }}>
+                {files.map(f => (
+                  <Space key={f.id} size={4}>
+                    <PaperClipOutlined />
+                    <a onClick={() => attachmentService.open(f).catch(e => message.error(e.message))}>{f.file_name}</a>
+                    <Popconfirm title={`Remove ${f.file_name}?`} onConfirm={async () => { try { await attachmentService.remove(f); loadFiles(); } catch (e: any) { message.error(e.message); } }}>
+                      <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                  </Space>
+                ))}
+                {pendingFiles.map((f, i) => (
+                  <Space key={`p${i}`} size={4}>
+                    <PaperClipOutlined /><span>{f.name}</span>
+                    <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => setPendingFiles(ps => ps.filter((_, j) => j !== i))} />
+                  </Space>
+                ))}
+                <Upload accept={ATTACH_TYPES} multiple showUploadList={false} beforeUpload={file => {
+                  if (docId) {
+                    attachmentService.add(companyId, docId, file).then(loadFiles).catch(e => message.error(e.message));
+                  } else setPendingFiles(ps => [...ps, file]);
+                  return false;
+                }}>
+                  <Button size="small" icon={<UploadOutlined />}>Attach file (PDF or picture)</Button>
+                </Upload>
+              </Space>
+            </Form.Item>
             {sales && <Form.Item label="Terms"><Input.TextArea autoSize={{ minRows: 2, maxRows: 6 }} value={doc.terms || ''} onChange={e => set({ terms: e.target.value })} /></Form.Item>}
           </Form>
         </div>
