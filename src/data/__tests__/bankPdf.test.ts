@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseStatementText } from '../bankPdf';
+import { parseStatementText, parseWithLayout, learnLayout, type PdfRow } from '../bankPdf';
 
 const w = (s: string) => s.split(/\s+/);
 
@@ -51,5 +51,39 @@ describe('taught layouts', () => {
       { txn_date: '2026-11-02', description: 'INWARD PAYMENT ACME TRADING', amount: 3270, sure: true },
       { txn_date: '2026-11-03', description: 'CPF BOARD', amount: -6000, sure: true },
     ]);
+  });
+});
+
+describe('DBS statements (19-May-26 dates)', () => {
+  // pieces at the x positions a DBS PDF puts them: date, value date, description, withdrawal, deposit, balance
+  const P = (s: string, x: number, wd = 40) => ({ s, x, w: wd });
+  const rows: PdfRow[] = [
+    [P('Transaction Details', 40, 120), P('01 May 2026 to 31 May 2026', 300, 160)],
+    [P('Balance Brought Forward', 140, 120), P('0.00', 520)],
+    [P('19-May-26', 40), P('19-May-26', 90), P('FAST PAYMENT Other', 140, 120), P('11,000.00', 440), P('11,000.00', 520)],
+    [P('202605190CBCSGSGBRT6534257 OTHER IVAN', 140, 200)],
+    [P('ONG WEI XIANG', 140, 80)],
+    [P('202605190CBCSGSGBRT6534257 SGD 11000', 140, 200)],
+    [P('26-May-26', 40), P('26-May-26', 90), P('GIRO PAYMENT GRP 260525090112AP009852', 140, 200), P('1,000.00', 360), P('10,000.00', 520)],
+    [P('26/05/2026 90000 Internal Transfer', 140, 160)],
+    [P('28-May-26', 40), P('28-May-26', 90), P('FAST PAYMENT Other', 140, 120), P('1,500.00', 440), P('11,500.00', 520)],
+  ];
+  const expected = [
+    { txn_date: '2026-05-19', amount: 11000 },
+    { txn_date: '2026-05-26', amount: -1000 },
+    { txn_date: '2026-05-28', amount: 1500 },
+  ];
+  it('reads them the way they were taught', () => {
+    const layout = { columns: [
+      ...learnLayout(rows[2], ['date', 'ignore', 'description', 'in', 'balance']).columns,
+      ...learnLayout(rows[6], ['date', 'ignore', 'description', 'out', 'balance']).columns,
+    ] };
+    const r = parseWithLayout(rows, layout);
+    expect(r.lines.map(l => ({ txn_date: l.txn_date, amount: l.amount }))).toEqual(expected);
+    expect(r.lines[0].description).toBe('FAST PAYMENT Other 202605190CBCSGSGBRT6534257 OTHER IVAN ONG WEI XIANG 202605190CBCSGSGBRT6534257 SGD 11000');
+  });
+  it('reads them automatically too', () => {
+    const r = parseStatementText(rows.map(r => r.flatMap(p => p.s.split(/\s+/))));
+    expect(r.lines.map(l => ({ txn_date: l.txn_date, amount: l.amount }))).toEqual(expected);
   });
 });
