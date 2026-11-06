@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
-import { createRoot } from 'react-dom/client';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { renderPdf } from '../../../utils/renderPdf';
 import { Typography, Tree, Table, Button, Space, Upload, Empty, Spin, message, Popconfirm, Alert, Breadcrumb, DatePicker } from 'antd';
 import dayjs from 'dayjs';
 import { FolderOutlined, FolderOpenOutlined, FilePdfOutlined, FileOutlined, DownloadOutlined, EyeOutlined, UploadOutlined, DeleteOutlined } from '@ant-design/icons';
@@ -15,29 +15,11 @@ import {
 import { DEFAULT_FINANCE_SETTINGS, DOC_LABEL, type FinDocument, type FinanceSettings, type Contact, type ContactPerson } from '../../../data/finance';
 import { lineText, type CatalogItem } from '../../../data/catalog';
 import { buildFolders, type Folder, type DocFile } from '../../../data/documents';
-import { elementsToPdf, downloadBlob, formatFileName, formatDocFileName } from '../../../utils/payslipFiles';
+import { downloadBlob, formatFileName, formatDocFileName } from '../../../utils/payslipFiles';
 import { PayslipView } from './hr/PayslipView';
 import { DocumentView } from './finance/DocumentView';
 
 const { Title, Text } = Typography;
-
-/** Draw a print view off-screen and turn it into a PDF. */
-async function renderPdf(node: ReactNode): Promise<Blob> {
-  const host = document.createElement('div');
-  host.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;background:#fff';
-  document.body.appendChild(host);
-  const root = createRoot(host);
-  try {
-    root.render(<>{node}</>);
-    await new Promise(r => setTimeout(r, 500)); // let the logo load
-    const el = host.firstElementChild as HTMLElement | null;
-    if (!el) throw new Error('Nothing to print');
-    return await elementsToPdf([el]);
-  } finally {
-    root.unmount();
-    host.remove();
-  }
-}
 
 type Row = DocFile | { kind: 'payslip'; key: string; name: string; date: string; slip: PayslipRow; run: PayrollRunRow };
 
