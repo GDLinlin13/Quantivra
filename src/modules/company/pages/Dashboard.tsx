@@ -1,25 +1,35 @@
 import { useState, useEffect } from 'react';
 import { Row, Col, Card, Statistic, Typography } from 'antd';
-import { TeamOutlined, UserSwitchOutlined, FileOutlined, CalendarOutlined } from '@ant-design/icons';
+import { TeamOutlined, IdcardOutlined, CalendarOutlined, ArrowDownOutlined, ArrowUpOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useCompanyAccess } from '../../../contexts/CompanyAccess';
+import { hrService } from '../../../services/hr';
+import { balanceDue } from '../../../data/finance';
+import { money } from '../../../data/documentLayouts';
 
 const { Title, Text } = Typography;
 
+interface Outstanding { count: number; total: number }
+
 export function CompanyDashboard() {
   const { companyId } = useAuth();
-  const [stats, setStats] = useState({ users: 0, roles: 0, documents: 0 });
+  const access = useCompanyAccess();
+  const canFinance = access.can('finance');
+  const [users, setUsers] = useState(0);
+  const [employees, setEmployees] = useState<number | null>(null);
   const [onLeave, setOnLeave] = useState<string[]>([]);
+  const [currency, setCurrency] = useState('SGD');
+  const [receivable, setReceivable] = useState<Outstanding>({ count: 0, total: 0 });
+  const [payable, setPayable] = useState<Outstanding>({ count: 0, total: 0 });
 
   useEffect(() => {
     if (!companyId) return;
-    Promise.all([
-      supabase.from('company_users').select('*', { count: 'exact', head: true }).eq('company_id', companyId),
-      supabase.from('company_roles').select('*', { count: 'exact', head: true }).eq('company_id', companyId),
-      supabase.from('documents').select('*', { count: 'exact', head: true }).eq('company_id', companyId),
-    ]).then(([u, r, d]) => {
-      setStats({ users: u.count || 0, roles: r.count || 0, documents: d.count || 0 });
-    });
+    supabase.from('company_users').select('*', { count: 'exact', head: true }).eq('company_id', companyId)
+      .then(r => setUsers(r.count || 0));
+    // headcount: active employees
+    hrService.listEmployees(companyId).then(list => setEmployees(list.filter(e => e.status !== 'terminated').length)).catch(() => setEmployees(null));
+    supabase.from('companies').select('currency').eq('id', companyId).maybeSingle().then(r => setCurrency(r.data?.currency || 'SGD'));
     // Approved leave covering today (local date).
     const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     supabase.from('leave_requests').select('employees(full_name)')
@@ -27,11 +37,30 @@ export function CompanyDashboard() {
       .then(({ data }) => setOnLeave(Array.from(new Set((data || []).map((x: any) => x.employees?.full_name).filter(Boolean)))));
   }, [companyId]);
 
-  const cards = [
-    { title: 'Users', value: stats.users, icon: <TeamOutlined />, color: '#4fc3f7' },
-    { title: 'Roles', value: stats.roles, icon: <UserSwitchOutlined />, color: '#81c784' },
-    { title: 'Documents', value: stats.documents, icon: <FileOutlined />, color: '#ffb74d' },
+  // what customers still owe (invoices) and what we still owe (bills, expenses)
+  useEffect(() => {
+    if (!companyId || !canFinance) return;
+    supabase.from('fin_documents').select('doc_type, status, total, amount_paid').eq('company_id', companyId)
+      .in('doc_type', ['invoice', 'bill', 'expense']).not('status', 'in', '(draft,void,paid)')
+      .then(({ data }) => {
+        const sum = (types: string[]): Outstanding => {
+          const open = (data || []).filter((d: any) => types.includes(d.doc_type) && balanceDue(d) > 0);
+          return { count: open.length, total: open.reduce((s: number, d: any) => s + balanceDue(d), 0) };
+        };
+        setReceivable(sum(['invoice'])); setPayable(sum(['bill', 'expense']));
+      });
+  }, [companyId, canFinance]);
+
+  const cards: { title: string; value: string | number; icon: React.ReactNode; color: string; note?: string }[] = [
+    { title: 'Users', value: users, icon: <TeamOutlined />, color: '#4fc3f7' },
+    ...(employees != null ? [{ title: 'Employees', value: employees, icon: <IdcardOutlined />, color: '#81c784' }] : []),
     { title: 'On leave today', value: onLeave.length, icon: <CalendarOutlined />, color: '#e57373', note: onLeave.length ? onLeave.join(', ') : 'Everyone is in' },
+    ...(canFinance ? [
+      { title: 'Outstanding receivables', value: money(receivable.total, currency), icon: <ArrowDownOutlined />, color: '#73d13d',
+        note: `${receivable.count} invoice${receivable.count === 1 ? '' : 's'}` },
+      { title: 'Outstanding payables', value: money(payable.total, currency), icon: <ArrowUpOutlined />, color: '#ffb74d',
+        note: `${payable.count} bill${payable.count === 1 ? '' : 's'}` },
+    ] : []),
   ];
 
   return (
@@ -39,15 +68,15 @@ export function CompanyDashboard() {
       <Title level={4} style={{ color: '#f0ede6', marginBottom: 24 }}>Company Overview</Title>
       <Row gutter={[16, 16]}>
         {cards.map((card) => (
-          <Col span={6} key={card.title}>
-            <Card style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8 }}>
+          <Col xs={24} sm={12} lg={8} xl={card.title.startsWith('Outstanding') ? 6 : 4} key={card.title}>
+            <Card style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, height: '100%' }}>
               <Statistic
                 title={<Text style={{ color: 'rgba(240,237,230,0.6)' }}>{card.title}</Text>}
                 value={card.value}
                 prefix={<span style={{ color: card.color, marginRight: 8 }}>{card.icon}</span>}
-                valueStyle={{ color: '#f0ede6', fontSize: 28 }}
+                styles={{ content: { color: '#f0ede6', fontSize: 28 } }}
               />
-              {'note' in card && card.note && <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>{card.note}</Text>}
+              {card.note && <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>{card.note}</Text>}
             </Card>
           </Col>
         ))}
