@@ -402,7 +402,7 @@ function BankAccountModal({ data, account, onClose, onSaved }: { data: FinanceDa
   const foreign = cur !== data.currency;
   const nextCode = () => {
     const used = new Set(data.accounts.map(a => a.code));
-    for (let c = 1001; c < 1100; c++) if (!used.has(String(c))) return String(c);
+    for (let c = 1000; c < 1100; c++) if (!used.has(String(c))) return String(c);
     return `1${Date.now() % 1000}`;
   };
   const submit = async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { lineAmount, docTotals, balanceDue, statusAfterPayment, isOverdue, addDays } from '../finance';
+import { lineAmount, docTotals, balanceDue, statusAfterPayment, isOverdue, addDays, bankCodePlan } from '../finance';
 
 describe('finance maths', () => {
   it('works out line amounts with a line discount', () => {
@@ -42,5 +42,20 @@ describe('finance maths', () => {
     expect(isOverdue({ doc_type: 'invoice', status: 'sent', due_date: '2026-01-01' }, '2026-02-01')).toBe(true);
     expect(isOverdue({ doc_type: 'invoice', status: 'paid', due_date: '2026-01-01' }, '2026-02-01')).toBe(false);
     expect(addDays('2026-01-31', 30)).toBe('2026-03-02');
+  });
+});
+
+describe('bank codes', () => {
+  it('numbers banks from 1000 with no gaps, keeping their order', () => {
+    const accts = [
+      { id: 5, code: '1001', subtype: 'bank' }, { id: 6, code: '1002', subtype: 'bank' }, { id: 7, code: '1003', subtype: 'bank' },
+      { id: 8, code: '1010', subtype: 'cash' },
+    ];
+    expect(bankCodePlan(accts)).toEqual([{ id: 5, code: '1000' }, { id: 6, code: '1001' }, { id: 7, code: '1002' }]);
+  });
+  it('changes nothing when already in order, and skips codes other accounts use', () => {
+    expect(bankCodePlan([{ id: 1, code: '1000', subtype: 'bank' }, { id: 2, code: '1001', subtype: 'bank' }])).toEqual([]);
+    const many = Array.from({ length: 11 }, (_, i) => ({ id: i + 1, code: String(1000 + i + (i >= 10 ? 1 : 0)), subtype: 'bank' }));
+    expect(bankCodePlan([...many, { id: 99, code: '1010', subtype: 'cash' }])).toEqual([]);
   });
 });

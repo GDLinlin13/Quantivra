@@ -166,6 +166,24 @@ export const DEFAULT_ACCOUNTS: Omit<Account, 'id' | 'company_id' | 'archived'>[]
   { code: '6990', name: 'General expenses', type: 'expense', subtype: 'general', is_system: true },
 ];
 
+/**
+ * Bank accounts are numbered 1000, 1001, 1002… in their current order, with no gaps.
+ * Returns only the accounts whose code has to change. Codes used by other accounts (e.g. 1010 Petty cash) are skipped.
+ */
+export function bankCodePlan(accounts: Pick<Account, 'id' | 'code' | 'subtype'>[]): { id: number; code: string }[] {
+  const banks = accounts.filter(a => a.subtype === 'bank')
+    .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }) || a.id - b.id);
+  const taken = new Set(accounts.filter(a => a.subtype !== 'bank').map(a => a.code));
+  const out: { id: number; code: string }[] = [];
+  let next = 1000;
+  for (const b of banks) {
+    while (taken.has(String(next))) next++;
+    if (b.code !== String(next)) out.push({ id: b.id, code: String(next) });
+    next++;
+  }
+  return out;
+}
+
 export const today = () => new Date().toISOString().slice(0, 10);
 export const addDays = (iso: string, days: number) => {
   const d = new Date(iso + 'T00:00:00Z');
