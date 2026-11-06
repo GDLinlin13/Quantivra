@@ -44,6 +44,7 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
   const CLAIMS = acc('claims_payable', 'liability') || AP;
   const WAGES = acc('payroll', 'expense'), EMPLOYER = acc('payroll_employer', 'expense') || WAGES;
   const STAT = acc('statutory_payable', 'liability'), RETAINED = acc('retained', 'equity');
+  const SALARIES = acc('payroll_payable', 'liability') || BANK;
   const entries: LedgerEntry[] = [];
   const docById = new Map(input.docs.map(d => [d.id, d]));
 
@@ -115,8 +116,8 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
     entries.push({ date: p.payment_date, source: p.direction === 'in' ? 'payment_in' : 'payment_out', source_id: p.id, ref: p.number || '', memo: '', lines });
   }
 
-  // Finalised payroll: wages and employer contributions are costs; net pay leaves the bank on pay day;
-  // CPF and other statutory amounts are owed until paid (bank / journal).
+  // Finalised payroll: wages and employer contributions are costs; net pay is owed to staff (salaries
+  // payable) and CPF / statutory amounts are owed, until they're paid (Payables → Payroll, or Bank).
   for (const r of input.payroll) {
     if (r.status === 'draft') continue;
     const gross = r2(r.total_gross), employer = r2(r.total_employer), net = r2(r.total_net), ded = r2(r.total_deductions);
@@ -124,7 +125,7 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
     const lines: LedgerLine[] = [
       { account_id: WAGES, debit: gross, credit: 0, description: 'Gross pay' },
       { account_id: EMPLOYER, debit: employer, credit: 0, description: 'Employer contributions' },
-      { account_id: BANK, debit: 0, credit: net, description: 'Net pay' },
+      { account_id: SALARIES, debit: 0, credit: net, description: 'Net pay owed to staff' },
       { account_id: STAT, debit: 0, credit: r2(ded + employer), description: 'CPF and statutory payable' },
     ].filter(l => l.debit || l.credit);
     // anything that doesn't add up (e.g. other deductions) stays with statutory payable
@@ -252,4 +253,33 @@ export function aged(docs: FinDocument[], kind: 'receivable' | 'payable', asAt: 
     buckets[k] = r2(buckets[k] + owed);
   }
   return { rows: [...byContact.entries()].map(([contact_id, v]) => ({ contact_id, ...v })), totals: buckets };
+}
+
+// ---- payroll still to pay ---------------------------------------------------------------------
+
+export interface PayrollDue {
+  run: LedgerInput['payroll'][number];
+  net: number; netPaid: number; netDue: number;
+  stat: number; statPaid: number; statDue: number;
+}
+
+/**
+ * What is still owed for each finalised payroll run: net salaries (account "Salaries payable") and
+ * CPF / statutory amounts. Payments are whatever has been taken off those accounts (Pay buttons,
+ * bank lines booked to them, journals) and are applied to the oldest runs first.
+ */
+export function payrollDue(input: Pick<LedgerInput, 'accounts' | 'payroll'>, entries: LedgerEntry[]): PayrollDue[] {
+  const sal = systemAccount(input.accounts, 'payroll_payable')?.id;
+  const stat = systemAccount(input.accounts, 'statutory_payable')?.id;
+  const paidTo = (acc?: number) => (acc == null ? 0 : r2(entries.filter(e => e.source !== 'payroll')
+    .reduce((s, e) => s + e.lines.filter(l => l.account_id === acc).reduce((t, l) => t + l.debit - l.credit, 0), 0)));
+  let netLeft = paidTo(sal), statLeft = paidTo(stat);
+  return input.payroll.filter(r => r.status !== 'draft')
+    .sort((a, b) => a.pay_date.localeCompare(b.pay_date))
+    .map(r => {
+      const net = r2(r.total_net), st = r2(Number(r.total_deductions) + Number(r.total_employer));
+      const netPaid = r2(Math.max(0, Math.min(net, netLeft))); netLeft = r2(netLeft - netPaid);
+      const statPaid = r2(Math.max(0, Math.min(st, statLeft))); statLeft = r2(statLeft - statPaid);
+      return { run: r, net, netPaid, netDue: r2(net - netPaid), stat: st, statPaid, statDue: r2(st - statPaid) };
+    });
 }

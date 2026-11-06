@@ -6,7 +6,7 @@ import {
 import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, type BankTxn, type Payment } from '../../../../services/finance';
-import { buildLedger, balances } from '../../../../data/ledger';
+import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
 import { balanceDue, type Account, type FinDocument } from '../../../../data/finance';
 import { parseBankCsv, type BankLine } from '../../../../data/bankCsv';
 import { parseStatementText, pdfToRows, rowsToLines, parseWithLayout, type PdfRow, type PdfLayout } from '../../../../data/bankPdf';
@@ -28,6 +28,8 @@ export function Bank({ data }: { data: FinanceData }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [allTxns, setAllTxns] = useState<BankTxn[]>([]);
   const [booksBalance, setBooksBalance] = useState(0);
+  const [dues, setDues] = useState<PayrollDue[]>([]);
+  const [used, setUsed] = useState(true); // has this account any activity (ledger lines or statement lines)?
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('unmatched');
   const [importing, setImporting] = useState<ImportLine[] | null>(null);
@@ -54,6 +56,9 @@ export function Bank({ data }: { data: FinanceData }) {
       setTxns(t); setAllTxns(all); setPayments([...pin, ...pout]);
       const b = balances(input.accounts, buildLedger(input as any)).find(x => x.account.id === accountId);
       setBooksBalance(b?.balance || 0);
+      const ledger = buildLedger(input as any);
+      setDues(payrollDue(input as any, ledger).filter(d => d.netDue > 0 || d.statDue > 0));
+      setUsed(t.length > 0 || ledger.some(e => e.lines.some(l => l.account_id === accountId)));
     } catch (e: any) { message.error(e.message); }
     setLoading(false);
   }, [companyId, accountId]);
@@ -121,6 +126,19 @@ export function Bank({ data }: { data: FinanceData }) {
         <Select style={{ width: 280 }} value={accountId ?? undefined} onChange={setAccountId}
           options={banks.map(b => ({ value: b.id, label: `${b.name}${b.bank_account_no ? ` (${b.bank_account_no})` : ''}${b.currency && b.currency !== currency ? ` · ${b.currency}` : ''}` }))} />
         <Button icon={<EditOutlined />} onClick={() => account && setBankEdit(account)} title="Edit this bank account" />
+        {account && !used && !Number(account.opening_balance) && !Number(account.opening_foreign) && banks.length > 1 && (
+          <Popconfirm title={`Delete ${account.name}?`} description="It has no activity, so nothing else changes."
+            onConfirm={async () => {
+              try {
+                await accountService.remove(account.id);
+                message.success('Bank account deleted');
+                setAccountId(banks.find(b => b.id !== account.id)?.id ?? null);
+                data.reload();
+              } catch (e: any) { message.error(e.message); }
+            }}>
+            <Button danger icon={<DeleteOutlined />} title="Delete this bank account" />
+          </Popconfirm>
+        )}
         <Button icon={<PlusOutlined />} onClick={() => setBankEdit({})}>Bank account</Button>
         <Upload accept=".csv,text/csv,.pdf,application/pdf" showUploadList={false} beforeUpload={onFile}><Button icon={<UploadOutlined />}>Import statement (PDF or CSV)</Button></Upload>
         <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>Add a line</Button>
@@ -220,7 +238,7 @@ export function Bank({ data }: { data: FinanceData }) {
             showImport(lines);
           }} />
       )}
-      {matching && <MatchModal data={data} txn={matching} accCur={accCur} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
+      {matching && <MatchModal data={data} txn={matching} accCur={accCur} dues={dues} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
         onClose={() => setMatching(null)} onDone={() => { setMatching(null); load(); data.reload(); }} />}
     </div>
   );
@@ -246,8 +264,8 @@ function AddLine({ onClose, onAdd, currency }: { onClose: () => void; onAdd: (l:
 }
 
 /** Decide what a statement line is: a payment already recorded, an invoice / bill being paid, or money for an account. */
-function MatchModal({ data, txn, accCur, payments, usedPayments, onClose, onDone }: {
-  data: FinanceData; txn: BankTxn; accCur: string; payments: Payment[]; usedPayments: Set<number>; onClose: () => void; onDone: () => void;
+function MatchModal({ data, txn, accCur, dues, payments, usedPayments, onClose, onDone }: {
+  data: FinanceData; txn: BankTxn; accCur: string; dues: PayrollDue[]; payments: Payment[]; usedPayments: Set<number>; onClose: () => void; onDone: () => void;
 }) {
   const inbound = txn.amount > 0;
   const foreign = accCur !== data.currency;
@@ -270,6 +288,9 @@ function MatchModal({ data, txn, accCur, payments, usedPayments, onClose, onDone
     .sort((a, b) => Number(Math.abs(balanceDue(a) - amt) > 0.005) - Number(Math.abs(balanceDue(b) - amt) > 0.005));
   const contact = (id: number | null) => data.contacts.find(c => c.id === id)?.name || '';
   const bookable = data.accounts.filter((a: Account) => !a.archived && a.id !== txn.account_id);
+  const salId = systemAccount(data.accounts, 'payroll_payable')?.id, statId = systemAccount(data.accounts, 'statutory_payable')?.id;
+  // salaries / CPF of exactly this amount: open the Payroll tab first
+  const payrollHit = !inbound && dues.some(d => Math.abs(d.netDue - lineAmt) < 0.005 || Math.abs(d.statDue - lineAmt) < 0.005);
 
   const run = async (f: () => Promise<void>) => { setBusy(true); try { await f(); message.success('Matched'); onDone(); } catch (e: any) { message.error(e.message); } setBusy(false); };
   const payDoc = () => run(async () => {
@@ -299,7 +320,7 @@ function MatchModal({ data, txn, accCur, payments, usedPayments, onClose, onDone
           {!ready && <div style={{ marginTop: 6 }}><Tag color="gold">Enter the exchange rate or the {data.currency} amount first</Tag></div>}
         </div>
       )}
-      <Tabs defaultActiveKey={suggestions.length ? 'existing' : openDocs.length ? 'doc' : 'account'} items={[
+      <Tabs defaultActiveKey={suggestions.length ? 'existing' : payrollHit ? 'payroll' : openDocs.length ? 'doc' : 'account'} items={[
         {
           key: 'doc', label: inbound ? 'Payment for an invoice' : 'Payment of a bill / expense',
           children: (
@@ -329,6 +350,29 @@ function MatchModal({ data, txn, accCur, payments, usedPayments, onClose, onDone
               ]} />
           ),
         },
+        ...(!inbound ? [{
+          key: 'payroll', label: `Payroll (${dues.length})`,
+          children: dues.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No salaries or CPF waiting to be paid" /> : (
+            <Table rowKey={(d: PayrollDue) => d.run.id} size="small" pagination={false} dataSource={dues}
+              columns={[
+                { title: 'Payroll', key: 'p', render: (_: any, d: PayrollDue) => dayjs(`${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}-01`).format('MMM YYYY') },
+                {
+                  title: 'Salaries to pay', key: 'n', align: 'right' as const, render: (_: any, d: PayrollDue) => d.netDue > 0 ? (
+                    <Button size="small" type={ready && Math.abs(d.netDue - amt) < 0.005 ? 'primary' : 'default'} disabled={!ready || !salId} loading={busy}
+                      onClick={() => run(() => bankService.categorise(data.companyId, txn, salId!, `Salaries paid — ${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}`, foreign ? amt : undefined))}>
+                      {money(d.netDue, data.currency)}
+                    </Button>) : <Tag color="green">Paid</Tag>,
+                },
+                {
+                  title: 'CPF to pay', key: 's', align: 'right' as const, render: (_: any, d: PayrollDue) => d.statDue > 0 ? (
+                    <Button size="small" type={ready && Math.abs(d.statDue - amt) < 0.005 ? 'primary' : 'default'} disabled={!ready || !statId} loading={busy}
+                      onClick={() => run(() => bankService.categorise(data.companyId, txn, statId!, `CPF paid — ${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}`, foreign ? amt : undefined))}>
+                      {money(d.statDue, data.currency)}
+                    </Button>) : <Tag color="green">Paid</Tag>,
+                },
+              ]} />
+          ),
+        }] : []),
         {
           key: 'account', label: 'Something else',
           children: (

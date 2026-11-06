@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_ACCOUNTS, type Account } from '../finance';
-import { buildLedger, balances, profitAndLoss, balanceSheet, gstReturn, accountLedger, aged, spread } from '../ledger';
+import { buildLedger, balances, profitAndLoss, balanceSheet, gstReturn, accountLedger, aged, spread, payrollDue } from '../ledger';
 
 const accounts: Account[] = DEFAULT_ACCOUNTS.map((a, i) => ({ ...a, id: i + 1, company_id: 1, archived: false, opening_balance: 0 }));
 const id = (code: string) => accounts.find(a => a.code === code)!.id;
@@ -52,7 +52,8 @@ describe('ledger', () => {
     expect(bal('1100')).toBe(2943 - 1000 + 1000);            // two invoices still owed in part
     expect(bal('2000')).toBe(109);                           // bill unpaid
     expect(bal('2300')).toBe(0);                             // staff claim paid back
-    expect(bal('1000')).toBe(10000 + 1000 - 50 - 4000 - 10);
+    expect(bal('1000')).toBe(10000 + 1000 - 50 - 10);          // net pay is owed until it's paid
+    expect(bal('2200')).toBe(4000);
     expect(bal('2100')).toBe(243 - 9);                        // GST owed
     expect(bal('2210')).toBe(1850);                           // CPF owed
   });
@@ -68,6 +69,15 @@ describe('ledger', () => {
     expect(h.closing).toBe(2943 - 1000 + 1000);
     const a = aged(input.docs as any, 'receivable', '2026-07-15');
     expect(a.totals.d31_60).toBe(1943);
+  });
+
+  it('payroll still to pay: net salaries and CPF, paid oldest first', () => {
+    const more = { ...input, payroll: [...input.payroll, { ...input.payroll[0], id: 2, period_month: 6, pay_date: '2026-06-30' }],
+      journals: [...input.journals,
+        { id: 2, number: 'J2', journal_date: '2026-06-01', memo: 'Salaries May', lines: [{ account_id: id('2200'), debit: 4000, credit: 0 }, { account_id: id('1000'), debit: 0, credit: 4000 }] },
+        { id: 3, number: 'J3', journal_date: '2026-06-14', memo: 'CPF part', lines: [{ account_id: id('2210'), debit: 1000, credit: 0 }, { account_id: id('1000'), debit: 0, credit: 1000 }] }] };
+    const due = payrollDue(more as any, buildLedger(more as any));
+    expect(due.map(d => [d.netDue, d.statDue])).toEqual([[0, 850], [4000, 1850]]);
   });
 
   it('spreads amounts to the cent', () => {
