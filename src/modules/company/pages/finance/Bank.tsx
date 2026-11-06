@@ -12,6 +12,7 @@ import { balanceDue, schemeLabel, type Account, type FinDocument } from '../../.
 import { parseBankCsv, type BankLine } from '../../../../data/bankCsv';
 import { parseStatementText, pdfToRows, rowsToLines, parseWithLayout, type PdfRow, type PdfLayout } from '../../../../data/bankPdf';
 import { TeachPdf } from './TeachPdf';
+import { MatchDetails, matchLabel, type MatchLookup } from './MatchDetails';
 
 type ImportLine = BankLine & { sure: boolean };
 import { money } from '../../../../data/documentLayouts';
@@ -27,6 +28,8 @@ export function Bank({ data }: { data: FinanceData }) {
   const [accountId, setAccountId] = useState<number | null>(() => banks.find(b => b.subtype === 'bank')?.id ?? banks[0]?.id ?? null);
   const [txns, setTxns] = useState<BankTxn[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [look, setLook] = useState<MatchLookup>({ journals: [], payments: [], allocations: [], docs: [] });
+  const [details, setDetails] = useState<BankTxn | null>(null);
   const [allTxns, setAllTxns] = useState<BankTxn[]>([]);
   const [booksBalance, setBooksBalance] = useState(0);
   const [dues, setDues] = useState<PayrollDue[]>([]);
@@ -59,6 +62,7 @@ export function Bank({ data }: { data: FinanceData }) {
         paymentService.list(companyId, 'in'), paymentService.list(companyId, 'out'), loadLedgerInput(companyId),
       ]);
       setTxns(t); setAllTxns(all); setPayments([...pin, ...pout]);
+      setLook({ journals: input.journals, payments: [...pin, ...pout], allocations: input.allocations as any, docs: input.docs as any });
       const b = balances(input.accounts, buildLedger(input as any)).find(x => x.account.id === accountId);
       setBooksBalance(b?.balance || 0);
       const ledger = buildLedger(input as any);
@@ -121,10 +125,11 @@ export function Bank({ data }: { data: FinanceData }) {
     setImporting(fresh);
   }
 
+  // what a matched line went to — click it for the details and the invoices / bills it paid
   const describe = (t: BankTxn) => {
-    if (t.payment_id) { const p = payments.find(x => x.id === t.payment_id); return p ? `Payment ${p.number || ''} · ${data.contacts.find(c => c.id === p.contact_id)?.name || ''}` : 'Payment'; }
-    if (t.journal_id) return 'Booked to an account (journal)';
-    return '';
+    const l = matchLabel(t, data, look);
+    if (!l) return '';
+    return <a onClick={() => setDetails(t)}>{l.title}{l.sub && <div style={{ fontSize: 12, opacity: 0.65 }}>{l.sub}</div>}</a>;
   };
 
   return (
@@ -171,8 +176,9 @@ export function Bank({ data }: { data: FinanceData }) {
         columns={[
           { title: 'Date', dataIndex: 'txn_date', width: 110 },
           { title: 'Description', dataIndex: 'description' },
-          { title: 'Money in', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
-          { title: 'Money out', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{money(-t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
+          // as on the bank statement: debit = money out, credit = money in
+          { title: 'Debit', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{money(-t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
+          { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
           { title: 'Matched to', key: 'm', render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : describe(t) },
           {
             title: '', key: 'a', width: 170, render: (_, t) => (
@@ -260,6 +266,7 @@ export function Bank({ data }: { data: FinanceData }) {
             showImport(lines);
           }} />
       )}
+      {details && <MatchDetails data={data} txn={details} look={look} accCur={accCur} onClose={() => setDetails(null)} />}
       {matching && <MatchModal data={data} txn={matching} accCur={accCur} dues={dues} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
         onClose={() => setMatching(null)} onDone={() => { setMatching(null); load(); data.reload(); }} />}
     </div>
@@ -381,14 +388,14 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, onClose, 
                 {
                   title: 'Salaries to pay', key: 'n', align: 'right' as const, render: (_: any, d: PayrollDue) => d.netDue > 0 ? (
                     <Button size="small" type={ready && Math.abs(d.netDue - amt) < 0.005 ? 'primary' : 'default'} disabled={!ready || !salId} loading={busy}
-                      onClick={() => run(() => bankService.categorise(data.companyId, txn, salId!, `Salaries paid — ${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}`, foreign ? amt : undefined))}>
+                      onClick={() => run(() => bankService.categorise(data.companyId, txn, salId!, `Salaries — ${dayjs(`${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}-01`).format('MMMM YYYY')}`, foreign ? amt : undefined))}>
                       {money(d.netDue, data.currency)}
                     </Button>) : <Tag color="green">Paid</Tag>,
                 },
                 {
                   title: `${schemeLabel(data.company?.country)} to pay`, key: 's', align: 'right' as const, render: (_: any, d: PayrollDue) => d.statDue > 0 ? (
                     <Button size="small" type={ready && Math.abs(d.statDue - amt) < 0.005 ? 'primary' : 'default'} disabled={!ready || !d.statParts.length} loading={busy}
-                      onClick={() => run(() => bankService.categorise(data.companyId, txn, d.statParts, `${schemeLabel(data.company?.country)} paid — ${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}`, foreign ? amt : undefined))}>
+                      onClick={() => run(() => bankService.categorise(data.companyId, txn, d.statParts, `${schemeLabel(data.company?.country)} — ${dayjs(`${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}-01`).format('MMMM YYYY')}`, foreign ? amt : undefined))}>
                       {money(d.statDue, data.currency)}
                     </Button>) : <Tag color="green">Paid</Tag>,
                 },
