@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { renderPdf } from '../../../utils/renderPdf';
 import { Typography, Tree, Table, Button, Space, Upload, Empty, Spin, message, Popconfirm, Alert, Breadcrumb, DatePicker, Select, Modal, Input } from 'antd';
 import dayjs from 'dayjs';
-import { FolderOutlined, FolderOpenOutlined, FilePdfOutlined, FileOutlined, DownloadOutlined, EyeOutlined, UploadOutlined, DeleteOutlined, FolderAddOutlined, EditOutlined, DragOutlined, FileExcelOutlined, FileWordOutlined, FilePptOutlined } from '@ant-design/icons';
+import { FolderOutlined, FolderOpenOutlined, FilePdfOutlined, FileOutlined, DownloadOutlined, EyeOutlined, UploadOutlined, DeleteOutlined, FolderAddOutlined, EditOutlined, FileExcelOutlined, FileWordOutlined, FilePptOutlined } from '@ant-design/icons';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../utils/supabase';
 import { brandingService, type Branding } from '../../../services/branding';
@@ -56,25 +56,24 @@ export function CompanyDocumentsPage() {
   const [newFolder, setNewFolder] = useState('');
   const [folderParent, setFolderParent] = useState('');
   // renaming a stored file, an attached file, or one of the company's own folders
-  // moving one of the company's own folders (into another, or to the top), or a file into a folder
-  const [moving, setMoving] = useState<{ kind: 'folder' | 'file'; path?: string; id?: number; name: string; to: string } | null>(null);
-  const doMove = async () => {
-    if (!moving || !companyId) return;
+  // drag and drop: a folder of the company's own onto another own folder (or the top level), a file onto a folder
+  const moveFolderTo = async (from: string, parent: string) => {
+    if (!companyId) return;
+    const leaf = from.split('/').pop()!, to = [parent, leaf].filter(Boolean).join('/');
+    if (to === from) return;
+    if (parent === from || parent.startsWith(`${from}/`)) { message.error("A folder can't go inside itself"); return; }
+    if (userFolders.includes(to)) { message.error(`There is already a folder called ${leaf} there`); return; }
     try {
-      if (moving.kind === 'folder') {
-        const from = moving.path!, leaf = from.split('/').pop()!, to = [moving.to, leaf].filter(Boolean).join('/');
-        if (to !== from) {
-          if (userFolders.includes(to)) throw new Error(`There is already a folder called ${leaf} there`);
-          await documentFolderService.save(companyId, userFolders.map(p => (p === from || p.startsWith(`${from}/`) ? to + p.slice(from.length) : p)));
-          await companyFileService.moveFolder(files, from, to);
-          setSelected(`other/${to}`);
-        }
-      } else {
-        await companyFileService.moveFile(moving.id!, moving.to);
-      }
-      setMoving(null); load();
+      await documentFolderService.save(companyId, userFolders.map(p => (p === from || p.startsWith(`${from}/`) ? to + p.slice(from.length) : p)));
+      await companyFileService.moveFolder(files, from, to);
+      setSelected(`other/${to}`); load();
     } catch (e: any) { message.error(e.message); }
   };
+  const moveFileTo = async (id: number, subfolder: string) => {
+    try { await companyFileService.moveFile(id, subfolder); message.success('Moved'); load(); } catch (e: any) { message.error(e.message); }
+  };
+  /** The own-folder path of a tree key ('other' = Other files → ''), or null for the built-in folders. */
+  const ownPath = (key: string): string | null => (key === 'other' ? '' : key.startsWith('other/') ? key.slice(6) : null);
   const [renaming, setRenaming] = useState<{ kind: 'file' | 'att' | 'folder'; id?: number; path?: string; name: string } | null>(null);
   const doRename = async () => {
     if (!renaming || !companyId) return;
@@ -207,7 +206,30 @@ export function CompanyDocumentsPage() {
           <Tree.DirectoryTree treeData={toTree(folders)} selectedKeys={[folder?.key]}
             expandedKeys={[...new Set([...expanded, ...trail.slice(0, -1).map(f => f.key)])]} onExpand={keys => setExpanded(keys.map(String))}
             icon={(p: any) => (p.expanded ? <FolderOpenOutlined /> : <FolderOutlined />)}
-            onSelect={keys => keys[0] && setSelected(String(keys[0]))} />
+            onSelect={keys => keys[0] && setSelected(String(keys[0]))}
+            // own folders can be dragged into another own folder, or between the top-level folders to go to the top
+            draggable={{ icon: false, nodeDraggable: n => !!ownPath(String(n.key)) }}
+            allowDrop={({ dropNode, dropPosition }) => {
+              const k = String(dropNode.key);
+              if (dropPosition === 0) return !!ownPath(k);                      // into one of the own folders
+              return ownPath(k) !== null || !k.includes('/');                  // beside a folder: next to it
+            }}
+            onDrop={info => {
+              const from = ownPath(String(info.dragNode.key)), k = String(info.node.key);
+              if (!from) return;
+              const into = !info.dropToGap ? ownPath(k) : null;
+              moveFolderTo(from, into ?? (ownPath(k) ?? '').split('/').slice(0, -1).join('/'));
+            }}
+            // files dragged from the list onto a folder
+            titleRender={(n: any) => {
+              const target = ownPath(String(n.key));
+              return (
+                <span onDragOver={e => { if (target !== null && e.dataTransfer.types.includes('qv-file')) e.preventDefault(); }}
+                  onDrop={e => { const id = Number(e.dataTransfer.getData('qv-file')); if (target !== null && id) { e.preventDefault(); e.stopPropagation(); moveFileTo(id, target); } }}>
+                  {n.title}
+                </span>
+              );
+            }} />
         </div>
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
@@ -229,7 +251,6 @@ export function CompanyDocumentsPage() {
             {folder?.upload && (
               <Space wrap>
                 {folder.userPath && <Button icon={<EditOutlined />} onClick={() => setRenaming({ kind: 'folder', path: folder.userPath, name: folder.title })}>Rename</Button>}
-                {folder.userPath && <Button icon={<DragOutlined />} onClick={() => setMoving({ kind: 'folder', path: folder.userPath, name: folder.title, to: folder.userPath!.split('/').slice(0, -1).join('/') })}>Move</Button>}
                 {folder.userPath && !folder.children.length && !folder.files.length && (
                   <Popconfirm title={`Delete the folder ${folder.title}?`} onConfirm={async () => {
                     try {
@@ -268,6 +289,11 @@ export function CompanyDocumentsPage() {
           ) : null}
           {!rows.length ? (!folder?.children.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing here yet" />) : (
             <Table rowKey="key" size="small" dataSource={rows} pagination={{ pageSize: 50, hideOnSinglePage: true }}
+              onRow={r => {
+                // files in own folders / Other files can be dragged onto a folder on the left
+                const f = r.kind === 'stored' && r.fileId ? files.find(x => x.id === r.fileId) : undefined;
+                return f?.folder === 'other' ? { draggable: true, style: { cursor: 'grab' }, onDragStart: e => { e.dataTransfer.setData('qv-file', String(f.id)); e.dataTransfer.effectAllowed = 'move'; } } : {};
+              }}
               columns={[
                 { title: 'Name', key: 'n', sorter: (a: Row, b: Row) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }), render: (_, r: Row) => <Space>{/\.pdf$/i.test(r.name) || r.kind !== 'stored' ? <FilePdfOutlined /> : /\.(xlsx?|xlsm|csv)$/i.test(r.name) ? <FileExcelOutlined /> : /\.docx?$/i.test(r.name) ? <FileWordOutlined /> : /\.pptx?$/i.test(r.name) ? <FilePptOutlined /> : <FileOutlined />}<a onClick={() => act(r, 'open')}>{r.name}</a></Space> },
                 { title: 'Date', dataIndex: 'date', width: 120, sorter: (a: Row, b: Row) => a.date.localeCompare(b.date) },
@@ -276,12 +302,6 @@ export function CompanyDocumentsPage() {
                     <Space size={4}>
                       <Button size="small" icon={<EyeOutlined />} loading={busy === r.key} onClick={() => act(r, 'open')} title="Open" />
                       <Button size="small" icon={<DownloadOutlined />} onClick={() => act(r, 'download')} title="Download" />
-                      {r.kind === 'stored' && r.fileId && files.find(f => f.id === r.fileId)?.folder === 'other' && (
-                        <Button size="small" icon={<DragOutlined />} title="Move" onClick={() => {
-                          const f = files.find(x => x.id === r.fileId)!;
-                          setMoving({ kind: 'file', id: f.id, name: f.file_name, to: f.subfolder || '' });
-                        }} />
-                      )}
                       {r.kind === 'stored' && (r.fileId || r.attachmentId) && (
                         <Button size="small" icon={<EditOutlined />} title="Rename" onClick={() => {
                           const cur = r.fileId ? files.find(f => f.id === r.fileId)?.file_name : attachments.find(a => a.id === r.attachmentId)?.file_name;
@@ -317,16 +337,6 @@ export function CompanyDocumentsPage() {
       </Modal>
       <Modal open={!!renaming} title="Rename" okText="Save" onCancel={() => setRenaming(null)} okButtonProps={{ disabled: !renaming?.name.trim() }} onOk={doRename}>
         <Input autoFocus value={renaming?.name || ''} onChange={e => setRenaming(r => (r ? { ...r, name: e.target.value } : r))} onPressEnter={doRename} />
-      </Modal>
-      <Modal open={!!moving} title={`Move ${moving?.name || ''}`} okText="Move" onCancel={() => setMoving(null)} onOk={doMove}>
-        <Select style={{ width: '100%' }} showSearch value={moving?.to ?? ''} onChange={v => setMoving(m => (m ? { ...m, to: v } : m))}
-          options={[
-            { value: '', label: moving?.kind === 'folder' ? 'Top level' : 'Other files' },
-            // a folder can't go inside itself
-            ...[...userFolders].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-              .filter(p => moving?.kind !== 'folder' || (p !== moving.path && !p.startsWith(`${moving.path}/`)))
-              .map(p => ({ value: p, label: p.split('/').join(' › ') })),
-          ]} />
       </Modal>
       {viewing && <FileViewer name={viewing.kind === 'stored' ? viewing.name : viewing.name.replace(/(\.pdf)?$/i, '.pdf')} load={() => fileOf(viewing).then(x => x.blob)} onClose={() => setViewing(null)} />}
     </div>
