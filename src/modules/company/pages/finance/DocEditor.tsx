@@ -275,7 +275,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
                   } else setPendingFiles(ps => [...ps, file]);
                   return false;
                 }}>
-                  <Button size="small" icon={<UploadOutlined />}>Attach file (PDF, picture or Excel)</Button>
+                  <Button size="small" icon={<UploadOutlined />}>Attach file</Button>
                 </Upload>
               </Space>
             </Form.Item>

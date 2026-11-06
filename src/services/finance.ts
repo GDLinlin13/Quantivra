@@ -69,11 +69,14 @@ export const financeSettingsService = {
 
 const ATTACH_BUCKET = 'fin-attachments';
 export interface Attachment { id: number; document_id: number; path: string; file_name: string; content_type: string | null; size_bytes: number | null }
-export const ATTACH_TYPES = '.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.xls,.xlsx,.csv';
+export const ATTACH_TYPES = '.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.xls,.xlsx,.xlsm,.csv,.doc,.docx,.ppt,.pptx';
 /** The file's type; some computers leave it empty for Excel / CSV, so work it out from the name. */
 const MIME_BY_EXT: Record<string, string> = {
   pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif',
-  xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', csv: 'text/csv', txt: 'text/plain',
+  xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+  csv: 'text/csv', txt: 'text/plain',
+  doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 };
 export const contentTypeOf = (file: File) => {
   const ext = (file.name.split('.').pop() || '').toLowerCase();
@@ -92,7 +95,7 @@ export const attachmentService = {
     const safe = file.name.replace(/[^\w.\- ]+/g, '_').slice(-80);
     const path = `${companyId}/${documentId}/${Date.now()}-${safe}`;
     const up = await supabase.storage.from(ATTACH_BUCKET).upload(path, file, { contentType: contentTypeOf(file), upsert: false });
-    if (up.error) throw new Error(/bucket|not found/i.test(up.error.message) ? 'Attachments need database update 028 — ask your administrator to run it in Supabase.' : /mime|type/i.test(up.error.message) ? `${file.name}: only PDF, pictures and Excel / CSV files can be uploaded` : up.error.message);
+    if (up.error) throw new Error(/bucket|not found/i.test(up.error.message) ? 'Attachments need database update 028 — ask your administrator to run it in Supabase.' : /mime|type/i.test(up.error.message) ? `${file.name}: only PDF, pictures and Microsoft Office (Word, Excel, PowerPoint) files can be uploaded` : up.error.message);
     const r = await supabase.from('fin_attachments').insert({ company_id: companyId, document_id: documentId, path, file_name: file.name, content_type: contentTypeOf(file), size_bytes: file.size });
     if (r.error) { await supabase.storage.from(ATTACH_BUCKET).remove([path]); throw new Error(r.error.message); }
   },
@@ -132,7 +135,7 @@ export const companyFileService = {
     const safe = file.name.replace(/[^\w.\- ]+/g, '_').slice(-80);
     const path = `${companyId}/files/${Date.now()}-${safe}`;
     const up = await supabase.storage.from(ATTACH_BUCKET).upload(path, file, { contentType: contentTypeOf(file), upsert: false });
-    if (up.error) throw new Error(/mime|type/i.test(up.error.message) ? `${file.name}: only PDF, pictures and Excel / CSV files can be uploaded` : up.error.message);
+    if (up.error) throw new Error(/mime|type/i.test(up.error.message) ? `${file.name}: only PDF, pictures and Microsoft Office (Word, Excel, PowerPoint) files can be uploaded` : up.error.message);
     const r = await supabase.from('company_files').insert({
       company_id: companyId, folder: meta.folder, account_id: meta.account_id ?? null, period: meta.period ?? null,
       path, file_name: file.name, content_type: contentTypeOf(file), size_bytes: file.size,
