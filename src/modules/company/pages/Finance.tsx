@@ -21,7 +21,7 @@ export function CompanyFinancePage() {
   const [error, setError] = useState<string | null>(null);
   const remembered = (k: string, dflt: string) => { try { return localStorage.getItem(k) || dflt; } catch { return dflt; } };
   const [area, setArea] = useState(() => remembered('qv-finance-area', 'sales'));
-  const [tab, setTab] = useState<Record<string, string>>(() => ({ sales: remembered('qv-finance-sales', 'invoices'), purchases: ((v: string) => (v === 'suppliers' ? 'bills' : v))(remembered('qv-finance-purchases', 'bills')) }));
+  const [tab, setTab] = useState<Record<string, string>>(() => ({ sales: remembered('qv-finance-sales', 'invoices'), purchases: ((v: string) => (v === 'suppliers' || v === 'expenses' ? 'bills' : v))(remembered('qv-finance-purchases', 'bills')) }));
 
   const load = useCallback(async () => {
     if (!companyId) return;
@@ -65,7 +65,6 @@ export function CompanyFinancePage() {
       {area === 'purchases' && (
         <Tabs activeKey={tab.purchases} onChange={k => change('purchases', k)} items={[
           { key: 'bills', label: 'Bills', children: <DocList data={d} docType="bill" /> },
-          { key: 'expenses', label: 'Expenses', children: <DocList data={d} docType="expense" /> },
           { key: 'payroll', label: 'Payroll', children: <PayrollPayables data={d} /> },
           { key: 'paid', label: 'Payments made', children: <PaymentsList data={d} direction="out" /> },
         ]} />
