@@ -179,7 +179,7 @@ export function Bank({ data }: { data: FinanceData }) {
           // as on the bank statement: debit = money out, credit = money in
           { title: 'Debit', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{money(-t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
           { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
-          { title: 'Matched to', key: 'm', render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : matchLabel(t, data, look)?.accounts || '' },
+          { title: 'Matched to', key: 'm', width: 220, render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : matchLabel(t, data, look)?.accounts || '' },
           {
             title: '', key: 'a', width: 170, render: (_, t) => (
               <Space size={4}>
