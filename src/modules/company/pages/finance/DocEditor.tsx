@@ -153,7 +153,14 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
           </Form.Item>
           <Form.Item label={docType === 'bill' ? 'Bill date' : 'Date'}>
             <DatePicker style={{ width: '100%' }} allowClear={false} value={doc.issue_date ? dayjs(doc.issue_date) : null}
-              onChange={d => set({ issue_date: d ? d.format('YYYY-MM-DD') : today() })} />
+              onChange={d => {
+                // the due date follows the date: customer's payment terms, else the default terms (quotations: validity)
+                const issue = d ? d.format('YYYY-MM-DD') : today();
+                const c = contacts.find(x => x.id === doc.contact_id);
+                const days = docType === 'quote' ? (settings.quoteValidityDays ?? 30)
+                  : c?.payment_terms_days != null ? c.payment_terms_days : (branding?.templates.invoice.paymentTermsDays ?? 30);
+                set({ issue_date: issue, ...(docType === 'expense' ? {} : { due_date: addDays(issue, days) }) });
+              }} />
           </Form.Item>
           {docType !== 'expense' ? (
             <Form.Item label={dateLabel}>
