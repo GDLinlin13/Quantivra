@@ -4,7 +4,7 @@
 // everything is then stored in the statement's own order.
 
 export interface PlanLine { txn_date: string; description: string; amount: number }
-export interface ExistingLine { id: number; txn_date: string; amount: number; description: string | null; status: string }
+export interface ExistingLine { id: number; txn_date: string; amount: number; description: string | null; status: string; source?: string }
 export interface RecordedEntry { id: number; txn_date: string; amount: number; journal_id: number | null; payment_id: number | null }
 
 export type PlannedLine<L extends PlanLine> =
@@ -28,6 +28,6 @@ export function planImport<L extends PlanLine>(lines: L[], existing: ExistingLin
   });
 }
 
-/** True when the file only repeats lines already there, word for word (nothing to import). */
+/** True when the file only repeats statement lines already there, word for word (nothing to import or confirm). */
 export const nothingNew = (plan: PlannedLine<PlanLine>[]) =>
-  plan.every(p => p.kind === 'keyed' && (p.existing.description || '') === p.line.description);
+  plan.every(p => p.kind === 'keyed' && p.existing.source === 'statement' && (p.existing.description || '') === p.line.description);

@@ -84,8 +84,12 @@ export function Bank({ data }: { data: FinanceData }) {
   useEffect(() => { load(); }, [load, data.docs]);
 
   // opening balance plus the statement lines already matched (lines still to match, or ignored, don't count yet)
+  // opening balance plus the lines that came from the bank's own statement (PDF / CSV); lines keyed in by hand don't count
   const statementBalance = useMemo(() => Math.round(((Number(foreign ? account?.opening_foreign : account?.opening_balance) || 0)
-    + txns.filter(t => t.status === 'matched').reduce((s, t) => s + Number(t.amount), 0)) * 100) / 100, [txns, account, foreign]);
+    + txns.filter(t => t.source === 'statement' && t.status !== 'ignored').reduce((s, t) => s + Number(t.amount), 0)) * 100) / 100, [txns, account, foreign]);
+  // amounts without the currency (it's shown once, at the top)
+  const num = (n: number) => Number(n).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const PURPLE = '#b37feb';
   // Recorded in Quantivra for this bank but not on any statement line yet (e.g. a transfer booked from
   // another bank, a payment recorded by hand): shown so the statement line can be matched to it.
   const expected = useMemo(() => accountId ? recordedNotOnStatement(accountId, look, allTxns, data) : [], [accountId, look, allTxns, data]);
@@ -186,8 +190,9 @@ export function Bank({ data }: { data: FinanceData }) {
         <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>Add a line</Button>
       </Space>
       <Space size={16} wrap style={{ marginBottom: 12 }}>
-        <Card size="small" style={{ minWidth: 200 }}><Statistic title="Balance per statement" value={money(statementBalance, accCur)} /></Card>
-        <Card size="small" style={{ minWidth: 200 }}><Statistic title={foreign ? `System Balance (in ${currency})` : 'System Balance'} value={money(booksBalance, currency)} /></Card>
+        <Card size="small" style={{ minWidth: 110 }}><Statistic title="Currency" value={accCur} /></Card>
+        <Card size="small" style={{ minWidth: 200 }}><Statistic title="Balance per statement" value={num(statementBalance)} styles={{ content: { color: PURPLE } }} /></Card>
+        <Card size="small" style={{ minWidth: 200 }}><Statistic title={foreign ? `System Balance (in ${currency})` : 'System Balance'} value={foreign ? money(booksBalance, currency) : num(booksBalance)} /></Card>
         <Card size="small" style={{ minWidth: 200 }}><Statistic title="Lines to match" value={unmatched} styles={{ content: { color: unmatched ? '#faad14' : undefined } }} /></Card>
       </Space>
       {booksBalance < 0 && !Number(account?.opening_balance) && (
@@ -195,9 +200,9 @@ export function Bank({ data }: { data: FinanceData }) {
           title="The System Balance is negative because this account has no opening balance yet."
           description={<>Payroll net pay, payments and other money out are taken from this account, but the money that was in it when you started isn't recorded. Click <EditOutlined /> next to the account and enter the opening balance and its date (e.g. your bank balance on the day before your first payroll in Quantivra).</>} />
       )}
-      {!foreign && Math.abs(statementBalance - booksBalance) >= 0.01 && unmatched === 0 && txns.length > 0 && (
+      {!foreign && Math.abs(statementBalance - booksBalance) >= 0.01 && unmatched === 0 && txns.length > 0 && txns.every(t => t.source === 'statement') && (
         <Alert type="warning" showIcon style={{ marginBottom: 12 }}
-          title={`The statement and the System Balance differ by ${money(Math.abs(statementBalance - booksBalance), currency)}. Check for payments recorded in Quantivra that aren't on the statement yet, or the account's opening balance.`} />
+          title={`The statement and the System Balance differ by ${num(Math.abs(statementBalance - booksBalance))}. Check for payments recorded in Quantivra that aren't on the statement yet, or the account's opening balance.`} />
       )}
       <Segmented value={filter} onChange={v => setFilter(String(v))} style={{ marginBottom: 12 }}
         options={[{ value: 'all', label: 'All' }, { value: 'unmatched', label: `To match (${unmatched})` }, { value: 'matched', label: 'Matched' },
@@ -205,12 +210,13 @@ export function Bank({ data }: { data: FinanceData }) {
       <Table rowKey="id" size="small" loading={loading} dataSource={shown} pagination={{ pageSize: 100, hideOnSinglePage: true }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={filter === 'unmatched' ? 'All matched' : 'No lines'} /> }}
         columns={[
-          { title: 'Date', dataIndex: 'txn_date', width: 110 },
+          // purple: the line came from the bank's statement (PDF / CSV)
+          { title: 'Date', key: 'dt', width: 110, render: (_, t) => <span style={t.source === 'statement' ? { color: PURPLE, fontWeight: 600 } : undefined}>{t.txn_date}</span> },
           { title: 'Description', key: 'd', render: (_, t) => describe(t) },
           // as on the bank statement: debit = money out, credit = money in
-          { title: 'Debit', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{money(-t.amount, t.status === ('expected' as any) ? currency : accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
-          { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{money(t.amount, t.status === ('expected' as any) ? currency : accCur)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
-          { title: 'Balance', key: 'bal', align: 'right' as const, width: 150, render: (_, t) => (running.has(t.id) ? money(running.get(t.id)!, accCur) : '') },
+          { title: 'Debit', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{t.status === ('expected' as any) && foreign ? money(-t.amount, currency) : num(-t.amount)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
+          { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{t.status === ('expected' as any) && foreign ? money(t.amount, currency) : num(t.amount)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
+          { title: 'Balance', key: 'bal', align: 'right' as const, width: 150, render: (_, t) => (running.has(t.id) ? num(running.get(t.id)!) : '') },
           { title: 'Matched to', key: 'm', width: 220, render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : matchLabel(t, data, look)?.accounts || '' },
           {
             title: '', key: 'a', width: 210, render: (_, t) => t.status === ('expected' as any) ? (
@@ -248,7 +254,7 @@ export function Bank({ data }: { data: FinanceData }) {
             try {
               // statement order; keyed-in lines are replaced by the statement's line, keeping their match
               const rows = plan.map(p => {
-                const base = { txn_date: p.line.txn_date, description: p.line.description, amount: p.line.amount };
+                const base = { txn_date: p.line.txn_date, description: p.line.description, amount: p.line.amount, source: 'statement' as const };
                 if (p.kind === 'keyed') {
                   const e = txns.find(t => t.id === p.existing.id)!;
                   return { ...base, status: e.status, payment_id: e.payment_id, journal_id: e.journal_id,

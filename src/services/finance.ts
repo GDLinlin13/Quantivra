@@ -451,6 +451,8 @@ export interface BankTxn {
   base_amount?: number | null;
   /** matched to a journal that was already recorded (e.g. the other side of a transfer), not made by the match */
   journal_existing?: boolean;
+  /** 'statement' = imported from the bank's PDF / CSV; 'manual' = keyed in by hand (migration 034) */
+  source?: 'statement' | 'manual';
 }
 
 export const bankService = {
