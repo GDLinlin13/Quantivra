@@ -92,15 +92,15 @@ describe('ledger', () => {
       { employee_id: 2, gross_pay: 2000, deductions_json: [{ componentCode: 'DEDUCTION_CPF', amount: 399 }],
         employer_json: [{ componentCode: 'COST_CPF_EMPLOYER', amount: 332.5 }] },
     ], new Set([2]));
-    expect(split).toEqual({ directorGross: 2000, eeCpf: 999, erCpf: 842.5 });
+    expect(split).toEqual({ directorGross: 2000, eeCpf: 999, erCpf: 842.5, sdl: 7.5 });
     const run = { ...input.payroll[0], split };
     const lines = payrollLines(run as any, accounts);
     const on = (code: string) => lines.filter(l => l.account_id === id(code)).reduce((t, l) => t + l.debit - l.credit, 0);
-    expect([on('6000'), on('6005'), on('6010'), on('6015')]).toEqual([3000, 2000, 842.5, 7.5]);
-    expect([on('2200'), on('2210'), on('2220'), on('2230')]).toEqual([-4000, -999, -842.5, -8.5]);
+    expect([on('6000'), on('6005'), on('6010'), on('6015')]).toEqual([3000, 2000, 842.5, 7]); // SDL 7.50 → 7 (cents dropped)
+    expect([on('2200'), on('2210'), on('2220'), on('2230')]).toEqual([-4000, -999, -842.5, -8]);
     const due = payrollDue({ accounts, payroll: [run] } as any, buildLedger({ ...input, payroll: [run] } as any));
-    expect(due[0].statDue).toBe(1850);
-    expect(splitByShare(1850, due[0].statParts).map(p => p.amount)).toEqual([999, 842.5, 8.5]);
+    expect(due[0].statDue).toBe(1849.5);
+    expect(splitByShare(1849.5, due[0].statParts).map(p => p.amount)).toEqual([999, 842.5, 8]);
   });
 
   it('upgrades an older chart of accounts once', () => {
