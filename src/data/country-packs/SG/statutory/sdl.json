@@ -61,7 +61,7 @@
   ],
   "rounding": {
     "employee": { "method": "round", "decimals": 2 },
-    "employer": { "method": "round", "decimals": 2 }
+    "employer": { "method": "round", "decimals": 6 }
   },
   "reporting": {
     "agency": "CPF Board",

@@ -143,4 +143,13 @@ describe('calculatePayroll pipeline', () => {
     const shg = emp.statutoryContributions.filter((s) => ['CDAC', 'SINDA', 'MBMF', 'ECF'].includes(s.schemeCode));
     expect(shg).toHaveLength(0);
   });
+
+  it('keeps the exact SDL per employee (cents are only dropped from the month total)', () => {
+    const r = run([{
+      employeeId: 'E1', name: 'Alice', dateOfBirth: '1990-06-15', dateOfJoining: '2020-01-01',
+      employmentStatusCode: 'PERMANENT', immigrationStatusCode: 'SC',
+      salaryComponents: [{ componentCode: 'BASIC', amount: 3333 }],
+    }]);
+    expect(r.employees[0].statutoryContributions.find((s) => s.schemeCode === 'SDL')!.employerTotal).toBe(8.3325);
+  });
 });
