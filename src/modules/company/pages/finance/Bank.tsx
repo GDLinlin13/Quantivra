@@ -88,19 +88,22 @@ export function Bank({ data }: { data: FinanceData }) {
   // Recorded in Quantivra for this bank but not on any statement line yet (e.g. a transfer booked from
   // another bank, a payment recorded by hand): shown so the statement line can be matched to it.
   const expected = useMemo(() => accountId ? recordedNotOnStatement(accountId, look, allTxns, data) : [], [accountId, look, allTxns, data]);
+  // oldest first: by date, then the order lines came in (the running balance follows this; the list shows it newest first)
+  const chrono = (a: BankTxn, b: BankTxn) => a.txn_date.localeCompare(b.txn_date) || Math.abs(a.id) - Math.abs(b.id);
   const shown: BankTxn[] = [
     ...(filter === 'all' || filter === 'unmatched' ? expected : []),
     ...txns.filter(t => filter === 'all' || t.status === filter),
-  ].sort((a, b) => b.txn_date.localeCompare(a.txn_date));
+  ].sort((a, b) => chrono(b, a));
   const unmatched = txns.filter(t => t.status === 'unmatched').length + expected.length;
   // running balance after each line, oldest first (ignored lines don't count)
   const running = useMemo(() => {
     const m = new Map<number, number>();
     let bal = Number(foreign ? account?.opening_foreign : account?.opening_balance) || 0;
     [...txns.filter(t => t.status !== 'ignored'), ...expected]
-      .sort((a, b) => a.txn_date.localeCompare(b.txn_date) || Math.abs(a.id) - Math.abs(b.id))
+      .sort(chrono)
       .forEach(t => { bal = Math.round((bal + Number(t.amount)) * 100) / 100; m.set(t.id, bal); });
     return m;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [txns, expected, account, foreign]);
 
   const bankModal = bankEdit && (
