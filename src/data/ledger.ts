@@ -9,18 +9,24 @@ export interface LedgerEntry {
   source_id: number | null; ref: string; memo: string; lines: LedgerLine[];
 }
 
-/** A payroll run broken down from its payslips: directors' pay and the CPF shares. */
+/** A payroll run broken down from its payslips: directors' pay and the employee / employer contribution shares. */
 export interface PayrollSplit { directorGross: number; eeCpf: number; erCpf: number; sdl?: number }
 
-/** Works out a run's split from its payslips. `directors` holds the ids of employees whose type is Director. */
-export function payrollSplit(slips: { employee_id: number; gross_pay: number; deductions_json?: any[]; employer_json?: any[] }[], directors: Set<number>): PayrollSplit {
-  const sum = (items: any[] | undefined, code: string) => (items || []).filter(i => i?.componentCode === code).reduce((t, i) => t + (Number(i.amount) || 0), 0);
+/**
+ * Works out a run's split from its payslips. `directors` holds the ids of employees whose type is Director.
+ * Singapore: the CPF shares (SDL and self-help funds are kept apart). Elsewhere: every statutory contribution.
+ */
+export function payrollSplit(slips: { employee_id: number; gross_pay: number; deductions_json?: any[]; employer_json?: any[] }[], directors: Set<number>, country = 'SG'): PayrollSplit {
+  const sg = (country || 'SG').toUpperCase() === 'SG';
+  const match = (code: string, want: string) => (sg ? code === want
+    : want.startsWith('DEDUCTION_') ? code.startsWith('DEDUCTION_') && !code.endsWith('_ABSORBED') : /^COST_.*_EMPLOYER$/.test(code));
+  const sum = (items: any[] | undefined, code: string) => (items || []).filter(i => match(String(i?.componentCode || ''), code)).reduce((t, i) => t + (Number(i.amount) || 0), 0);
   let directorGross = 0, eeCpf = 0, erCpf = 0, sdl = 0;
   for (const p of slips) {
     if (directors.has(Number(p.employee_id))) directorGross += Number(p.gross_pay) || 0;
     eeCpf += sum(p.deductions_json, 'DEDUCTION_CPF');
     erCpf += sum(p.employer_json, 'COST_CPF_EMPLOYER');
-    sdl += sum(p.employer_json, 'COST_SDL_EMPLOYER');
+    if (sg) sdl += sum(p.employer_json, 'COST_SDL_EMPLOYER');
   }
   return { directorGross: r2(directorGross), eeCpf: r2(eeCpf), erCpf: r2(erCpf), sdl: r2(sdl) };
 }
@@ -54,12 +60,12 @@ export function payrollLines(r: LedgerInput['payroll'][number], accounts: Accoun
   const lines: LedgerLine[] = [
     { account_id: WAGES, debit: r2(gross - dirGross), credit: 0, description: 'Employee salaries' },
     { account_id: DIRECTOR, debit: dirGross, credit: 0, description: "Director's salary" },
-    { account_id: ER_CPF, debit: erCpf, credit: 0, description: "Employer's CPF" },
-    { account_id: ER_OTHER, debit: r2(employer - erCpf - sdlCents), credit: 0, description: 'SDL and other employer contributions' },
+    { account_id: ER_CPF, debit: erCpf, credit: 0, description: 'Employer contributions' },
+    { account_id: ER_OTHER, debit: r2(employer - erCpf - sdlCents), credit: 0, description: 'Other employer contributions' },
     { account_id: SALARIES, debit: 0, credit: net, description: 'Net salaries owed' },
-    { account_id: EE_PAY, debit: 0, credit: eeCpf, description: "Employee's CPF owed" },
-    { account_id: ER_PAY, debit: 0, credit: erCpf, description: "Employer's CPF owed" },
-    { account_id: OTHER_PAY, debit: 0, credit: r2(ded - eeCpf + employer - erCpf - sdlCents), description: 'SDL, self-help funds and other deductions owed' },
+    { account_id: EE_PAY, debit: 0, credit: eeCpf, description: 'Employee contributions owed' },
+    { account_id: ER_PAY, debit: 0, credit: erCpf, description: 'Employer contributions owed' },
+    { account_id: OTHER_PAY, debit: 0, credit: r2(ded - eeCpf + employer - erCpf - sdlCents), description: 'Other deductions owed' },
   ];
   // anything that doesn't add up stays with the other deductions
   const diff = r2(lines.reduce((s, l) => s + l.debit - l.credit, 0));

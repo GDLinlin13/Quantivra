@@ -7,7 +7,7 @@ import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteO
 import dayjs from 'dayjs';
 import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, type BankTxn, type Payment } from '../../../../services/finance';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
-import { balanceDue, type Account, type FinDocument } from '../../../../data/finance';
+import { balanceDue, schemeLabel, type Account, type FinDocument } from '../../../../data/finance';
 import { parseBankCsv, type BankLine } from '../../../../data/bankCsv';
 import { parseStatementText, pdfToRows, rowsToLines, parseWithLayout, type PdfRow, type PdfLayout } from '../../../../data/bankPdf';
 import { TeachPdf } from './TeachPdf';
@@ -352,7 +352,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, onClose, 
         },
         ...(!inbound ? [{
           key: 'payroll', label: `Payroll (${dues.length})`,
-          children: dues.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No salaries or CPF waiting to be paid" /> : (
+          children: dues.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`No salaries or ${schemeLabel(data.company?.country)} waiting to be paid`} /> : (
             <Table rowKey={(d: PayrollDue) => d.run.id} size="small" pagination={false} dataSource={dues}
               columns={[
                 { title: 'Payroll', key: 'p', render: (_: any, d: PayrollDue) => dayjs(`${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}-01`).format('MMM YYYY') },
@@ -364,9 +364,9 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, onClose, 
                     </Button>) : <Tag color="green">Paid</Tag>,
                 },
                 {
-                  title: 'CPF to pay', key: 's', align: 'right' as const, render: (_: any, d: PayrollDue) => d.statDue > 0 ? (
+                  title: `${schemeLabel(data.company?.country)} to pay`, key: 's', align: 'right' as const, render: (_: any, d: PayrollDue) => d.statDue > 0 ? (
                     <Button size="small" type={ready && Math.abs(d.statDue - amt) < 0.005 ? 'primary' : 'default'} disabled={!ready || !d.statParts.length} loading={busy}
-                      onClick={() => run(() => bankService.categorise(data.companyId, txn, d.statParts, `CPF paid — ${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}`, foreign ? amt : undefined))}>
+                      onClick={() => run(() => bankService.categorise(data.companyId, txn, d.statParts, `${schemeLabel(data.company?.country)} paid — ${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}`, foreign ? amt : undefined))}>
                       {money(d.statDue, data.currency)}
                     </Button>) : <Tag color="green">Paid</Tag>,
                 },
@@ -377,7 +377,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, onClose, 
           key: 'account', label: 'Something else',
           children: (
             <div>
-              <Text type="secondary">For money that isn't an invoice or bill — bank charges, interest, CPF payment, owner's capital, a loan…</Text>
+              <Text type="secondary">For money that isn't an invoice or bill — bank charges, interest, owner's capital, a loan…</Text>
               <Form layout="vertical" style={{ marginTop: 8 }}>
                 <Form.Item label="Account">
                   <Select showSearch optionFilterProp="label" value={accountId ?? undefined} onChange={setAccountId}

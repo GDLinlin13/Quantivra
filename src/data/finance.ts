@@ -185,6 +185,43 @@ const PAYROLL_RENAMES: Record<string, [string, string]> = {
   payroll: ['Salaries and wages', 'Employee salaries / wages'],
   payroll_employer: ['CPF and statutory contributions', "Employer's CPF contributions"],
 };
+// ---- names that depend on the company's country ---------------------------------------------
+
+/** Short name of the main payroll contribution scheme, e.g. "CPF" in Singapore. */
+const SCHEMES: Record<string, string> = {
+  SG: 'CPF', MY: 'EPF, SOCSO & EIS', HK: 'MPF', AE: 'pension (GPSSA)', SA: 'GOSI', AU: 'superannuation', NZ: 'KiwiSaver',
+  GB: 'pension & National Insurance', US: 'FICA', CA: 'CPP & EI', IN: 'PF & ESI', ID: 'BPJS', PH: 'SSS, PhilHealth & Pag-IBIG',
+};
+export const payrollScheme = (country?: string | null) => SCHEMES[(country || 'SG').toUpperCase()] || 'statutory';
+/** The same, for screens: "CPF", "EPF, SOCSO & EIS", "Statutory contributions"… (capitalised). */
+export const schemeLabel = (country?: string | null) => {
+  const x = payrollScheme(country);
+  const t = x === 'statutory' ? 'statutory contributions' : x;
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
+/** Name of the sales tax, e.g. "GST" in Singapore, "VAT" in the UAE. */
+const SALES_TAX: Record<string, string> = { SG: 'GST', AU: 'GST', NZ: 'GST', IN: 'GST', CA: 'GST', MY: 'SST', US: 'Sales tax', HK: 'Sales tax', JP: 'Consumption tax' };
+export const salesTaxName = (country?: string | null) => SALES_TAX[(country || 'SG').toUpperCase()] || 'VAT';
+
+/** Account names that follow the country (everything else in DEFAULT_ACCOUNTS is the same everywhere). */
+export function localAccountNames(country?: string | null): Record<string, string> {
+  const c = (country || 'SG').toUpperCase(), x = payrollScheme(c);
+  const sg = c === 'SG';
+  return {
+    tax: salesTaxName(c),
+    statutory_payable: `Employee's ${x} contribution${sg ? '' : 's'} payable`,
+    cpf_employer_payable: `Employer's ${x} contribution${sg ? '' : 's'} payable`,
+    payroll_employer: `Employer's ${x} contributions`,
+    other_payroll_payable: sg ? 'SDL, CDAC/SINDA/MBMF/ECF and other deductions payable' : 'Other payroll deductions payable',
+    payroll_employer_other: sg ? 'SDL and other employer contributions' : 'Other employer payroll costs',
+  };
+}
+/** The standard chart of accounts with the country's names. */
+export function defaultAccountsFor(country?: string | null) {
+  const names = localAccountNames(country);
+  return DEFAULT_ACCOUNTS.map(a => (a.subtype && names[a.subtype] ? { ...a, name: names[a.subtype] } : a));
+}
+
 /**
  * Accounts added to the standard chart after companies were set up. Each group is added once: when its
  * `marker` account is missing (the payroll split also renames untouched old names).
@@ -194,25 +231,35 @@ const CHART_UPGRADES: { marker: string; subtypes: string[]; renames?: Record<str
   { marker: 'fees_tax_agent', subtypes: ['fees_secretarial', 'fees_tax_agent', 'fees_accounting'] },
 ];
 
-/** Brings an older company's chart of accounts up to date, once per group. Empty when nothing to do. */
-export function chartUpgrade(rows: Pick<Account, 'id' | 'code' | 'name' | 'subtype'>[]) {
+/**
+ * Brings an older company's chart of accounts up to date, once per group, with the country's names; and renames
+ * accounts still carrying another country's standard name (e.g. "Employee's CPF…" in a Malaysian company).
+ * Empty when nothing to do.
+ */
+export function chartUpgrade(rows: Pick<Account, 'id' | 'code' | 'name' | 'subtype'>[], country?: string | null) {
   const add: Omit<Account, 'id' | 'company_id' | 'archived'>[] = [];
   const rename: { id: number; name: string }[] = [];
   if (!rows.length) return { add, rename };
+  const local = localAccountNames(country), sgNames = localAccountNames('SG');
+  const defaults = defaultAccountsFor(country);
   const used = new Set(rows.map(r => r.code));
   for (const g of CHART_UPGRADES) {
     if (rows.some(r => r.subtype === g.marker)) continue;
-    for (const d of DEFAULT_ACCOUNTS.filter(a => g.subtypes.includes(a.subtype || ''))) {
+    for (const d of defaults.filter(a => g.subtypes.includes(a.subtype || ''))) {
       if (rows.some(r => r.subtype === d.subtype)) continue;
       let c = Number(d.code);
       while (used.has(String(c))) c++;
       used.add(String(c));
       add.push({ ...d, code: String(c) });
     }
-    for (const r of rows) {
-      const rn = g.renames?.[r.subtype || ''];
-      if (rn && r.name === rn[0]) rename.push({ id: r.id, name: rn[1] });
-    }
+  }
+  for (const r of rows) {
+    const st = r.subtype || '';
+    const old = CHART_UPGRADES.some(g => g.renames?.[st]?.[0] === r.name);
+    const target = local[st] || CHART_UPGRADES.map(g => g.renames?.[st]?.[1]).find(Boolean);
+    if (!target || r.name === target) continue;
+    // only names nobody changed: an old standard name, or the Singapore standard name in another country
+    if (old || (sgNames[st] && r.name === sgNames[st])) rename.push({ id: r.id, name: target });
   }
   return { add, rename };
 }
