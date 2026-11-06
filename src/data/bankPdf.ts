@@ -19,7 +19,8 @@ const val = (s: string) => {
 function leadingDate(words: string[], year: string | null): { date: string; used: number } | null {
   if (!words.length) return null;
   const one = parseDate(words[0]);
-  if (one && /\d{4}|\d{1,2}[/.-]\d{1,2}[/.-]\d{2}/.test(words[0])) return { date: one, used: 1 };
+  // 01/11/2026, 2026-11-01, 01/11/26, and DBS-style 19-May-26
+  if (one && /\d{4}|\d{1,2}[/.-]\d{1,2}[/.-]\d{2}|^\d{1,2}[-/.][A-Za-z]{3,}[-/.]\d{2,4}$/.test(words[0])) return { date: one, used: 1 };
   if (/^\d{1,2}$/.test(words[0]) && MONTHS.test(words[1] || '')) {
     if (/^\d{2,4}$/.test(words[2] || '')) { const d = parseDate(`${words[0]} ${words[1]} ${words[2]}`); if (d) return { date: d, used: 3 }; }
     if (year) { const d = parseDate(`${words[0]} ${words[1]} ${year}`); if (d) return { date: d, used: 2 }; }
@@ -151,7 +152,12 @@ export function parseWithLayout(rows: PdfRow[], layout: PdfLayout): { lines: Pdf
     const text = row.map(p => p.s).join(' ');
     const dateText = (parts.date || []).join(' ');
     const d = leadingDate(dateText.split(/\s+/), year);
-    const num = (k: string) => { const t = (parts[k] || []).join(' ').trim(); return t && /\d/.test(t) ? val(t.split(/\s+/).filter(w => /\d/.test(w)).pop() || '') : null; };
+    // only money-shaped pieces (1,000.00 / (50.00) / 12.30 CR) count — never reference numbers
+    const num = (k: string) => {
+      const t = (parts[k] || []).join(' ').replace(/\s+(CR|DR)\b/gi, '$1').trim();
+      const m = t.split(/\s+/).filter(w => AMOUNT.test(w)).pop();
+      return m ? val(m) : null;
+    };
     const outAmt = num('out'), inAmt = num('in'), amt = num('amount'), bal = num('balance');
     if (/balance\s+(brought|b\/f|carried|c\/f)|opening balance|previous balance|balance forward/i.test(text)) {
       if (bal != null) prevBalance = bal;
