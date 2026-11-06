@@ -2,14 +2,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { renderPdf } from '../../../utils/renderPdf';
 import { Typography, Tree, Table, Button, Space, Upload, Empty, Spin, message, Popconfirm, Alert, Breadcrumb, DatePicker, Select, Modal, Input } from 'antd';
 import dayjs from 'dayjs';
-import { FolderOutlined, FolderOpenOutlined, FilePdfOutlined, FileOutlined, DownloadOutlined, EyeOutlined, UploadOutlined, DeleteOutlined, FolderAddOutlined, EditOutlined } from '@ant-design/icons';
+import { FolderOutlined, FolderOpenOutlined, FilePdfOutlined, FileOutlined, DownloadOutlined, EyeOutlined, UploadOutlined, DeleteOutlined, FolderAddOutlined, EditOutlined, FileExcelOutlined, FileWordOutlined, FilePptOutlined } from '@ant-design/icons';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../utils/supabase';
 import { brandingService, type Branding } from '../../../services/branding';
 import { payrollService, type PayrollRunRow, type PayslipRow } from '../../../services/payroll';
 import { hrService, type Employee } from '../../../services/hr';
 import {
-  docService, contactService, accountService, financeSettingsService, catalogService, attachmentService, companyFileService, statementPrefService, documentFolderService,
+  docService, contactService, accountService, financeSettingsService, catalogService, attachmentService, companyFileService, statementPrefService, documentFolderService, ATTACH_TYPES,
   type Attachment, type CompanyFile, type DuplicateStatement,
 } from '../../../services/finance';
 import { DEFAULT_FINANCE_SETTINGS, DOC_LABEL, type FinDocument, type FinanceSettings, type Contact, type ContactPerson } from '../../../data/finance';
@@ -199,7 +199,7 @@ export function CompanyDocumentsPage() {
               <Space wrap>
                 <Text type="secondary">Statement for</Text>
                 <DatePicker picker="month" format="MMMM YYYY" allowClear={false} value={month} onChange={d => d && setMonth(d)} />
-                <Upload showUploadList={false} beforeUpload={file => {
+                <Upload accept={ATTACH_TYPES} showUploadList={false} beforeUpload={file => {
                   saveBankStatement(companyId, file, bankId, month.format('YYYY-MM'))
                     .then(r => { message.success(r === 'kept-old' ? 'Kept the statement that was already there' : `${file.name} saved as the ${month.format('MMMM YYYY')} statement`); load(); })
                     .catch(e => message.error(e.message));
@@ -223,7 +223,7 @@ export function CompanyDocumentsPage() {
                   </Popconfirm>
                 )}
                 {folder.userPath && <Button icon={<FolderAddOutlined />} onClick={() => { setFolderParent(folder.userPath!); setNewFolder(''); setAddingFolder(true); }}>New folder</Button>}
-                <Upload multiple showUploadList={false} beforeUpload={file => {
+                <Upload accept={ATTACH_TYPES} multiple showUploadList={false} beforeUpload={file => {
                   companyFileService.add(companyId, file, { folder: folder.upload!, subfolder: folder.userPath || null })
                     .then(() => { message.success(`${file.name} uploaded`); load(); }).catch(e => message.error(e.message));
                   return false;
@@ -251,7 +251,7 @@ export function CompanyDocumentsPage() {
           {!rows.length ? (!folder?.children.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing here yet" />) : (
             <Table rowKey="key" size="small" dataSource={rows} pagination={{ pageSize: 50, hideOnSinglePage: true }}
               columns={[
-                { title: 'Name', key: 'n', sorter: (a: Row, b: Row) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }), render: (_, r: Row) => <Space>{/\.pdf$/i.test(r.name) || r.kind !== 'stored' ? <FilePdfOutlined /> : <FileOutlined />}<a onClick={() => act(r, 'open')}>{r.name}</a></Space> },
+                { title: 'Name', key: 'n', sorter: (a: Row, b: Row) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }), render: (_, r: Row) => <Space>{/\.pdf$/i.test(r.name) || r.kind !== 'stored' ? <FilePdfOutlined /> : /\.(xlsx?|xlsm|csv)$/i.test(r.name) ? <FileExcelOutlined /> : /\.docx?$/i.test(r.name) ? <FileWordOutlined /> : /\.pptx?$/i.test(r.name) ? <FilePptOutlined /> : <FileOutlined />}<a onClick={() => act(r, 'open')}>{r.name}</a></Space> },
                 { title: 'Date', dataIndex: 'date', width: 120, sorter: (a: Row, b: Row) => a.date.localeCompare(b.date) },
                 {
                   title: '', key: 'a', width: 190, render: (_, r: Row) => (
