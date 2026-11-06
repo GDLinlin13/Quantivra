@@ -29,6 +29,7 @@ export function Bank({ data }: { data: FinanceData }) {
   const [allTxns, setAllTxns] = useState<BankTxn[]>([]);
   const [booksBalance, setBooksBalance] = useState(0);
   const [dues, setDues] = useState<PayrollDue[]>([]);
+  const [used, setUsed] = useState(true); // has this account any activity (ledger lines or statement lines)?
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('unmatched');
   const [importing, setImporting] = useState<ImportLine[] | null>(null);
@@ -55,7 +56,9 @@ export function Bank({ data }: { data: FinanceData }) {
       setTxns(t); setAllTxns(all); setPayments([...pin, ...pout]);
       const b = balances(input.accounts, buildLedger(input as any)).find(x => x.account.id === accountId);
       setBooksBalance(b?.balance || 0);
-      setDues(payrollDue(input as any, buildLedger(input as any)).filter(d => d.netDue > 0 || d.statDue > 0));
+      const ledger = buildLedger(input as any);
+      setDues(payrollDue(input as any, ledger).filter(d => d.netDue > 0 || d.statDue > 0));
+      setUsed(t.length > 0 || ledger.some(e => e.lines.some(l => l.account_id === accountId)));
     } catch (e: any) { message.error(e.message); }
     setLoading(false);
   }, [companyId, accountId]);
@@ -123,6 +126,19 @@ export function Bank({ data }: { data: FinanceData }) {
         <Select style={{ width: 280 }} value={accountId ?? undefined} onChange={setAccountId}
           options={banks.map(b => ({ value: b.id, label: `${b.name}${b.bank_account_no ? ` (${b.bank_account_no})` : ''}${b.currency && b.currency !== currency ? ` · ${b.currency}` : ''}` }))} />
         <Button icon={<EditOutlined />} onClick={() => account && setBankEdit(account)} title="Edit this bank account" />
+        {account && !used && !Number(account.opening_balance) && !Number(account.opening_foreign) && banks.length > 1 && (
+          <Popconfirm title={`Delete ${account.name}?`} description="It has no activity, so nothing else changes."
+            onConfirm={async () => {
+              try {
+                await accountService.remove(account.id);
+                message.success('Bank account deleted');
+                setAccountId(banks.find(b => b.id !== account.id)?.id ?? null);
+                data.reload();
+              } catch (e: any) { message.error(e.message); }
+            }}>
+            <Button danger icon={<DeleteOutlined />} title="Delete this bank account" />
+          </Popconfirm>
+        )}
         <Button icon={<PlusOutlined />} onClick={() => setBankEdit({})}>Bank account</Button>
         <Upload accept=".csv,text/csv,.pdf,application/pdf" showUploadList={false} beforeUpload={onFile}><Button icon={<UploadOutlined />}>Import statement (PDF or CSV)</Button></Upload>
         <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>Add a line</Button>
