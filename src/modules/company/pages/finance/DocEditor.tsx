@@ -2,14 +2,14 @@ import { useState, useEffect, useMemo } from 'react';
 import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Table, Divider, Typography, message, Switch, Popconfirm, Alert, Tag } from 'antd';
 import { PlusOutlined, DeleteOutlined, HolderOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { docService, paymentService } from '../../../../services/finance';
+import { docService, paymentService, catalogService } from '../../../../services/finance';
 import {
   docTotals, addDays, today, DOC_LABEL, STATUS_LABEL, STATUS_COLOR,
   type DocType, type FinDocument, type DocLine, type DocDiscount, type Contact, type ContactPerson, type FinanceSettings, type Account,
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
-import type { CatalogItem } from '../../../../data/catalog';
+import { priceFor, type CatalogItem, type CustomerPrice } from '../../../../data/catalog';
 
 const { Text } = Typography;
 
@@ -63,13 +63,16 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
       { label: 'Expenses', options: lineAccounts.filter(a => a.type === 'expense').map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
       { label: 'Things you own (assets)', options: lineAccounts.filter(a => a.type === 'asset').map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
     ];
+  // special prices for particular customers (Catalog → item → Customer prices)
+  const [custPrices, setCustPrices] = useState<CustomerPrice[]>([]);
+  useEffect(() => { if (sales) catalogService.prices(companyId).then(setCustPrices).catch(() => null); }, [companyId, sales]);
   const catalog = items.filter(it => !it.archived || lines.some(l => l.item_id === it.id));
   const pickItem = (i: number, id: number | null) => {
     const it = items.find(x => x.id === id);
     if (!it) { setLine(i, { item_id: null }); return; }
     setLine(i, {
       item_id: it.id, description: it.description ? `${it.name}\n${it.description}` : it.name,
-      unit_price: Number(sales ? it.sale_price : it.purchase_price) || 0,
+      unit_price: sales ? priceFor(it, doc.contact_id, custPrices) : Number(it.purchase_price) || 0,
       tax_rate: settings.gstRegistered ? (it.tax_rate == null ? gstRate : Number(it.tax_rate)) : 0,
       account_id: (sales ? it.income_account_id : it.expense_account_id) || null,
     });
@@ -83,6 +86,18 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
     const patch: Partial<FinDocument> = { contact_id: id, contact_person_id: main?.id ?? null };
     if (c?.payment_terms_days != null && docType !== 'quote' && doc.issue_date) patch.due_date = addDays(doc.issue_date, c.payment_terms_days);
     set(patch);
+    // catalog lines still at the previous customer's price move to this customer's price
+    if (sales) {
+      let changed = 0;
+      setLines(ls => ls.map(l => {
+        const it = l.item_id ? items.find(x => x.id === l.item_id) : undefined;
+        if (!it || Math.abs(Number(l.unit_price) - priceFor(it, doc.contact_id, custPrices)) > 0.005) return l;
+        const p = priceFor(it, id, custPrices);
+        if (Math.abs(p - Number(l.unit_price)) > 0.005) changed++;
+        return { ...l, unit_price: p };
+      }));
+      setTimeout(() => { if (changed) message.info(`Prices updated to ${c?.name || 'this customer'}'s prices`); });
+    }
   };
 
   const save = async (status?: string) => {

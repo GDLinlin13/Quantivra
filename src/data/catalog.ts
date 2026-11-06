@@ -6,6 +6,15 @@ export interface CatalogItem {
   tax_rate: number | null; income_account_id: number | null; expense_account_id: number | null;
   track_stock: boolean; opening_qty: number; reorder_level: number | null; category: string | null; archived: boolean;
 }
+/** A special selling price of one item for one customer (migration 027). */
+export interface CustomerPrice { id?: number; item_id: number; contact_id: number; price: number }
+
+/** The price to quote a customer: their own price for the item if there is one, otherwise the normal selling price. */
+export function priceFor(item: Pick<CatalogItem, 'id' | 'sale_price'>, contactId: number | null | undefined, prices: CustomerPrice[]): number {
+  const own = contactId ? prices.find(p => p.item_id === item.id && p.contact_id === contactId) : undefined;
+  return Number(own ? own.price : item.sale_price) || 0;
+}
+
 export interface StockAdjustment { id: number; item_id: number; adj_date: string; quantity: number; reason: string | null }
 export interface StockMove { date: string; ref: string; kind: 'opening' | 'sold' | 'bought' | 'returned' | 'adjusted'; quantity: number; note?: string }
 

@@ -7,9 +7,9 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, SwapOutline
 import dayjs from 'dayjs';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../utils/supabase';
-import { catalogService, accountService, financeSettingsService, loadLedgerInput } from '../../../services/finance';
+import { catalogService, accountService, financeSettingsService, loadLedgerInput, contactService } from '../../../services/finance';
 import { stockMoves, onHand, type CatalogItem, type StockAdjustment } from '../../../data/catalog';
-import { DEFAULT_FINANCE_SETTINGS, type Account, type FinanceSettings } from '../../../data/finance';
+import { DEFAULT_FINANCE_SETTINGS, type Account, type Contact, type FinanceSettings } from '../../../data/finance';
 import { money } from '../../../data/documentLayouts';
 
 const { Title, Text } = Typography;
@@ -131,13 +131,21 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
   const [saving, setSaving] = useState(false);
   const kind = Form.useWatch('kind', form) ?? item.kind;
   const track = Form.useWatch('track_stock', form);
+  // special prices for particular customers
+  const [customers, setCustomers] = useState<Contact[]>([]);
+  const [custPrices, setCustPrices] = useState<{ contact_id: number | null; price: number | null }[]>([]);
+  useEffect(() => {
+    contactService.list(companyId).then(cs => setCustomers(cs.filter(c => c.is_customer && !c.archived))).catch(() => setCustomers([]));
+    if (item.id) catalogService.prices(companyId, item.id).then(ps => setCustPrices(ps.map(p => ({ contact_id: p.contact_id, price: p.price })))).catch(() => null);
+  }, [companyId, item.id]);
   const income = accounts.filter(a => a.type === 'income' && !a.archived);
   const costs = accounts.filter(a => (a.type === 'expense' || a.type === 'asset') && !a.archived && !['bank', 'cash', 'receivable'].includes(a.subtype || ''));
   const submit = async () => {
     const v = await form.validateFields();
     setSaving(true);
     try {
-      await catalogService.save(companyId, { ...item, ...v, tax_rate: v.tax_rate === 'default' ? null : v.tax_rate });
+      const id = await catalogService.save(companyId, { ...item, ...v, tax_rate: v.tax_rate === 'default' ? null : v.tax_rate });
+      await catalogService.setPrices(companyId, id, custPrices.filter(p => p.contact_id).map(p => ({ contact_id: p.contact_id!, price: Number(p.price) || 0 })));
       message.success('Saved'); onSaved();
     } catch (e: any) { message.error(e.message); }
     setSaving(false);
@@ -160,6 +168,19 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
           <Form.Item name="sale_price" label="Selling price"><InputNumber min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="purchase_price" label="Cost / buying price"><InputNumber min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>
         </div>
+        <Card size="small" style={{ background: 'transparent', marginBottom: 16 }} title="Customer prices"
+          extra={<Button size="small" icon={<PlusOutlined />} onClick={() => setCustPrices(ps => [...ps, { contact_id: null, price: Number(form.getFieldValue('sale_price')) || 0 }])}>Customer</Button>}>
+          {!custPrices.length ? <Text type="secondary">Every customer pays the selling price.</Text> : custPrices.map((p, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: 8, marginBottom: 8 }}>
+              <Select showSearch optionFilterProp="label" placeholder="Customer" value={p.contact_id ?? undefined}
+                onChange={v => setCustPrices(ps => ps.map((x, j) => (j === i ? { ...x, contact_id: v } : x)))}
+                options={customers.filter(c => c.id === p.contact_id || !custPrices.some(x => x.contact_id === c.id)).map(c => ({ value: c.id, label: c.name }))} />
+              <InputNumber min={0} precision={2} prefix={currency} style={{ width: '100%' }} value={p.price}
+                onChange={v => setCustPrices(ps => ps.map((x, j) => (j === i ? { ...x, price: v } : x)))} />
+              <Button icon={<DeleteOutlined />} onClick={() => setCustPrices(ps => ps.filter((_, j) => j !== i))} />
+            </div>
+          ))}
+        </Card>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Form.Item name="category" label="Category">
             <Select allowClear showSearch mode={undefined} options={categories.map(c => ({ value: c, label: c }))}

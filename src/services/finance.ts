@@ -1,4 +1,4 @@
-import type { CatalogItem, StockAdjustment } from '../data/catalog';
+import type { CatalogItem, StockAdjustment, CustomerPrice } from '../data/catalog';
 import { supabase } from '../utils/supabase';
 import {
   docTotals, statusAfterPayment, bankCodePlan, payrollChartUpgrade, DEFAULT_ACCOUNTS, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
@@ -407,4 +407,24 @@ export const catalogService = {
     must(await supabase.from('catalog_stock_adjustments').insert({ company_id: companyId, item_id: itemId, quantity, adj_date: date, reason: reason || null }));
   },
   async removeAdjustment(id: number) { must(await supabase.from('catalog_stock_adjustments').delete().eq('id', id)); },
+  /** Special prices for particular customers (empty until migration 027 is run). */
+  async prices(companyId: number, itemId?: number): Promise<CustomerPrice[]> {
+    let q = supabase.from('catalog_customer_prices').select('id, item_id, contact_id, price').eq('company_id', companyId);
+    if (itemId) q = q.eq('item_id', itemId);
+    const r = await q;
+    return r.error ? [] : (r.data || []).map((p: any) => ({ ...p, price: Number(p.price) }));
+  },
+  /** Replace an item's customer prices with `rows`. */
+  async setPrices(companyId: number, itemId: number, rows: { contact_id: number; price: number }[]) {
+    const keep = rows.filter(r => r.contact_id);
+    const old = await this.prices(companyId, itemId);
+    const gone = old.filter(o => !keep.some(k => k.contact_id === o.contact_id)).map(o => o.id!);
+    if (gone.length) must(await supabase.from('catalog_customer_prices').delete().in('id', gone));
+    if (keep.length) {
+      const r = await supabase.from('catalog_customer_prices').upsert(
+        keep.map(k => ({ company_id: companyId, item_id: itemId, contact_id: k.contact_id, price: Number(k.price) || 0, updated_at: new Date().toISOString() })),
+        { onConflict: 'item_id,contact_id' });
+      if (r.error) throw new Error(/catalog_customer_prices|does not exist/i.test(r.error.message) ? 'Customer prices need database update 027 — ask your administrator to run it in Supabase.' : r.error.message);
+    }
+  },
 };
