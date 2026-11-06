@@ -1,9 +1,10 @@
 import type { CatalogItem, StockAdjustment } from '../data/catalog';
 import { supabase } from '../utils/supabase';
 import {
-  docTotals, statusAfterPayment, bankCodePlan, DEFAULT_ACCOUNTS, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
+  docTotals, statusAfterPayment, bankCodePlan, payrollChartUpgrade, DEFAULT_ACCOUNTS, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
   type Contact, type ContactPerson, type FinDocument, type DocLine, type DocType, type FinanceSettings, type Account,
 } from '../data/finance';
+import { splitByShare, payrollSplit } from '../data/ledger';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const must = (r: { data: any; error: any }): any => { if (r.error) throw new Error(r.error.message); return r.data; };
@@ -74,6 +75,14 @@ export const accountService = {
       must(await supabase.from('fin_accounts').upsert(
         DEFAULT_ACCOUNTS.map(a => ({ ...a, company_id: companyId })), { onConflict: 'company_id,code', ignoreDuplicates: true }));
       rows = must(await supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code')) || [];
+    }
+    const up = payrollChartUpgrade(rows);
+    if (up.add.length || up.rename.length) {
+      try {
+        if (up.add.length) must(await supabase.from('fin_accounts').insert(up.add.map(a => ({ ...a, company_id: companyId }))));
+        for (const r of up.rename) must(await supabase.from('fin_accounts').update({ name: r.name }).eq('id', r.id));
+        rows = must(await supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code')) || [];
+      } catch { /* no edit rights: keep the accounts as they are */ }
     }
     if (bankCodePlan(rows).length) {
       try {
@@ -280,6 +289,20 @@ export async function loadLedgerInput(companyId: number) {
     supabase.from('payroll_runs').select('id, period_year, period_month, pay_date, status, total_gross, total_deductions, total_employer, total_net')
       .eq('company_id', companyId).then(r => (r.error ? [] : r.data || [])),
   ]);
+  const runs = (payroll as any[]).filter(r => r.status !== 'draft');
+  if (runs.length) {
+    // per payslip: CPF employee / employer shares and directors' pay, so each goes to its own account
+    const [slips, emps] = await Promise.all([
+      supabase.from('payslips').select('run_id, employee_id, gross_pay, deductions_json, employer_json').in('run_id', runs.map(r => r.id))
+        .then(r => (r.error ? [] : r.data || [])),
+      supabase.from('employees').select('id, employment_type').eq('company_id', companyId).then(r => (r.error ? [] : r.data || [])),
+    ]);
+    const directors = new Set((emps as any[]).filter(e => e.employment_type === 'director').map(e => e.id));
+    for (const r of runs) {
+      const mine = (slips as any[]).filter(s => s.run_id === r.id);
+      if (mine.length) r.split = payrollSplit(mine, directors);
+    }
+  }
   const byDoc = new Map<number, any[]>();
   for (const l of lines || []) { const a = byDoc.get(l.document_id) || []; a.push(l); byDoc.set(l.document_id, a); }
   return {
@@ -317,12 +340,14 @@ export const bankService = {
     await this.update(txnId, { payment_id: paymentId, journal_id: null, status: 'matched', ...(baseAmount != null ? { base_amount: baseAmount } : {}) });
   },
   /** Money in / out that isn't an invoice or bill: book it straight to an account (e.g. bank charges, interest). */
-  async categorise(companyId: number, txn: BankTxn, accountId: number, memo: string, baseAmount?: number) {
+  async categorise(companyId: number, txn: BankTxn, accountId: number | { account_id: number; share: number }[], memo: string, baseAmount?: number) {
     // books are in the company's currency: a foreign-currency line uses its converted amount
     const amt = Math.abs(baseAmount != null ? baseAmount : Number(txn.amount));
+    // one account, or several (e.g. CPF: employee's and employer's CPF payable) split by share
+    const parts = typeof accountId === 'number' ? [{ account_id: accountId, amount: amt }] : splitByShare(amt, accountId);
     const lines = txn.amount > 0
-      ? [{ account_id: txn.account_id, debit: amt, credit: 0, description: memo }, { account_id: accountId, debit: 0, credit: amt, description: memo }]
-      : [{ account_id: accountId, debit: amt, credit: 0, description: memo }, { account_id: txn.account_id, debit: 0, credit: amt, description: memo }];
+      ? [{ account_id: txn.account_id, debit: amt, credit: 0, description: memo }, ...parts.map(p => ({ account_id: p.account_id, debit: 0, credit: p.amount, description: memo }))]
+      : [...parts.map(p => ({ account_id: p.account_id, debit: p.amount, credit: 0, description: memo })), { account_id: txn.account_id, debit: 0, credit: amt, description: memo }];
     const jid = await journalService.save(companyId, { journal_date: txn.txn_date, memo: memo || txn.description || 'Bank' }, lines);
     await this.update(txn.id, { journal_id: jid, payment_id: null, status: 'matched', ...(baseAmount != null ? { base_amount: Math.sign(Number(txn.amount)) * amt } : {}) });
   },

@@ -9,12 +9,79 @@ export interface LedgerEntry {
   source_id: number | null; ref: string; memo: string; lines: LedgerLine[];
 }
 
+/** A payroll run broken down from its payslips: directors' pay and the CPF shares. */
+export interface PayrollSplit { directorGross: number; eeCpf: number; erCpf: number }
+
+/** Works out a run's split from its payslips. `directors` holds the ids of employees whose type is Director. */
+export function payrollSplit(slips: { employee_id: number; gross_pay: number; deductions_json?: any[]; employer_json?: any[] }[], directors: Set<number>): PayrollSplit {
+  const sum = (items: any[] | undefined, code: string) => (items || []).filter(i => i?.componentCode === code).reduce((t, i) => t + (Number(i.amount) || 0), 0);
+  let directorGross = 0, eeCpf = 0, erCpf = 0;
+  for (const p of slips) {
+    if (directors.has(Number(p.employee_id))) directorGross += Number(p.gross_pay) || 0;
+    eeCpf += sum(p.deductions_json, 'DEDUCTION_CPF');
+    erCpf += sum(p.employer_json, 'COST_CPF_EMPLOYER');
+  }
+  return { directorGross: r2(directorGross), eeCpf: r2(eeCpf), erCpf: r2(erCpf) };
+}
+
+/** Split `amount` over accounts in proportion to their shares, keeping cents exact. */
+export function splitByShare(amount: number, shares: { account_id: number; share: number }[]): { account_id: number; amount: number }[] {
+  const amts = spread(amount, shares.map(s => Math.max(0, s.share)));
+  const out = new Map<number, number>();
+  shares.forEach((s, i) => out.set(s.account_id, r2((out.get(s.account_id) || 0) + amts[i])));
+  return [...out.entries()].filter(([, a]) => a).map(([account_id, a]) => ({ account_id, amount: a }));
+}
+
+/**
+ * How a finalised run is booked. Costs: employee salaries, director's salary, employer's CPF, SDL and other
+ * employer contributions. Owed: net salaries, employee's CPF, employer's CPF, SDL / self-help funds / other deductions.
+ */
+export function payrollLines(r: LedgerInput['payroll'][number], accounts: Account[]): LedgerLine[] {
+  const id = (sub: string) => systemAccount(accounts, sub)?.id ?? 0;
+  const BANK = id('bank');
+  const WAGES = id('payroll') || systemAccount(accounts, 'general', 'expense')?.id || 0;
+  const DIRECTOR = id('payroll_director') || WAGES;
+  const ER_CPF = id('payroll_employer') || WAGES, ER_OTHER = id('payroll_employer_other') || ER_CPF;
+  const SALARIES = id('payroll_payable') || BANK;
+  const EE_PAY = id('statutory_payable'), ER_PAY = id('cpf_employer_payable') || EE_PAY, OTHER_PAY = id('other_payroll_payable') || EE_PAY;
+  const gross = r2(r.total_gross), employer = r2(r.total_employer), net = r2(r.total_net), ded = r2(r.total_deductions);
+  const sp = r.split;
+  const dirGross = r2(Math.min(gross, sp?.directorGross || 0));
+  const eeCpf = sp ? r2(Math.min(ded, sp.eeCpf)) : ded, erCpf = sp ? r2(Math.min(employer, sp.erCpf)) : employer;
+  const lines: LedgerLine[] = [
+    { account_id: WAGES, debit: r2(gross - dirGross), credit: 0, description: 'Employee salaries' },
+    { account_id: DIRECTOR, debit: dirGross, credit: 0, description: "Director's salary" },
+    { account_id: ER_CPF, debit: erCpf, credit: 0, description: "Employer's CPF" },
+    { account_id: ER_OTHER, debit: r2(employer - erCpf), credit: 0, description: 'SDL and other employer contributions' },
+    { account_id: SALARIES, debit: 0, credit: net, description: 'Net salaries owed' },
+    { account_id: EE_PAY, debit: 0, credit: eeCpf, description: "Employee's CPF owed" },
+    { account_id: ER_PAY, debit: 0, credit: erCpf, description: "Employer's CPF owed" },
+    { account_id: OTHER_PAY, debit: 0, credit: r2(ded - eeCpf + employer - erCpf), description: 'SDL, self-help funds and other deductions owed' },
+  ];
+  // anything that doesn't add up stays with the other deductions
+  const diff = r2(lines.reduce((s, l) => s + l.debit - l.credit, 0));
+  if (diff) lines.push({ account_id: OTHER_PAY, debit: diff < 0 ? -diff : 0, credit: diff > 0 ? diff : 0, description: 'Other deductions' });
+  // put lines for the same account and side together (when an account is missing they fall back to one)
+  const merged = new Map<string, LedgerLine>();
+  for (const l of lines) {
+    const k = `${l.account_id}|${l.debit ? 'd' : 'c'}`, m = merged.get(k);
+    if (m) { m.debit = r2(m.debit + l.debit); m.credit = r2(m.credit + l.credit); } else merged.set(k, { ...l });
+  }
+  return [...merged.values()].filter(l => l.debit || l.credit);
+}
+
+/** The accounts CPF Board payments come off: employee's CPF, employer's CPF, SDL / self-help funds. */
+export function cpfPayableIds(accounts: Account[]): number[] {
+  return [...new Set(['statutory_payable', 'cpf_employer_payable', 'other_payroll_payable']
+    .map(s => systemAccount(accounts, s)?.id).filter((x): x is number => !!x))];
+}
+
 export interface LedgerInput {
   accounts: Account[];
   docs: (FinDocument & { lines: DocLine[] })[];
   payments: { id: number; direction: 'in' | 'out'; number: string | null; contact_id: number | null; payment_date: string; amount: number; account_id: number | null }[];
   allocations: { payment_id: number; document_id: number; amount: number }[];
-  payroll: { id: number; period_year: number; period_month: number; pay_date: string; status: string; total_gross: number; total_deductions: number; total_employer: number; total_net: number }[];
+  payroll: { id: number; period_year: number; period_month: number; pay_date: string; status: string; total_gross: number; total_deductions: number; total_employer: number; total_net: number; split?: PayrollSplit }[];
   journals: { id: number; number: string | null; journal_date: string; memo: string | null; lines: { account_id: number; debit: number; credit: number; description?: string | null }[] }[];
 }
 
@@ -42,9 +109,7 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
   const AR = acc('receivable', 'asset'), AP = acc('payable', 'liability'), GST = acc('tax', 'liability');
   const SALES = acc('sales', 'income'), GENERAL = acc('general', 'expense'), BANK = acc('bank', 'asset');
   const CLAIMS = acc('claims_payable', 'liability') || AP;
-  const WAGES = acc('payroll', 'expense'), EMPLOYER = acc('payroll_employer', 'expense') || WAGES;
-  const STAT = acc('statutory_payable', 'liability'), RETAINED = acc('retained', 'equity');
-  const SALARIES = acc('payroll_payable', 'liability') || BANK;
+  const RETAINED = acc('retained', 'equity');
   const entries: LedgerEntry[] = [];
   const docById = new Map(input.docs.map(d => [d.id, d]));
 
@@ -116,21 +181,12 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
     entries.push({ date: p.payment_date, source: p.direction === 'in' ? 'payment_in' : 'payment_out', source_id: p.id, ref: p.number || '', memo: '', lines });
   }
 
-  // Finalised payroll: wages and employer contributions are costs; net pay is owed to staff (salaries
-  // payable) and CPF / statutory amounts are owed, until they're paid (Payables → Payroll, or Bank).
+  // Finalised payroll: salaries and employer contributions are costs; net pay and CPF are owed
+  // until they're paid (Payables → Payroll, or Bank).
   for (const r of input.payroll) {
     if (r.status === 'draft') continue;
-    const gross = r2(r.total_gross), employer = r2(r.total_employer), net = r2(r.total_net), ded = r2(r.total_deductions);
     const label = `Payroll ${r.period_year}-${String(r.period_month).padStart(2, '0')}`;
-    const lines: LedgerLine[] = [
-      { account_id: WAGES, debit: gross, credit: 0, description: 'Gross pay' },
-      { account_id: EMPLOYER, debit: employer, credit: 0, description: 'Employer contributions' },
-      { account_id: SALARIES, debit: 0, credit: net, description: 'Net pay owed to staff' },
-      { account_id: STAT, debit: 0, credit: r2(ded + employer), description: 'CPF and statutory payable' },
-    ].filter(l => l.debit || l.credit);
-    // anything that doesn't add up (e.g. other deductions) stays with statutory payable
-    const diff = r2(lines.reduce((s, l) => s + l.debit - l.credit, 0));
-    if (diff) lines.push({ account_id: STAT, debit: diff < 0 ? -diff : 0, credit: diff > 0 ? diff : 0, description: 'Other deductions' });
+    const lines = payrollLines(r, accounts);
     entries.push({ date: r.pay_date, source: 'payroll', source_id: r.id, ref: label, memo: label, lines });
   }
 
@@ -261,25 +317,29 @@ export interface PayrollDue {
   run: LedgerInput['payroll'][number];
   net: number; netPaid: number; netDue: number;
   stat: number; statPaid: number; statDue: number;
+  /** what this run owes to each CPF Board account, used to split a CPF payment */
+  statParts: { account_id: number; share: number }[];
 }
 
 /**
- * What is still owed for each finalised payroll run: net salaries (account "Salaries payable") and
- * CPF / statutory amounts. Payments are whatever has been taken off those accounts (Pay buttons,
- * bank lines booked to them, journals) and are applied to the oldest runs first.
+ * What is still owed for each finalised payroll run: net salaries (account "Net salaries payable") and
+ * CPF (employee's and employer's CPF payable, SDL / self-help funds). Payments are whatever has been taken
+ * off those accounts (Pay buttons, bank lines booked to them, journals) and are applied to the oldest runs first.
  */
 export function payrollDue(input: Pick<LedgerInput, 'accounts' | 'payroll'>, entries: LedgerEntry[]): PayrollDue[] {
   const sal = systemAccount(input.accounts, 'payroll_payable')?.id;
-  const stat = systemAccount(input.accounts, 'statutory_payable')?.id;
-  const paidTo = (acc?: number) => (acc == null ? 0 : r2(entries.filter(e => e.source !== 'payroll')
-    .reduce((s, e) => s + e.lines.filter(l => l.account_id === acc).reduce((t, l) => t + l.debit - l.credit, 0), 0)));
-  let netLeft = paidTo(sal), statLeft = paidTo(stat);
+  const statIds = cpfPayableIds(input.accounts);
+  const paidTo = (ids: number[]) => r2(entries.filter(e => e.source !== 'payroll')
+    .reduce((s, e) => s + e.lines.filter(l => ids.includes(l.account_id)).reduce((t, l) => t + l.debit - l.credit, 0), 0));
+  let netLeft = sal == null ? 0 : paidTo([sal]), statLeft = paidTo(statIds);
   return input.payroll.filter(r => r.status !== 'draft')
     .sort((a, b) => a.pay_date.localeCompare(b.pay_date))
     .map(r => {
-      const net = r2(r.total_net), st = r2(Number(r.total_deductions) + Number(r.total_employer));
+      const lines = payrollLines(r, input.accounts);
+      const statParts = lines.filter(l => statIds.includes(l.account_id)).map(l => ({ account_id: l.account_id, share: r2(l.credit - l.debit) }));
+      const net = r2(r.total_net), st = r2(statParts.reduce((t, p) => t + p.share, 0));
       const netPaid = r2(Math.max(0, Math.min(net, netLeft))); netLeft = r2(netLeft - netPaid);
       const statPaid = r2(Math.max(0, Math.min(st, statLeft))); statLeft = r2(statLeft - statPaid);
-      return { run: r, net, netPaid, netDue: r2(net - netPaid), stat: st, statPaid, statDue: r2(st - statPaid) };
+      return { run: r, net, netPaid, netDue: r2(net - netPaid), stat: st, statPaid, statDue: r2(st - statPaid), statParts };
     });
 }

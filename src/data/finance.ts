@@ -144,16 +144,21 @@ export const DEFAULT_ACCOUNTS: Omit<Account, 'id' | 'company_id' | 'archived'>[]
   { code: '1500', name: 'Equipment and furniture', type: 'asset', subtype: 'fixed', is_system: false },
   { code: '2000', name: 'Accounts payable (we owe suppliers)', type: 'liability', subtype: 'payable', is_system: true },
   { code: '2100', name: 'GST', type: 'liability', subtype: 'tax', is_system: true },
-  { code: '2200', name: 'Salaries payable', type: 'liability', subtype: 'payroll_payable', is_system: true },
-  { code: '2210', name: 'CPF and statutory payable', type: 'liability', subtype: 'statutory_payable', is_system: true },
+  { code: '2200', name: 'Net salaries payable', type: 'liability', subtype: 'payroll_payable', is_system: true },
+  { code: '2210', name: "Employee's CPF contribution payable", type: 'liability', subtype: 'statutory_payable', is_system: true },
+  { code: '2220', name: "Employer's CPF contribution payable", type: 'liability', subtype: 'cpf_employer_payable', is_system: true },
+  { code: '2230', name: 'SDL, CDAC/SINDA/MBMF/ECF and other deductions payable', type: 'liability', subtype: 'other_payroll_payable', is_system: true },
   { code: '2300', name: 'Staff claims payable', type: 'liability', subtype: 'claims_payable', is_system: true },
   { code: '3000', name: 'Share capital', type: 'equity', subtype: null, is_system: false },
   { code: '3100', name: 'Retained earnings', type: 'equity', subtype: 'retained', is_system: true },
   { code: '4000', name: 'Sales', type: 'income', subtype: 'sales', is_system: true },
   { code: '4100', name: 'Other income', type: 'income', subtype: null, is_system: false },
   { code: '5000', name: 'Cost of sales', type: 'expense', subtype: null, is_system: false },
-  { code: '6000', name: 'Salaries and wages', type: 'expense', subtype: 'payroll', is_system: true },
-  { code: '6010', name: 'CPF and statutory contributions', type: 'expense', subtype: 'payroll_employer', is_system: true },
+  { code: '6000', name: 'Employee salaries / wages', type: 'expense', subtype: 'payroll', is_system: true },
+  { code: '6005', name: "Director's salary", type: 'expense', subtype: 'payroll_director', is_system: true },
+  { code: '6008', name: "Director's fees", type: 'expense', subtype: 'director_fees', is_system: false },
+  { code: '6010', name: "Employer's CPF contributions", type: 'expense', subtype: 'payroll_employer', is_system: true },
+  { code: '6015', name: 'SDL and other employer contributions', type: 'expense', subtype: 'payroll_employer_other', is_system: true },
   { code: '6100', name: 'Rent', type: 'expense', subtype: null, is_system: false },
   { code: '6200', name: 'Utilities', type: 'expense', subtype: null, is_system: false },
   { code: '6300', name: 'Office supplies', type: 'expense', subtype: null, is_system: false },
@@ -170,6 +175,38 @@ export const DEFAULT_ACCOUNTS: Omit<Account, 'id' | 'company_id' | 'archived'>[]
  * Bank accounts are numbered 1000, 1001, 1002… in their current order, with no gaps.
  * Returns only the accounts whose code has to change. Codes used by other accounts (e.g. 1010 Petty cash) are skipped.
  */
+/** Old default names renamed in the payroll chart of accounts update (only if the company never renamed them). */
+const PAYROLL_RENAMES: Record<string, [string, string]> = {
+  payroll_payable: ['Salaries payable', 'Net salaries payable'],
+  statutory_payable: ['CPF and statutory payable', "Employee's CPF contribution payable"],
+  payroll: ['Salaries and wages', 'Employee salaries / wages'],
+  payroll_employer: ['CPF and statutory contributions', "Employer's CPF contributions"],
+};
+const PAYROLL_NEW = ['cpf_employer_payable', 'other_payroll_payable', 'payroll_director', 'director_fees', 'payroll_employer_other'];
+
+/**
+ * Brings a company set up before the payroll accounts were split (employee / employer CPF, director's
+ * salary and fees) up to date, once. Returns accounts to add and names to change; empty when done.
+ */
+export function payrollChartUpgrade(rows: Pick<Account, 'id' | 'code' | 'name' | 'subtype'>[]) {
+  const add: Omit<Account, 'id' | 'company_id' | 'archived'>[] = [];
+  const rename: { id: number; name: string }[] = [];
+  if (!rows.length || rows.some(r => r.subtype === 'cpf_employer_payable')) return { add, rename };
+  const used = new Set(rows.map(r => r.code));
+  for (const d of DEFAULT_ACCOUNTS.filter(a => PAYROLL_NEW.includes(a.subtype || ''))) {
+    if (rows.some(r => r.subtype === d.subtype)) continue;
+    let c = Number(d.code);
+    while (used.has(String(c))) c++;
+    used.add(String(c));
+    add.push({ ...d, code: String(c) });
+  }
+  for (const r of rows) {
+    const rn = PAYROLL_RENAMES[r.subtype || ''];
+    if (rn && r.name === rn[0]) rename.push({ id: r.id, name: rn[1] });
+  }
+  return { add, rename };
+}
+
 export function bankCodePlan(accounts: Pick<Account, 'id' | 'code' | 'subtype'>[]): { id: number; code: string }[] {
   const banks = accounts.filter(a => a.subtype === 'bank')
     .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }) || a.id - b.id);

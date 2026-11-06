@@ -8,7 +8,7 @@ import { WORK_PATTERN_PRESETS, presetKeyOf, describePattern, type WorkPattern } 
 import { supabase } from '../../../../utils/supabase';
 import { residencyOptions, defaultResidency } from '../../../../data/residency-options';
 
-const EMP_TYPES = ['full_time', 'part_time', 'contract', 'intern', 'casual'];
+const EMP_TYPES = ['full_time', 'part_time', 'contract', 'intern', 'casual', 'director'];
 
 export function EmployeesTab({ companyId }: { companyId: number }) {
   const { canViewPay } = useCompanyAccess();

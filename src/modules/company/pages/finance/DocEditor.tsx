@@ -54,7 +54,7 @@ export function DocEditor({ companyId, docType, docId, contacts, people, account
   const contactPeople = people.filter(p => p.contact_id === doc.contact_id);
   // What a line can be booked to: income for sales; for purchases, expenses plus the few asset accounts you can
   // buy into (prepayments, equipment) — never bank / cash / receivables, and not the payroll accounts payroll books itself.
-  const AUTO = ['bank', 'cash', 'receivable', 'payroll', 'payroll_employer'];
+  const AUTO = ['bank', 'cash', 'receivable', 'payroll', 'payroll_director', 'payroll_employer', 'payroll_employer_other'];
   const lineAccounts = accounts.filter(a => !a.archived && !AUTO.includes(a.subtype || '')
     && (sales ? a.type === 'income' : a.type === 'expense' || a.type === 'asset'));
   const accountOptions = sales

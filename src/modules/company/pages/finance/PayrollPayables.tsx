@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Table, Button, Space, Card, Statistic, Modal, InputNumber, DatePicker, Select, Input, message, Empty, Typography, Popconfirm, Tag } from 'antd';
 import dayjs from 'dayjs';
 import { loadLedgerInput, journalService } from '../../../../services/finance';
-import { buildLedger, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
+import { buildLedger, payrollDue, systemAccount, splitByShare, type PayrollDue } from '../../../../data/ledger';
 import { money } from '../../../../data/documentLayouts';
 import type { FinanceData } from './DocList';
 
@@ -20,7 +20,7 @@ export function PayrollPayables({ data }: { data: FinanceData }) {
   useEffect(() => { load(); }, [load, data.docs]);
   const dues = useMemo(() => (input ? payrollDue(input as any, buildLedger(input as any)).reverse() : []), [input]);
   if (!input) return null;
-  const sal = systemAccount(input.accounts, 'payroll_payable'), stat = systemAccount(input.accounts, 'statutory_payable');
+  const sal = systemAccount(input.accounts, 'payroll_payable');
   const bank = input.accounts.find(a => a.subtype === 'bank' && !a.archived);
   const netDue = dues.reduce((s, d) => s + d.netDue, 0), statDue = dues.reduce((s, d) => s + d.statDue, 0);
   const M = (n: number) => money(n, data.currency);
@@ -47,7 +47,7 @@ export function PayrollPayables({ data }: { data: FinanceData }) {
     <div>
       <Space size={16} wrap style={{ marginBottom: 12 }}>
         <Card size="small" style={{ minWidth: 200 }}><Statistic title="Salaries to pay" value={M(netDue)} /></Card>
-        <Card size="small" style={{ minWidth: 200 }}><Statistic title="CPF & statutory to pay" value={M(statDue)} /></Card>
+        <Card size="small" style={{ minWidth: 200 }}><Statistic title="CPF to pay" value={M(statDue)} /></Card>
         {netDue > 0 && (
           <Popconfirm title="Mark every unpaid salary as paid from the bank on its pay date?"
             description="Use this if salaries were already paid. Don't also match those bank lines in Bank." onConfirm={markAllNet}>
@@ -64,7 +64,7 @@ export function PayrollPayables({ data }: { data: FinanceData }) {
             title: 'Salaries to pay', key: 'nd', align: 'right' as const,
             render: (_, d) => d.netDue > 0 ? <b>{M(d.netDue)}</b> : <Tag color="green">Paid</Tag>,
           },
-          { title: 'CPF & statutory', key: 's', align: 'right' as const, render: (_, d) => M(d.stat) },
+          { title: 'CPF (employee + employer)', key: 's', align: 'right' as const, render: (_, d) => M(d.stat) },
           {
             title: 'CPF to pay', key: 'sd', align: 'right' as const,
             render: (_, d) => d.statDue > 0 ? <b>{M(d.statDue)}</b> : <Tag color="green">Paid</Tag>,
@@ -81,19 +81,19 @@ export function PayrollPayables({ data }: { data: FinanceData }) {
       <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
         When the money leaves the bank, either click Pay here or match the bank statement line in Bank → Match → Payroll — not both.
       </Text>
-      {paying && sal && stat && (
-        <PayModal data={data} accounts={input.accounts} title={`${paying.what === 'net' ? 'Pay salaries' : 'Pay CPF & statutory'} — ${period(paying.due.run)}`}
+      {paying && sal && (
+        <PayModal data={data} accounts={input.accounts} title={`${paying.what === 'net' ? 'Pay salaries' : 'Pay CPF'} — ${period(paying.due.run)}`}
           amount={paying.what === 'net' ? paying.due.netDue : paying.due.statDue} date={paying.due.run.pay_date}
-          payableId={paying.what === 'net' ? sal.id : stat.id}
-          memo={`${paying.what === 'net' ? 'Salaries' : 'CPF & statutory'} paid — ${period(paying.due.run)}`}
+          to={paying.what === 'net' ? [{ account_id: sal.id, share: 1 }] : paying.due.statParts}
+          memo={`${paying.what === 'net' ? 'Salaries' : 'CPF'} paid — ${period(paying.due.run)}`}
           onClose={() => setPaying(null)} onDone={() => { setPaying(null); load(); data.reload(); }} />
       )}
     </div>
   );
 }
 
-function PayModal({ data, accounts, title, amount, date, payableId, memo, onClose, onDone }: {
-  data: FinanceData; accounts: FinanceData['accounts']; title: string; amount: number; date: string; payableId: number; memo: string;
+function PayModal({ data, accounts, title, amount, date, to, memo, onClose, onDone }: {
+  data: FinanceData; accounts: FinanceData['accounts']; title: string; amount: number; date: string; to: { account_id: number; share: number }[]; memo: string;
   onClose: () => void; onDone: () => void;
 }) {
   const banks = accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash') && !a.currency);
@@ -108,7 +108,8 @@ function PayModal({ data, accounts, title, amount, date, payableId, memo, onClos
         setSaving(true);
         try {
           await journalService.save(data.companyId, { journal_date: day.format('YYYY-MM-DD'), memo: note }, [
-            { account_id: payableId, debit: amt!, credit: 0, description: note },
+            // CPF is split over employee's / employer's CPF payable (and SDL etc.) in the run's proportions
+            ...splitByShare(amt!, to).map(p => ({ account_id: p.account_id, debit: p.amount, credit: 0, description: note })),
             { account_id: from!, debit: 0, credit: amt!, description: note },
           ]);
           message.success('Payment recorded'); onDone();
