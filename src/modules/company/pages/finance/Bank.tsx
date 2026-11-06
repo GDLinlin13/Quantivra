@@ -406,11 +406,10 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, onClose, 
           key: 'account', label: 'Something else',
           children: (
             <div>
-              <Text type="secondary">For money that isn't an invoice or bill — bank charges, interest, owner's capital, a loan…</Text>
-              <Form layout="vertical" style={{ marginTop: 8 }}>
+              <Form layout="vertical">
                 <Form.Item label="Account">
                   <Select showSearch optionFilterProp="label" value={accountId ?? undefined} onChange={setAccountId}
-                    options={bookable.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))} placeholder={inbound ? 'e.g. 4100 Other income' : 'e.g. 6900 Bank charges'} />
+                    options={bookable.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
                 </Form.Item>
                 <Form.Item label="Details"><Input value={memo} onChange={e => setMemo(e.target.value)} /></Form.Item>
               </Form>
