@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Modal, Table, Typography, Space, Button, Tag, Empty, message, Descriptions } from 'antd';
-import { PaperClipOutlined, FilePdfOutlined } from '@ant-design/icons';
-import { docService, attachmentService, type Attachment, type BankTxn, type JournalRow, type Payment, type Allocation } from '../../../../services/finance';
+import { Modal, Table, Typography, Space, Button, Tag, Empty, message, Descriptions, Upload, Popconfirm } from 'antd';
+import { PaperClipOutlined, FilePdfOutlined, UploadOutlined, DeleteOutlined } from '@ant-design/icons';
+import { docService, attachmentService, companyFileService, ATTACH_TYPES, type CompanyFile, type Attachment, type BankTxn, type JournalRow, type Payment, type Allocation } from '../../../../services/finance';
 import { DOC_LABEL, isSalesDoc, type FinDocument } from '../../../../data/finance';
 import { lineText } from '../../../../data/catalog';
 import { money } from '../../../../data/documentLayouts';
@@ -43,7 +43,7 @@ export function matchLabel(t: BankTxn, data: FinanceData, look: MatchLookup): { 
 }
 
 /** Click a matched bank line: what it was booked to, and the invoices / bills it paid with their files. */
-export function MatchDetails({ data, txn, look, accCur, onClose }: { data: FinanceData; txn: BankTxn; look: MatchLookup; accCur: string; onClose: () => void }) {
+export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged }: { data: FinanceData; txn: BankTxn; look: MatchLookup; accCur: string; onClose: () => void; onFilesChanged?: () => void }) {
   const acc = (id: number) => data.accounts.find(a => a.id === id);
   const M = (n: number) => money(n, data.currency);
   const label = matchLabel(txn, data, look);
@@ -53,6 +53,11 @@ export function MatchDetails({ data, txn, look, accCur, onClose }: { data: Finan
   const paidDocs = allocs.map(a => ({ alloc: a, doc: look.docs.find(d => d.id === a.document_id) })).filter(x => x.doc) as { alloc: Allocation; doc: FinDocument }[];
   const [files, setFiles] = useState<Record<number, Attachment[]>>({});
   const [busy, setBusy] = useState<number | null>(null);
+  // supporting documents of a journal entry (e.g. the share capital agreement)
+  const [support, setSupport] = useState<CompanyFile[]>([]);
+  const loadSupport = () => { if (journal) companyFileService.list(data.companyId).then(fs => setSupport(fs.filter(f => f.journal_id === journal.id))).catch(() => null); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(loadSupport, [journal?.id]);
   useEffect(() => {
     Promise.all(paidDocs.map(x => attachmentService.list(x.doc.id).then(fs => [x.doc.id, fs] as const)))
       .then(all => setFiles(Object.fromEntries(all))).catch(() => null);
@@ -89,6 +94,28 @@ export function MatchDetails({ data, txn, look, accCur, onClose }: { data: Finan
               { title: 'Debit', key: 'dr', align: 'right' as const, render: (_, l) => (Number(l.debit) ? M(Number(l.debit)) : '') },
               { title: 'Credit', key: 'cr', align: 'right' as const, render: (_, l) => (Number(l.credit) ? M(Number(l.credit)) : '') },
             ]} />
+          <div style={{ marginTop: 16 }}>
+            <Text strong>Supporting documents</Text>
+            <Space orientation="vertical" size={4} style={{ display: 'flex', marginTop: 6 }}>
+              {support.map(f => (
+                <Space key={f.id} size={4}>
+                  <PaperClipOutlined />
+                  <a onClick={() => companyFileService.open(f.path).catch(e => message.error(e.message))}>{f.file_name}</a>
+                  <Popconfirm title={`Remove ${f.file_name}?`} onConfirm={async () => { try { await companyFileService.remove(f); loadSupport(); onFilesChanged?.(); } catch (e: any) { message.error(e.message); } }}>
+                    <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+                  </Popconfirm>
+                </Space>
+              ))}
+              <Upload accept={ATTACH_TYPES} multiple showUploadList={false} beforeUpload={file => {
+                companyFileService.add(data.companyId, file, { folder: 'journal', journal_id: journal.id, period: journal.journal_date.slice(0, 7) })
+                  .then(() => { loadSupport(); onFilesChanged?.(); })
+                  .catch(e => message.error(/journal_id|folder_check/i.test(e.message) ? 'Supporting documents need database update 033 — ask your administrator to run it in Supabase.' : e.message));
+                return false;
+              }}>
+                <Button size="small" icon={<UploadOutlined />}>Attach file</Button>
+              </Upload>
+            </Space>
+          </div>
         </>
       )}
       {payment && (

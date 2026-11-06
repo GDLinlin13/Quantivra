@@ -130,6 +130,15 @@ export function buildFolders(input: DocumentsInput, opts: { payslips?: boolean; 
     out.push(f);
   }
   {
+    // supporting documents of things booked from the bank (share capital, loans, bank charges…), by month
+    const f: Folder = { key: 'support', title: 'Supporting documents', children: [], files: [] };
+    fill(f, input.files.filter(x => x.folder === 'journal').map(x => {
+      const ym = (x.period || x.created_at).slice(0, 7);
+      return { ym, file: { key: `file-${x.id}`, name: x.file_name, date: x.period || x.created_at.slice(0, 10), kind: 'stored' as const, path: x.path, size: x.size_bytes, fileId: x.id } };
+    }), 'date');
+    if (f.children.length) out.push(f);
+  }
+  {
     // the company's own folders (folders inside folders too) sit at the top level with the others;
     // files not put in a folder are under Other files
     const root: Folder = { key: 'other', title: 'Other files', children: [], files: [], upload: 'other', userPath: '' };
