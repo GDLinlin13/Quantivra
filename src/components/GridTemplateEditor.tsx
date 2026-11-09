@@ -348,7 +348,7 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
         <Segmented value={mode} onChange={v => { finishEdit(true); setMode(v as any); }}
           options={[{ label: 'Design', value: 'design' }, { label: 'Preview with example data', value: 'preview' }]} />
-        <Popconfirm title="Replace this layout with the starter layout?" description="Your current layout will be lost (you can still Undo)." onConfirm={() => commit({ ...STARTER_LAYOUTS[kind](country), enabled: t.enabled })}>
+        <Popconfirm title="Replace this layout with the starter layout?" description="Your current layout will be lost (you can still Undo)." onConfirm={() => commit({ ...STARTER_LAYOUTS[kind](country, branding), enabled: t.enabled })}>
           <Button size="small" icon={<ReloadOutlined />}>Start again from the starter layout</Button>
         </Popconfirm>
       </div>

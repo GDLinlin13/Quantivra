@@ -169,9 +169,14 @@ export function parseWithLayout(rows: PdfRow[], layout: PdfLayout): { lines: Pdf
       continue;
     }
     let amount = 0, sure = true;
-    if (inAmt) amount = Math.abs(inAmt);
-    else if (outAmt) amount = -Math.abs(outAmt);
-    else if (amt != null) {
+    if (inAmt || outAmt) {
+      amount = inAmt ? Math.abs(inAmt) : -Math.abs(outAmt!);
+      // the balance says which way it went (a layout taught from a row with only a debit has no credit column)
+      if (bal != null && prevBalance != null) {
+        const diff = r2(bal - prevBalance);
+        if (Math.abs(Math.abs(diff) - Math.abs(amount)) < 0.005) amount = diff;
+      }
+    } else if (amt != null) {
       amount = amt;
       if (bal != null && prevBalance != null) {
         const diff = r2(bal - prevBalance);

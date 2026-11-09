@@ -1,6 +1,6 @@
 import { supabase } from '../utils/supabase';
 import { normalizeTemplate, type GridTemplate } from '../utils/gridTemplate';
-import { STARTER_LAYOUTS, type AmountFormat } from '../data/documentLayouts';
+import { isLegacyStarter, type AmountFormat } from '../data/documentLayouts';
 
 export interface PayslipTemplate {
   showLogo: boolean;
@@ -66,18 +66,16 @@ export const DEFAULT_TEMPLATES: Templates = {
   document: { showLogo: true, showLetterhead: true, footerNote: '' },
 };
 
-/** Key order does not matter (the database reorders keys). */
-const canon = (v: any): string => Array.isArray(v) ? `[${v.map(canon).join(',')}]`
-  : v && typeof v === 'object' ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canon(v[k])}`).join(',')}}` : JSON.stringify(v);
-
-/** A company outside Singapore still holding the untouched Singapore starter (UEN, CPF) gets its own country's starter. */
-export function ownLayout(kind: 'payslip' | 'invoice', saved: any, country?: string | null): GridTemplate {
-  const starter = STARTER_LAYOUTS[kind](country);
-  const t = normalizeTemplate(saved, starter);
-  if ((country || 'SG').toUpperCase() === 'SG' || t === starter) return t;
-  const sg = normalizeTemplate(STARTER_LAYOUTS[kind]('SG'), starter);
-  const same = canon({ cols: t.cols, rows: t.rows, cells: t.cells }) === canon({ cols: sg.cols, rows: sg.rows, cells: sg.cells });
-  return same ? { ...starter, enabled: t.enabled } : t;
+/**
+ * The company's own saved layout, or none yet (Custom then starts from a copy of the pre-built design).
+ * An untouched copy of the older grid starter counts as none: it was never really this company's design.
+ */
+export function ownLayout(kind: 'payslip' | 'invoice', saved: any, country?: string | null): GridTemplate | undefined {
+  if (!saved) return undefined;
+  const t = normalizeTemplate(saved, null as unknown as GridTemplate);
+  if (!t) return undefined;
+  if (isLegacyStarter(kind, t, country) && (!t.enabled || (country || 'SG').toUpperCase() !== 'SG')) return undefined;
+  return t;
 }
 
 function withDefaults(row: any, companyId: number, country?: string | null): Branding {
