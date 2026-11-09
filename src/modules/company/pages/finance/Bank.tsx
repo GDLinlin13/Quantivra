@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined, EditOutlined , PaperClipOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, companyFileService, type BankTxn, type Payment } from '../../../../services/finance';
+import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, pictureStatementPref, companyFileService, type BankTxn, type Payment } from '../../../../services/finance';
 import { statementPeriod } from '../../../../data/documents';
 import { planImport, nothingNew } from '../../../../data/bankImport';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
@@ -56,6 +56,8 @@ export function Bank({ data }: { data: FinanceData }) {
   const [teaching, setTeaching] = useState(false);
   const [layouts, setLayouts] = useState<Record<string, PdfLayout>>({});
   useEffect(() => { pdfLayoutService.get(companyId).then(setLayouts).catch(() => setLayouts({})); }, [companyId]);
+  const [readPictures, setReadPictures] = useState(false);
+  useEffect(() => { pictureStatementPref.get(companyId).then(setReadPictures).catch(() => null); }, [companyId]);
   const [adding, setAdding] = useState(false);
   const [amending, setAmending] = useState<BankTxn | null>(null);
   const [fxMatch, setFxMatch] = useState<BankTxn | null>(null);
@@ -178,10 +180,18 @@ export function Bank({ data }: { data: FinanceData }) {
         hide();
         if (!rows.length) {
           // a picture of a statement (scan, or "Print to PDF"): offer to read it with OCR
+          if (readPictures) { readPicture(file); return false; }
+          let dontAsk = false;
           Modal.confirm({
             title: 'This statement is a picture', okText: 'Read it', cancelText: 'Cancel',
-            content: 'Quantivra can read the text from the picture. It takes a minute, and you check every line before importing.',
-            onOk: () => { readPicture(file); },
+            content: <>
+              <div>Quantivra can read the text from the picture. It takes a minute, and you check every line before importing.</div>
+              <Checkbox style={{ marginTop: 12 }} onChange={e => { dontAsk = e.target.checked; }}>Don't ask again — always read picture statements</Checkbox>
+            </>,
+            onOk: () => {
+              if (dontAsk) { setReadPictures(true); pictureStatementPref.set(companyId, true).catch(e => message.error(e.message)); }
+              readPicture(file);
+            },
           });
           return false;
         }

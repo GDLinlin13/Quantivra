@@ -564,6 +564,19 @@ export const statementPrefService = {
   },
 };
 
+/** Picture statements: read them straight away instead of asking each time. */
+export const pictureStatementPref = {
+  async get(companyId: number): Promise<boolean> {
+    const { data } = await supabase.from('company_settings').select('value')
+      .eq('company_id', companyId).eq('category', 'company').eq('key', 'bank_picture_read').maybeSingle();
+    return !!(data?.value as any)?.auto;
+  },
+  async set(companyId: number, auto: boolean) {
+    must(await supabase.from('company_settings').upsert(
+      { company_id: companyId, category: 'company', key: 'bank_picture_read', value: { auto } }, { onConflict: 'company_id,category,key' }));
+  },
+};
+
 // ---- catalog (products and services) ---------------------------------------------------------
 
 
