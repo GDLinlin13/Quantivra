@@ -83,7 +83,8 @@ export function LeaveTab({ companyId }: { companyId: number }) {
 
   const typeById = (id: number) => types.find(t => t.id === id);
   // Parental leave only shows once it applies (right parent + due date or newborn recorded).
-  const PARENTAL = /maternity|paternity|shared parental|childcare/i;
+  // leave that only applies to some people: hidden when this employee has no days for it
+  const PARENTAL = /maternity|paternity|parental|childcare|study/i;
   const entitledFor = (typeId: number) => {
     const b = balances.find(x => x.leave_type_id === typeId);
     return b ? Number(b.entitled_days) + Number(b.carried_days || 0) : 0;

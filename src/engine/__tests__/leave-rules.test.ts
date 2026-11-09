@@ -97,3 +97,20 @@ describe('SG leave eligibility rules', () => {
     expect(ent('Shared Parental Leave', { gender: 'female' }, [due('2026-09-01', 'FOREIGNER')]).days).toBe(0);
   });
 });
+
+describe('leave that only applies to some people (any country)', () => {
+  const base = { countryCode: 'AE', templateDefault: 60, statutoryMin: 0, incrementPerYear: 0, maxDays: null, asOf: new Date('2026-06-01T00:00:00') };
+  const who = (gender: string, dependents: any[] = []) => ({ employee: emp({ gender }), dependents });
+  it('maternity only for women', () => {
+    expect(computeLeaveEntitlement({ ...base, leaveTypeName: 'Maternity Leave', ...who('male') }).days).toBe(0);
+    expect(computeLeaveEntitlement({ ...base, leaveTypeName: 'Maternity Leave', ...who('female') }).days).toBe(60);
+  });
+  it('paternity / parental only with a baby on the way or born in the last year', () => {
+    expect(computeLeaveEntitlement({ ...base, leaveTypeName: 'Parental Leave', templateDefault: 5, ...who('male') }).days).toBe(0);
+    expect(computeLeaveEntitlement({ ...base, leaveTypeName: 'Parental Leave', templateDefault: 5, ...who('male', [{ relationship: 'expected_child' }]) }).days).toBe(5);
+    expect(computeLeaveEntitlement({ ...base, leaveTypeName: 'Paternity Leave', templateDefault: 5, ...who('female', [{ relationship: 'expected_child' }]) }).days).toBe(0);
+  });
+  it('study leave only when HR gives it', () => {
+    expect(computeLeaveEntitlement({ ...base, leaveTypeName: 'Study Leave', templateDefault: 10, ...who('male') }).days).toBe(0);
+  });
+});

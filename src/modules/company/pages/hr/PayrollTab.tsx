@@ -99,7 +99,8 @@ export function PayrollTab({ companyId }: { companyId: number }) {
 
       <PayItemsCard companyId={companyId} year={year} month={month} currency={cur} />
 
-      <Card size="small" style={{ marginBottom: 16, background: 'rgba(255,255,255,0.03)' }}
+      {/* CDAC / SINDA / MBMF / ECF are Singapore funds */}
+      {(company?.country || 'SG').toUpperCase() === 'SG' && <Card size="small" style={{ marginBottom: 16, background: 'rgba(255,255,255,0.03)' }}
         title={<span style={{ color: '#f0ede6', fontSize: 13 }}>Self-help group contributions the company absorbs</span>}>
         <Space size={[24, 8]} wrap>
           {ABSORBABLE_SCHEMES.map(s => (
@@ -113,7 +114,7 @@ export function PayrollTab({ companyId }: { companyId: number }) {
         <div style={{ color: 'rgba(240,237,230,0.35)', fontSize: 12, marginTop: 8 }}>
           When on, the employee's CDAC/SINDA/MBMF/ECF amount isn't deducted from net pay — the company pays it. CPF is always split (employee and employer each pay their own share); SDL is always fully employer-paid. Applies to the next run.
         </div>
-      </Card>
+      </Card>}
 
       <Table
         dataSource={runs} rowKey="id" loading={loading} size="small" pagination={false} style={{ background: 'transparent' }}

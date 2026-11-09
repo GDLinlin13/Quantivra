@@ -199,6 +199,34 @@ function singapore(i: LeaveRuleInput): RuleResult | null {
   return null; // fall through to template
 }
 
+// ---------------------------------------------------------------------------
+// Every country: who a leave type can apply to at all
+// ---------------------------------------------------------------------------
+function everywhere(i: LeaveRuleInput): RuleResult | null {
+  const asOf = i.asOf ?? new Date();
+  const name = i.leaveTypeName.toLowerCase();
+  const none = (basis: string): RuleResult => ({ days: 0, statutoryMin: 0, computed: true, warnings: [], basis });
+  // an expected baby, or a child born in the last 12 months
+  const yearAgo = new Date(asOf); yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+  const birth = i.dependents.some(d => d.relationship === 'expected_child'
+    || (d.relationship === 'child' && !!d.date_of_birth && new Date(d.date_of_birth + 'T00:00:00') >= yearAgo));
+
+  if (name.includes('maternity') && i.employee.gender !== 'female') {
+    return none(i.employee.gender === 'male' ? 'Maternity leave is for mothers' : "Set the employee's gender in HR → Employees");
+  }
+  if (name.includes('paternity') && i.employee.gender !== 'male') {
+    return none(i.employee.gender === 'female' ? 'Paternity leave is for fathers' : "Set the employee's gender in HR → Employees");
+  }
+  if ((name.includes('paternity') || name.includes('parental')) && !birth) {
+    return none("Add the expected delivery date (or the baby's birth date) under HR → Employees → Dependents");
+  }
+  if (name.includes('study')) {
+    // only when it applies (e.g. enrolled on a course): HR gives the days in Leave Balances
+    return none('Given when it applies — set the days in HR → Leave Balances');
+  }
+  return null;
+}
+
 const COUNTRY_RULES: Record<string, (i: LeaveRuleInput) => RuleResult | null> = {
   SG: singapore,
 };
@@ -209,7 +237,8 @@ export function computeLeaveEntitlement(i: LeaveRuleInput): LeaveEntitlement {
   const policy = companyPolicyDays(Number(i.templateDefault || 0), inc, i.maxDays, years);
 
   const rule = COUNTRY_RULES[i.countryCode?.toUpperCase()];
-  const computed = rule?.(i);
+  // the country's own rules first; otherwise who the leave can apply to at all (any country)
+  const computed = rule?.(i) ?? everywhere(i);
   if (computed) {
     const { policyApplies, ...result } = computed;
     // Statutory rules set the floor. For service-based leave (annual, sick) a
