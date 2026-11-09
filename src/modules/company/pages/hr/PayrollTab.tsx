@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Button, Select, InputNumber, Table, Tag, message, Modal, Descriptions, Space, Popconfirm, Alert, Statistic, Row, Col, Switch, Tooltip } from 'antd';
+import { Card, Button, Select, InputNumber, Table, Tag, message, Modal, Descriptions, Space, Popconfirm, Alert, Statistic, Row, Col, Switch, Tooltip, DatePicker } from 'antd';
 import { PlayCircleOutlined, FileTextOutlined, CheckCircleOutlined, DeleteOutlined, PrinterOutlined, InfoCircleOutlined, DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { payrollService, statutorySettingsService, componentLabel, ABSORBABLE_SCHEMES, type PayrollRunRow, type PayslipRow } from '../../../../services/payroll';
@@ -19,6 +19,8 @@ export function PayrollTab({ companyId }: { companyId: number }) {
   const now = dayjs();
   const [year, setYear] = useState(now.month() === 0 ? now.year() - 1 : now.year());
   const [month, setMonth] = useState(now.month() === 0 ? 12 : now.month());
+  // the date salaries are paid out; empty = last day of the month
+  const [payDate, setPayDate] = useState<dayjs.Dayjs | null>(null);
   const [company, setCompany] = useState<any>(null);
   const [runs, setRuns] = useState<PayrollRunRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +68,7 @@ export function PayrollTab({ companyId }: { companyId: number }) {
     try {
       const { runId } = await payrollService.run({
         companyId, countryCode: company?.country || 'SG', currency: company?.currency || 'SGD',
-        year, month, createdBy: user?.id,
+        year, month, createdBy: user?.id, payDate: payDate ? payDate.format('YYYY-MM-DD') : null,
       });
       message.success('Payroll calculated');
       await load();
@@ -89,6 +91,8 @@ export function PayrollTab({ companyId }: { companyId: number }) {
           <span style={{ color: 'rgba(240,237,230,0.6)' }}>Run payroll for</span>
           <Select value={month} onChange={setMonth} options={MONTHS} style={{ width: 130 }} />
           <InputNumber value={year} onChange={v => setYear(v || year)} min={2020} max={2100} />
+          <span style={{ color: 'rgba(240,237,230,0.6)' }}>paid on</span>
+          <DatePicker value={payDate} onChange={setPayDate} placeholder={dayjs(`${year}-${String(month).padStart(2, '0')}-01`).endOf('month').format('YYYY-MM-DD')} />
           <Button type="primary" icon={<PlayCircleOutlined />} loading={running} onClick={doRun}
             style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>Run Payroll</Button>
         </Space>
