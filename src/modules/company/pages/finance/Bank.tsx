@@ -230,8 +230,8 @@ export function Bank({ data }: { data: FinanceData }) {
           { title: 'Date', key: 'dt', width: 110, render: (_, t) => <span style={t.source === 'statement' ? { color: PURPLE, fontWeight: 600 } : undefined}>{t.txn_date}</span> },
           { title: 'Description', key: 'd', render: (_, t) => describe(t) },
           // as on the bank statement: debit = money out, credit = money in
-          { title: 'Debit', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{t.status === ('expected' as any) && foreign ? money(-t.amount, currency) : num(-t.amount)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
-          { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{t.status === ('expected' as any) && foreign ? money(t.amount, currency) : num(t.amount)}{foreign && t.base_amount != null ? <div style={{ fontSize: 11, color: '#999' }}>= {money(Math.abs(t.base_amount), currency)}</div> : null}</span> : '' },
+          { title: 'Debit', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{t.status === ('expected' as any) && foreign ? money(-t.amount, currency) : num(-t.amount)}</span> : '' },
+          { title: 'Credit', key: 'in', align: 'right' as const, width: 140, render: (_, t) => t.amount > 0 ? <span style={{ color: '#73d13d' }}>{t.status === ('expected' as any) && foreign ? money(t.amount, currency) : num(t.amount)}</span> : '' },
           { title: 'Balance', key: 'bal', align: 'right' as const, width: 150, render: (_, t) => (running.has(t.id) ? num(running.get(t.id)!) : '') },
           { title: 'Matched to', key: 'm', width: 220, render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : matchLabel(t, data, look)?.accounts || '' },
           {
@@ -431,8 +431,11 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   const r2 = (n: number) => Math.round(n * 100) / 100;
   const [rate, setRate] = useState<number | null>(foreign && lastRate ? lastRate : null);
   const [base, setBase] = useState<number | null>(foreign && lastRate ? r2(lastRate * lineAmt) : null);  // the same in the company's currency
-  const amt = foreign ? (base ?? 0) : lineAmt;                  // what goes into the books
-  const ready = !foreign || (base != null && base > 0);
+  // no rate keyed: the last rate used on this bank is used (only the very first line needs one)
+  const effBase = base ?? (foreign && lastRate ? r2(lastRate * lineAmt) : null);
+  const [editRate, setEditRate] = useState(!lastRate);
+  const amt = foreign ? (effBase ?? 0) : lineAmt;               // what goes into the books
+  const ready = !foreign || (effBase != null && effBase > 0);
   const signedBase = foreign ? Math.sign(Number(txn.amount)) * amt : undefined;
   const fx = (n: number) => Math.round(n * 1e6) / 1e6;
   const [busy, setBusy] = useState(false);
@@ -480,7 +483,13 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   return (
     <Modal open width={780} onCancel={onClose} footer={null}
       title={<span>{inbound ? 'Money in' : 'Money out'} {money(lineAmt, accCur)} on {txn.txn_date}<div style={{ fontSize: 12, fontWeight: 400, color: '#999' }}>{txn.description}</div></span>}>
-      {foreign && (
+      {foreign && !editRate && (
+        <div style={{ marginBottom: 12 }}>
+          <Text type="secondary">1 {accCur} = {lastRate} {data.currency}</Text>{' '}
+          <Button size="small" type="link" onClick={() => setEditRate(true)}>Change rate</Button>
+        </div>
+      )}
+      {foreign && editRate && (
         <div style={{ marginBottom: 12, padding: 10, border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}>
           <Text>In {data.currency}:</Text>{' '}
           <Space wrap>
