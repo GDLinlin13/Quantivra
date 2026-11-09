@@ -1270,3 +1270,24 @@ export function nationalIdLabel(country?: string | null): string {
   const fmt = COUNTRY_PACKS[c]?.localisation?.national_id_format || '';
   return fmt.match(/\(([^)]+)\)\s*$/)?.[1] || 'National ID';
 }
+
+/** What the country calls a company's registration number, e.g. "UEN" in Singapore, "Trade Licence No." in the UAE. */
+export function companyRegLabel(country?: string | null): string {
+  const L: Record<string, string> = {
+    SG: 'UEN', MY: 'SSM Registration No.', HK: 'Business Registration (BR) No.', AE: 'Trade Licence No.',
+    SA: 'Commercial Registration (CR) No.', AU: 'ABN', NZ: 'NZBN', GB: 'Company Number', US: 'EIN',
+    CA: 'Business Number (BN)', IN: 'CIN', ID: 'NIB', TH: 'Company Registration No.', PH: 'SEC Registration No.',
+    VN: 'Enterprise Code', CN: 'Unified Social Credit Code', JP: 'Corporate Number', KR: 'Business Registration No.',
+    DE: 'Handelsregisternummer', FR: 'SIREN', NL: 'KvK Number', CH: 'UID',
+  };
+  return L[(country || 'SG').toUpperCase()] || 'Company Registration No.';
+}
+
+/** What the country calls a sales-tax registration number, e.g. "GST Reg. No." in Singapore, "TRN" in the UAE. */
+export function taxRegLabel(country?: string | null): string {
+  const L: Record<string, string> = {
+    SG: 'GST Reg. No.', MY: 'SST Registration No.', AE: 'TRN', SA: 'VAT Number', AU: 'ABN (GST)', NZ: 'GST Number',
+    GB: 'VAT Number', IN: 'GSTIN', CA: 'GST/HST Number', DE: 'USt-IdNr.', FR: 'TVA Number', NL: 'BTW Number',
+  };
+  return L[(country || 'SG').toUpperCase()] || 'Tax Registration No.';
+}

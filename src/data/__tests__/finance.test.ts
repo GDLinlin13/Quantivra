@@ -67,3 +67,11 @@ describe('national ID names', () => {
       .toEqual(['NRIC / FIN', 'MyKad', 'HKID', 'Emirates ID', 'NI Number', 'National ID']);
   });
 });
+
+describe('company and tax registration names', () => {
+  it('follow the country', async () => {
+    const { companyRegLabel, taxRegLabel } = await import('../countries');
+    expect([companyRegLabel('SG'), companyRegLabel('AE'), companyRegLabel('MY'), companyRegLabel('ZZ')]).toEqual(['UEN', 'Trade Licence No.', 'SSM Registration No.', 'Company Registration No.']);
+    expect([taxRegLabel('SG'), taxRegLabel('AE'), taxRegLabel('ZZ')]).toEqual(['GST Reg. No.', 'TRN', 'Tax Registration No.']);
+  });
+});

@@ -71,7 +71,7 @@ export function CompanyFinancePage() {
       )}
       {area === 'bank' && <Bank data={d} />}
       {area === 'accounting' && <Accounting data={d} />}
-      {area === 'settings' && <FinanceSettingsTab companyId={data.companyId} settings={data.settings} onSaved={load} />}
+      {area === 'settings' && <FinanceSettingsTab companyId={data.companyId} country={data.company?.country} settings={data.settings} onSaved={load} />}
     </div>
   );
 }

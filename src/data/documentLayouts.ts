@@ -10,7 +10,7 @@ const COMPANY_FIELDS: FieldDef[] = [
   { name: 'logo', label: 'Company logo (put alone in a cell)' },
   { name: 'company_name', label: 'Company name' },
   { name: 'company_legal_name', label: 'Legal name' },
-  { name: 'company_reg_no', label: 'Registration / UEN' },
+  { name: 'company_reg_no', label: 'Company registration no.' },
   { name: 'company_address', label: 'Company address' },
   { name: 'company_phone', label: 'Company phone' },
   { name: 'company_email', label: 'Company email' },
@@ -50,7 +50,7 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
     { name: 'document_title', label: 'Document title (INVOICE / QUOTATION / CREDIT NOTE)' },
     { name: 'invoice_no', label: 'Invoice number' },
     { name: 'reference', label: 'Reference / PO number' },
-    { name: 'company_gst_no', label: 'Our GST registration no.' },
+    { name: 'company_gst_no', label: 'Our tax registration no. (GST / VAT)' },
     { name: 'invoice_date', label: 'Invoice date' },
     { name: 'due_date', label: 'Due date' },
     { name: 'payment_terms', label: 'Payment terms' },
@@ -136,7 +136,7 @@ const label = (v: string, extra: GridCell = {}): GridCell => ({ v, b: true, c: G
 
 export const STARTER_LAYOUTS: Record<DocKind, () => GridTemplate> = {
   payslip: () => build([130, 16, 140, 40, 130, 16, 140], [
-    { h: 30, cells: [[0, { v: '{{logo}}', rs: 3, cs: 3, va: 'middle' }], [4, { v: 'UEN : {{company_reg_no}}', cs: 3, b: true, al: 'right' }]] },
+    { h: 30, cells: [[0, { v: '{{logo}}', rs: 3, cs: 3, va: 'middle' }], [4, { v: 'Reg. No. : {{company_reg_no}}', cs: 3, b: true, al: 'right' }]] },
     { h: 36, cells: [[4, { v: '{{company_address}}', cs: 3, fs: 11, al: 'right' }]] },
     { cells: [[4, { v: '{{company_website}}', cs: 3, fs: 11, al: 'right' }]] },
     { h: 10 },

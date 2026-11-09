@@ -138,16 +138,41 @@ export function Bank({ data }: { data: FinanceData }) {
     );
   }
 
+  // picture statements (scans, images, "Print to PDF"): read with OCR, then the same steps as a PDF
+  const readPicture = async (file: File) => {
+    const hide = message.loading('Reading the picture… (the first time also downloads the reader)', 0);
+    try {
+      const { ocrToRows } = await import('../../../../data/bankOcr');
+      const rows = await ocrToRows(file);
+      hide();
+      if (!rows.length) { message.error('No text could be read from that picture'); return; }
+      setPdfRows(rows);
+      const taught = layouts[String(accountId)];
+      const parsed = taught ? parseWithLayout(rows, taught) : parseStatementText(rowsToLines(rows));
+      if (!parsed.lines.length) { setTeaching(true); return; }
+      // OCR can misread: every line is marked to check
+      showImport(parsed.lines.map(l => ({ ...l, sure: false })));
+    } catch (e: any) { hide(); message.error(`Couldn’t read the picture: ${e.message}`); }
+  };
   const onFile = async (file: File) => {
     setStmtFile(file);
     let r: { lines: ImportLine[]; error?: string };
     setPdfRows(null);
+    if (/^image\//.test(file.type) || /\.(png|jpe?g|webp)$/i.test(file.name)) { readPicture(file); return false; }
     if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
       const hide = message.loading('Reading the PDF…', 0);
       try {
         const rows = await pdfToRows(file);
         hide();
-        if (!rows.length) { message.error('No text in that PDF. Scanned (photo) statements can’t be read — download the statement from internet banking as PDF or CSV.'); return false; }
+        if (!rows.length) {
+          // a picture of a statement (scan, or "Print to PDF"): offer to read it with OCR
+          Modal.confirm({
+            title: 'This statement is a picture', okText: 'Read it', cancelText: 'Cancel',
+            content: 'Quantivra can read the text from the picture. It takes a minute, and you check every line before importing.',
+            onOk: () => { readPicture(file); },
+          });
+          return false;
+        }
         setPdfRows(rows);
         const taught = layouts[String(accountId)];
         const parsed = taught ? parseWithLayout(rows, taught) : parseStatementText(rowsToLines(rows));
@@ -198,7 +223,7 @@ export function Bank({ data }: { data: FinanceData }) {
           </Popconfirm>
         )}
         <Button icon={<PlusOutlined />} onClick={() => setBankEdit({})}>Bank account</Button>
-        <Upload accept=".csv,text/csv,.pdf,application/pdf" showUploadList={false} beforeUpload={onFile}><Button icon={<UploadOutlined />}>Import statement (PDF or CSV)</Button></Upload>
+        <Upload accept=".csv,text/csv,.pdf,application/pdf,.png,.jpg,.jpeg,.webp" showUploadList={false} beforeUpload={onFile}><Button icon={<UploadOutlined />}>Import statement (PDF or CSV)</Button></Upload>
         <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>Add a line</Button>
       </Space>
       {/* the summary cards share one row and are all the same height */}

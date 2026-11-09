@@ -10,7 +10,7 @@ import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, payme
 import { CellValue } from '../../../components/GridDocument';
 import type { GridTemplate } from '../../../utils/gridTemplate';
 import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME, formatDocFileName, DOC_FILE_NAME_TOKENS, DEFAULT_DOC_FILE_NAME } from '../../../utils/payslipFiles';
-import { nationalIdLabel } from '../../../data/countries';
+import { nationalIdLabel, companyRegLabel } from '../../../data/countries';
 
 const { Title, Text } = Typography;
 const panel = { background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)' };
@@ -171,7 +171,7 @@ export function CompanyProfilePage() {
       </Form>
     </Card>,
     previewBox('Preview with example data', (
-      <DocumentShell branding={previewBranding} companyName={company.name} title="PAYSLIP" meta={<>August 2026<br />Pay date 2026-08-31</>}
+      <DocumentShell country={company?.country} branding={previewBranding} companyName={company.name} title="PAYSLIP" meta={<>August 2026<br />Pay date 2026-08-31</>}
         showLogo={tpl.payslip.showLogo} showCompanyBlock={tpl.payslip.showCompanyBlock} footerNote={tpl.payslip.footerNote} forPrint>
         <table style={{ width: '100%', fontSize: 13, color: '#111', borderCollapse: 'collapse' }}>
           <tbody>
@@ -319,7 +319,7 @@ export function CompanyProfilePage() {
       {invoiceSettings}
     </Card>,
     previewBox('Preview with example data', (
-      <DocumentShell branding={previewBranding} companyName={company.name} title="INVOICE" meta={<>INV-0001<br />Date 2026-08-01</>}
+      <DocumentShell country={company?.country} branding={previewBranding} companyName={company.name} title="INVOICE" meta={<>INV-0001<br />Date 2026-08-01</>}
         showLogo={tpl.invoice.showLogo} showCompanyBlock={tpl.invoice.showCompanyBlock} footerNote={tpl.invoice.footerNote} forPrint>
         <div style={{ fontSize: 13, color: '#111', marginBottom: 10 }}>
           <div style={{ color: '#666' }}>Bill to</div>Acme Trading Pte Ltd<br />1 Example Road, Singapore 123456
@@ -384,7 +384,7 @@ export function CompanyProfilePage() {
                 </div>
                 <Form form={form} initialValues={vals} layout="vertical" size="small" onValuesChange={(_, all) => setVals(p => ({ ...p, ...all }))}>
                   <Form.Item name="legal_name" label="Legal name (on documents)"><Input /></Form.Item>
-                  <Form.Item name="registration_no" label="Registration / UEN"><Input /></Form.Item>
+                  <Form.Item name="registration_no" label={companyRegLabel(company.country)}><Input /></Form.Item>
                   <Form.Item name="address" label="Address"><Input.TextArea rows={2} /></Form.Item>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
                     <Form.Item name="phone" label="Phone"><Input /></Form.Item>
@@ -400,7 +400,7 @@ export function CompanyProfilePage() {
                 </Card>
               </>,
               previewBox('Preview — how it looks at the top of your documents', (
-                <DocumentShell branding={previewBranding} companyName={company.name} title="DOCUMENT" meta={<>Reference<br />Date</>} forPrint>
+                <DocumentShell country={company?.country} branding={previewBranding} companyName={company.name} title="DOCUMENT" meta={<>Reference<br />Date</>} forPrint>
                   <div style={{ color: '#999', fontSize: 12, padding: '12px 0' }}>Document content goes here.</div>
                 </DocumentShell>
               )),

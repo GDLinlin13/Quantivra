@@ -4,6 +4,7 @@ import { GridDocument, CellValue } from '../../../../components/GridDocument';
 import { companyFields, money as fmtMoney, pickPaymentAccount } from '../../../../data/documentLayouts';
 import { docTotals, balanceDue, DOC_LABEL, type FinDocument, type DocLine, type Contact, type ContactPerson, type FinanceSettings } from '../../../../data/finance';
 import type { FieldValues, ListValues } from '../../../../utils/gridTemplate';
+import { taxRegLabel } from '../../../../data/countries';
 
 const qtyText = (n: number) => String(Number(n)).replace(/\.0+$/, '');
 
@@ -67,14 +68,14 @@ export function DocumentView({ doc, lines, contact, person, company, branding, s
   );
   return (
     <div id={domId} style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
-      <DocumentShell branding={branding} companyName={company?.name || ''} forPrint title={fields.document_title}
+      <DocumentShell country={company?.country} branding={branding} companyName={company?.name || ''} forPrint title={fields.document_title}
         meta={<>{doc.number}<br />Date {doc.issue_date}{doc.due_date ? <><br />{doc.doc_type === 'quote' ? 'Valid until' : 'Due'} {doc.due_date}</> : null}{doc.reference ? <><br />Ref {doc.reference}</> : null}</>}
         showLogo={inv?.showLogo ?? true} showCompanyBlock={inv?.showCompanyBlock ?? true} footerNote={inv?.footerNote}>
         <div style={{ fontSize: 13, color: '#111', marginBottom: 12, whiteSpace: 'pre-line' }}>
           <div style={{ color: '#666', fontSize: 12 }}>{doc.doc_type === 'quote' ? 'Prepared for' : 'Bill to'}</div>
           <b>{fields.customer_name}</b>{fields.customer_address ? `\n${fields.customer_address}` : ''}
           {fields.customer_contact && <div style={{ fontSize: 12, marginTop: 2 }}>Attn: {fields.customer_contact}{[fields.customer_phone, fields.customer_email].filter(Boolean).length ? ` · ${[fields.customer_phone, fields.customer_email].filter(Boolean).join(' · ')}` : ''}</div>}
-          {fields.company_gst_no && <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>Our GST reg. no. {fields.company_gst_no}</div>}
+          {fields.company_gst_no && <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>Our {taxRegLabel(company?.country)} {fields.company_gst_no}</div>}
         </div>
         <table style={{ width: '100%', fontSize: 13, color: '#111', borderCollapse: 'collapse' }}>
           <thead>
