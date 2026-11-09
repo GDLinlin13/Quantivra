@@ -211,7 +211,7 @@ export function Bank({ data }: { data: FinanceData }) {
   // leave out lines already imported (same date, amount and description)
   // the whole statement is kept, in its order: lines keyed in by hand are taken over (with their match)
   function showImport(lines: ImportLine[]) {
-    if (!lines.length || nothingNew(planImport(lines, txns, foreign ? [] : expected))) { message.info('Nothing new in that file'); setImporting(null); return; }
+    if (!lines.length || nothingNew(planImport(lines, txns, foreign ? [] : expected))) { message.info(lines.length ? `Nothing new in that file: the ${lines.length} line${lines.length === 1 ? '' : 's'} it holds ${lines.length === 1 ? 'is' : 'are'} already in this account` : 'Nothing new in that file'); setImporting(null); return; }
     setStmtMonth(dayjs(`${statementPeriod(lines.map(l => l.txn_date)) || dayjs().format('YYYY-MM')}-01`));
     setImporting(lines);
   }
