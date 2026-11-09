@@ -30,7 +30,10 @@ export function cleanWord(raw: string): string {
   let t = raw.trim().replace(/^[|[\]{}'"‘’“”_!]+|[|[\]{}'"‘’“”_!]+$/g, '');
   if (/\d/.test(t) && /^[\d,.OoIlS]+$/.test(t) && /[.,][\dOo]{2}$/.test(t)) {
     t = t.replace(/[Oo]/g, '0').replace(/[Il]/g, '1').replace(/S/g, '5');
-    if (/^\d{1,3}(,\d{3})*,\d{2}$/.test(t)) t = `${t.slice(0, -3)}.${t.slice(-2)}`; // 105,00 → 105.00
+    // the last mark before two digits is the decimal point; the others are thousands, whichever OCR saw:
+    // 7.350,000.00 → 7,350,000.00 · 2,647.994.33 → 2,647,994.33 · 105,00 → 105.00
+    const body = t.slice(0, -3).replace(/[.,]/g, ',');
+    if (/^\d{1,3}(,\d{3})*$/.test(body)) t = `${body}.${t.slice(-2)}`;
   }
   return fixDate(t);
 }

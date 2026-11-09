@@ -44,7 +44,7 @@ export function parseStatementText(lines: string[][]): { lines: PdfBankLine[]; u
   for (const words of lines) {
     const text = words.join(' ');
     const amounts = words.filter(w => AMOUNT.test(w));
-    if (/balance\s+(brought|b\/f|carried|c\/f)|opening balance|previous balance|balance forward/i.test(text)) {
+    if (/balance\s+(brought|b\/f|carried|c\/f)|opening balance|closing balance|previous balance|balance forward/i.test(text)) {
       if (amounts.length) prevBalance = val(amounts[amounts.length - 1]);
       last = null;
       continue;
@@ -159,7 +159,7 @@ export function parseWithLayout(rows: PdfRow[], layout: PdfLayout): { lines: Pdf
       return m ? val(m) : null;
     };
     const outAmt = num('out'), inAmt = num('in'), amt = num('amount'), bal = num('balance');
-    if (/balance\s+(brought|b\/f|carried|c\/f)|opening balance|previous balance|balance forward/i.test(text)) {
+    if (/balance\s+(brought|b\/f|carried|c\/f)|opening balance|closing balance|previous balance|balance forward/i.test(text)) {
       if (bal != null) prevBalance = bal;
       last = null; continue;
     }

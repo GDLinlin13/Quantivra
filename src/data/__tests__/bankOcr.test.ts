@@ -30,5 +30,9 @@ describe('scan noise', () => {
     expect(cleanWord('1,234,56')).toBe('1,234.56');
     expect(cleanWord('1,000')).toBe('1,000');
     expect(cleanWord('|')).toBe('');
+    expect(cleanWord('7.350,000.00')).toBe('7,350,000.00');
+    expect(cleanWord('9.997,994.33')).toBe('9,997,994.33');
+    expect(cleanWord('2,647.994.33')).toBe('2,647,994.33');
+    expect(cleanWord('12.30')).toBe('12.30');
   });
 });
