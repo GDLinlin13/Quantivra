@@ -8,11 +8,11 @@ const period: PayrollPeriod = {
   frequency: 'monthly', payYear: 2026, payMonth: 8, payPeriod: 8,
 };
 
-const run = (residency: string, basic = 20000) => calculatePayroll({
+const run = (residency: string, basic = 20000, status = 'FULL_TIME') => calculatePayroll({
   period, countryPack: aePack,
   employees: [{
     employeeId: 'E1', name: 'T', dateOfBirth: '1990-01-01', dateOfJoining: '2022-01-01',
-    employmentStatusCode: 'FULL_TIME', immigrationStatusCode: residency,
+    employmentStatusCode: status, immigrationStatusCode: residency,
     salaryComponents: [{ componentCode: 'BASIC', amount: basic }],
   }],
 }).employees[0];
@@ -40,6 +40,12 @@ describe('UAE country pack', () => {
     expect(eosb!.employeeTotal).toBe(0);
     expect(eosb!.employerTotal).toBeGreaterThan(0);   // ~5.83% of basic
     expect(r.netPay).toBe(20000);                     // nothing deducted from the employee
+  });
+
+  it('directors: no gratuity, no employer cost', () => {
+    const r = run('EXPAT', 55000, 'DIRECTOR');
+    expect(r.statutoryContributions.find(s => s.schemeCode === 'EOSB' && s.employerTotal > 0)).toBeUndefined();
+    expect(r.totalEmployerCosts).toBe(0);
   });
 
   it('GPSSA contribution salary is capped at AED 100,000', () => {
