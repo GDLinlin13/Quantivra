@@ -7,8 +7,12 @@ import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { WORK_PATTERN_PRESETS, presetKeyOf, describePattern, type WorkPattern } from '../../../../utils/workdays';
 import { supabase } from '../../../../utils/supabase';
 import { residencyOptions, defaultResidency } from '../../../../data/residency-options';
+import { AmountInput } from '../../../../components/AmountInput';
+import { nationalIdLabel } from '../../../../data/countries';
 
 const EMP_TYPES = ['full_time', 'part_time', 'contract', 'intern', 'casual', 'director'];
+/** 'on_leave' → 'On leave' */
+const nice = (v: string) => { const t = (v || '').replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1); };
 
 export function EmployeesTab({ companyId }: { companyId: number }) {
   const { canViewPay } = useCompanyAccess();
@@ -16,6 +20,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
   const [depts, setDepts] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [country, setCountry] = useState<string | null>(null);
+  const isSG = (country || 'SG').toUpperCase() === 'SG';
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
@@ -96,8 +101,8 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
     { title: 'Designation', dataIndex: 'job_title', key: 'jt' },
     { title: 'Department', dataIndex: 'department_name', key: 'dept', render: (v: string) => v || '—' },
     { title: 'Manager', dataIndex: 'manager_name', key: 'mgr', render: (v: string) => v || '—' },
-    { title: 'Type', dataIndex: 'employment_type', key: 'type', render: (v: string) => <Tag>{v.replace('_', ' ')}</Tag> },
-    { title: 'Status', dataIndex: 'status', key: 'status', render: (v: string) => <Tag color={v === 'active' ? 'green' : v === 'on_leave' ? 'gold' : 'red'}>{v.replace('_', ' ')}</Tag> },
+    { title: 'Type', dataIndex: 'employment_type', key: 'type', render: (v: string) => <Tag>{nice(v)}</Tag> },
+    { title: 'Status', dataIndex: 'status', key: 'status', render: (v: string) => <Tag color={v === 'active' ? 'green' : v === 'on_leave' ? 'gold' : 'red'}>{nice(v)}</Tag> },
     {
       title: '', key: 'act', render: (_: any, r: Employee) => (
         <Space>
@@ -150,27 +155,28 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
                   .map(u => ({ label: `${u.full_name} (${u.username || u.email || 'no username'})`, value: u.id }))} />
             </Form.Item>
             <Form.Item name="employment_type" label="Employment Type">
-              <Select options={EMP_TYPES.map(t => ({ label: t.replace('_', ' '), value: t }))} />
+              <Select options={EMP_TYPES.map(t => ({ label: nice(t), value: t }))} />
             </Form.Item>
             <Form.Item name="status" label="Status">
-              <Select options={['active', 'on_leave', 'terminated'].map(s => ({ label: s.replace('_', ' '), value: s }))} />
+              <Select options={['active', 'on_leave', 'terminated'].map(s => ({ label: nice(s), value: s }))} />
             </Form.Item>
             <Form.Item name="join_date" label="Join Date"><DatePicker style={{ width: '100%' }} /></Form.Item>
             <Form.Item name="exit_date" label="Exit Date"><DatePicker style={{ width: '100%' }} /></Form.Item>
-            {canViewPay && <Form.Item name="base_salary" label="Base Salary (monthly)"><InputNumber style={{ width: '100%' }} min={0} /></Form.Item>}
+            {canViewPay && <Form.Item name="base_salary" label="Base Salary (monthly)"><AmountInput style={{ width: '100%' }} min={0} /></Form.Item>}
             <Form.Item name="date_of_birth" label="Date of Birth"><DatePicker style={{ width: '100%' }} /></Form.Item>
             <Form.Item name="residency_status" label="Residency (for statutory)">
               <Select options={residencyOptions(country).map(o => ({ label: o.label, value: o.value }))} />
             </Form.Item>
-            <Form.Item name="pr_stage" label="PR Stage (Singapore)" dependencies={['residency_status']}>
+            {/* Singapore only: CPF rates for permanent residents depend on the PR year; self-help groups are Singapore funds */}
+            {isSG && <Form.Item name="pr_stage" label="PR Stage" dependencies={['residency_status']}>
               <Select allowClear disabled={form.getFieldValue('residency_status') !== 'PR'}
                 options={[
                   { label: 'Year 1', value: 'year_1' },
                   { label: 'Year 2', value: 'year_2' },
                   { label: 'Year 3+', value: 'year_3_plus' },
                 ]} />
-            </Form.Item>
-            <Form.Item name="ethnicity" label="Ethnicity (self-help group)"
+            </Form.Item>}
+            {isSG && <Form.Item name="ethnicity" label="Ethnicity (self-help group)"
               tooltip="Determines which SG self-help group contribution applies (CDAC / MBMF / SINDA / ECF)">
               <Select allowClear options={[
                 { label: 'Chinese (CDAC)', value: 'chinese' },
@@ -179,7 +185,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
                 { label: 'Eurasian (ECF)', value: 'eurasian' },
                 { label: 'Other / none', value: 'other' },
               ]} />
-            </Form.Item>
+            </Form.Item>}
             <Form.Item name="gender" label="Gender" tooltip="Decides maternity or paternity leave">
               <Select allowClear options={[{ label: 'Female', value: 'female' }, { label: 'Male', value: 'male' }]} />
             </Form.Item>
@@ -221,7 +227,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
           {canViewPay && <div style={{ color: 'rgba(240,237,230,0.4)', fontSize: 12, margin: '4px 0 8px' }}>PII below is encrypted at rest.</div>}
           {canViewPay && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Form.Item name="national_id" label="National ID / NRIC"><Input /></Form.Item>
+            <Form.Item name="national_id" label={nationalIdLabel(country)}><Input /></Form.Item>
             <Form.Item name="tax_id" label="Tax ID"><Input /></Form.Item>
             <Form.Item name="bank_name" label="Bank"><Input /></Form.Item>
             <Form.Item name="bank_account" label="Bank Account No."><Input /></Form.Item>

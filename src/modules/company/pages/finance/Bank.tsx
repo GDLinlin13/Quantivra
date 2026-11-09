@@ -20,6 +20,7 @@ type ImportLine = BankLine & { sure: boolean };
 import { money } from '../../../../data/documentLayouts';
 import { currencyOptions } from '../../../../utils/currencies';
 import type { FinanceData } from './DocList';
+import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
 
@@ -366,7 +367,7 @@ function FxMatch({ txn, currency, accCur, onClose, onMatch }: {
         <Text>{txn.description} · {txn.txn_date} · {money(base, currency)}</Text>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div><Text type="secondary">Amount in {accCur}</Text>
-            <InputNumber style={{ width: '100%' }} min={0.01} precision={2} prefix={accCur} value={received ?? undefined} onChange={v => setReceived(v == null ? null : Number(v))} /></div>
+            <AmountInput style={{ width: '100%' }} min={0.01} precision={2} prefix={accCur} value={received ?? undefined} onChange={v => setReceived(v == null ? null : Number(v))} /></div>
           <div><Text type="secondary">Rate (1 {accCur} = ? {currency})</Text>
             <InputNumber style={{ width: '100%' }} min={0} precision={6} value={rate ? Math.round(rate * 1e6) / 1e6 : undefined}
               onChange={r => setReceived(r ? Math.round((base / Number(r)) * 100) / 100 : null)} /></div>
@@ -394,7 +395,7 @@ function AddLine({ onClose, onAdd, currency, line }: { onClose: () => void; onAd
         ]} /></Form.Item>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Form.Item name="date" label="Date" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>
-          <Form.Item name="amount" label="Amount" rules={[{ required: true }]}><InputNumber min={0.01} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="amount" label="Amount" rules={[{ required: true }]}><AmountInput min={0.01} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>
         </div>
         <Form.Item name="description" label="Description"><Input /></Form.Item>
       </Form>
@@ -454,11 +455,11 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
         <div style={{ marginBottom: 12, padding: 10, border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}>
           <Text>In {data.currency}:</Text>{' '}
           <Space wrap>
-            <InputNumber min={0} precision={6} style={{ width: 170 }} prefix={`1 ${accCur} =`} suffix={data.currency}
+            <AmountInput min={0} precision={6} style={{ width: 170 }} prefix={`1 ${accCur} =`} suffix={data.currency}
               value={base != null && lineAmt ? fx(base / lineAmt) : undefined}
               onChange={r => setBase(r ? Math.round(Number(r) * lineAmt * 100) / 100 : null)} />
             <Text type="secondary">or</Text>
-            <InputNumber min={0} precision={2} style={{ width: 170 }} prefix={data.currency} value={base ?? undefined} onChange={v => setBase(v == null ? null : Number(v))} />
+            <AmountInput min={0} precision={2} style={{ width: 170 }} prefix={data.currency} value={base ?? undefined} onChange={v => setBase(v == null ? null : Number(v))} />
           </Space>
           {!ready && <div style={{ marginTop: 6 }}><Tag color="gold">Enter the exchange rate or the {data.currency} amount first</Tag></div>}
         </div>
@@ -582,11 +583,11 @@ function BankAccountModal({ data, account, onClose, onSaved }: { data: FinanceDa
           </Form.Item>
           {foreign && (
             <Form.Item name="opening_foreign" label={`Opening balance (${cur})`}>
-              <InputNumber precision={2} style={{ width: '100%' }} prefix={cur} />
+              <AmountInput precision={2} style={{ width: '100%' }} prefix={cur} />
             </Form.Item>
           )}
           <Form.Item name="opening_balance" label={foreign ? `Opening balance in ${data.currency}` : 'Opening balance'}>
-            <InputNumber precision={2} style={{ width: '100%' }} prefix={data.currency} />
+            <AmountInput precision={2} style={{ width: '100%' }} prefix={data.currency} />
           </Form.Item>
           <Form.Item name="opening_date" label="As at"><DatePicker style={{ width: '100%' }} /></Form.Item>
         </div>

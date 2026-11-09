@@ -8,6 +8,7 @@ import { GridDocument, CellValue } from '../../../../components/GridDocument';
 import { companyFields, money as fmtMoney, plainAmount } from '../../../../data/documentLayouts';
 import { hrService, type Employee } from '../../../../services/hr';
 import type { FieldValues, ListValues } from '../../../../utils/gridTemplate';
+import { nationalIdLabel } from '../../../../data/countries';
 
 
 export const PRINT_CSS = `@page{size:A4;margin:12mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -116,7 +117,7 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
           <tbody>
             <tr><td style={{ color: '#666' }}>Employee</td><td style={{ textAlign: 'right' }}>{slip.employee_name}{(t?.showEmployeeId ?? true) && slip.employee_code ? ` · ${slip.employee_code}` : ''}</td></tr>
             {(t?.showDesignation ?? true) && designation && <tr><td style={{ color: '#666' }}>Designation</td><td style={{ textAlign: 'right' }}>{designation}</td></tr>}
-            {t?.showNationalId && idMasked && <tr><td style={{ color: '#666' }}>NRIC / ID no.</td><td style={{ textAlign: 'right' }}>{t?.nationalIdFull ? idFull : idMasked}</td></tr>}
+            {t?.showNationalId && idMasked && <tr><td style={{ color: '#666' }}>{nationalIdLabel(company?.country)}</td><td style={{ textAlign: 'right' }}>{t?.nationalIdFull ? idFull : idMasked}</td></tr>}
             {t?.showBankAccount && bankMasked && <tr><td style={{ color: '#666' }}>Bank account</td><td style={{ textAlign: 'right' }}>{[bankName, (t?.bankAccountFull && bankFull) || bankMasked].filter(Boolean).join(' ')}</td></tr>}
 
             <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Earnings</td></tr>

@@ -59,3 +59,11 @@ describe('bank codes', () => {
     expect(bankCodePlan([...many, { id: 99, code: '1010', subtype: 'cash' }])).toEqual([]);
   });
 });
+
+describe('national ID names', () => {
+  it('uses each country’s own term', async () => {
+    const { nationalIdLabel } = await import('../countries');
+    expect([nationalIdLabel('SG'), nationalIdLabel('MY'), nationalIdLabel('HK'), nationalIdLabel('AE'), nationalIdLabel('GB'), nationalIdLabel('ZZ')])
+      .toEqual(['NRIC / FIN', 'MyKad', 'HKID', 'Emirates ID', 'NI Number', 'National ID']);
+  });
+});

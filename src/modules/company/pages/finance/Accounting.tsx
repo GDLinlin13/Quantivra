@@ -11,6 +11,7 @@ import { ACCOUNT_TYPE_LABEL, today, type Account, type AccountType } from '../..
 import { money } from '../../../../data/documentLayouts';
 import { PRINT_CSS } from '../hr/PayslipView';
 import type { FinanceData } from './DocList';
+import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -315,7 +316,7 @@ function AccountModal({ data, account, onClose, onSaved }: { data: FinanceData; 
         <Form.Item name="description" label="Description"><Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} /></Form.Item>
         {['asset', 'liability', 'equity'].includes(type) && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Form.Item name="opening_balance" label="Opening balance" tooltip="What the account held when you started using Quantivra (e.g. your bank balance)."><InputNumber precision={2} style={{ width: '100%' }} /></Form.Item>
+            <Form.Item name="opening_balance" label="Opening balance" tooltip="What the account held when you started using Quantivra (e.g. your bank balance)."><AmountInput precision={2} style={{ width: '100%' }} /></Form.Item>
             <Form.Item name="opening_date" label="As at"><DatePicker style={{ width: '100%' }} /></Form.Item>
           </div>
         )}
@@ -409,8 +410,8 @@ function JournalModal({ data, accounts, journal, onClose, onSaved }: { data: Fin
           <Select showSearch optionFilterProp="label" placeholder="Account" value={l.account_id || undefined} onChange={v => setLine(i, { account_id: v })}
             options={accounts.filter(a => !a.archived).map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
           <Input placeholder="Details" value={l.description || ''} onChange={e => setLine(i, { description: e.target.value })} />
-          <InputNumber placeholder="Debit" min={0} precision={2} value={l.debit || undefined} onChange={v => setLine(i, { debit: Number(v) || 0, credit: v ? 0 : l.credit })} />
-          <InputNumber placeholder="Credit" min={0} precision={2} value={l.credit || undefined} onChange={v => setLine(i, { credit: Number(v) || 0, debit: v ? 0 : l.debit })} />
+          <AmountInput placeholder="Debit" min={0} precision={2} value={l.debit || undefined} onChange={v => setLine(i, { debit: Number(v) || 0, credit: v ? 0 : l.credit })} />
+          <AmountInput placeholder="Credit" min={0} precision={2} value={l.credit || undefined} onChange={v => setLine(i, { credit: Number(v) || 0, debit: v ? 0 : l.debit })} />
           <Button icon={<DeleteOutlined />} onClick={() => setLines(ls => ls.filter((_, j) => j !== i))} />
         </div>
       ))}
@@ -448,7 +449,7 @@ function PayLiability({ data, accounts, account, amount, onClose, onDone }: {
       <Form form={form} layout="vertical" style={{ marginTop: 12 }}
         initialValues={{ amount, date: dayjs(), bank: banks.find(b => b.subtype === 'bank')?.id, memo: `Paid ${account.name}` }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <Form.Item name="amount" label="Amount" rules={[{ required: true }]}><InputNumber min={0.01} precision={2} style={{ width: '100%' }} prefix={data.currency} /></Form.Item>
+          <Form.Item name="amount" label="Amount" rules={[{ required: true }]}><AmountInput min={0.01} precision={2} style={{ width: '100%' }} prefix={data.currency} /></Form.Item>
           <Form.Item name="date" label="Paid on" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} allowClear={false} /></Form.Item>
           <Form.Item name="bank" label="From" rules={[{ required: true }]}><Select options={banks.map(b => ({ value: b.id, label: b.name }))} /></Form.Item>
           <Form.Item name="memo" label="Details"><Input /></Form.Item>

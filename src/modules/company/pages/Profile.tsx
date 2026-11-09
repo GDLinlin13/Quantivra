@@ -10,6 +10,7 @@ import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, payme
 import { CellValue } from '../../../components/GridDocument';
 import type { GridTemplate } from '../../../utils/gridTemplate';
 import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME, formatDocFileName, DOC_FILE_NAME_TOKENS, DEFAULT_DOC_FILE_NAME } from '../../../utils/payslipFiles';
+import { nationalIdLabel } from '../../../data/countries';
 
 const { Title, Text } = Typography;
 const panel = { background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)' };
@@ -148,7 +149,7 @@ export function CompanyProfilePage() {
       <TplToggle label="Company address block" v={tpl.payslip.showCompanyBlock} on={x => setTplField('payslip', 'showCompanyBlock', x)} />
       <TplToggle label="Employee ID" v={tpl.payslip.showEmployeeId} on={x => setTplField('payslip', 'showEmployeeId', x)} />
       <TplToggle label="Designation" v={tpl.payslip.showDesignation ?? true} on={x => setTplField('payslip', 'showDesignation', x)} />
-      <TplToggle label="NRIC / ID number" v={!!tpl.payslip.showNationalId} on={x => setTplField('payslip', 'showNationalId', x)} />
+      <TplToggle label={nationalIdLabel(company.country)} v={!!tpl.payslip.showNationalId} on={x => setTplField('payslip', 'showNationalId', x)} />
       {tpl.payslip.showNationalId && (
         <div style={{ padding: '4px 0 4px 16px' }}>
           <Segmented size="small" value={tpl.payslip.nationalIdFull ? 'full' : 'masked'}
@@ -176,7 +177,7 @@ export function CompanyProfilePage() {
           <tbody>
             {row('Employee', `Alice Tan${tpl.payslip.showEmployeeId ? ' · EMP-001' : ''}`, { muted: true })}
             {(tpl.payslip.showDesignation ?? true) && row('Designation', 'Senior Designer', { muted: true })}
-            {tpl.payslip.showNationalId && row('NRIC / ID no.', tpl.payslip.nationalIdFull ? 'S1234567A' : '•••••567A', { muted: true })}
+            {tpl.payslip.showNationalId && row(nationalIdLabel(company.country), tpl.payslip.nationalIdFull ? 'S1234567A' : '•••••567A', { muted: true })}
             {tpl.payslip.showBankAccount && row('Bank account', tpl.payslip.bankAccountFull ? 'DBS 012-345678-9' : 'DBS ••••••••78-9', { muted: true })}
             <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Earnings</td></tr>
             {row('Basic Salary', money(9000, cur, tpl.payslip.amountFormat))}

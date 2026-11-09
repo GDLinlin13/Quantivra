@@ -6,6 +6,7 @@ import { buildLedger, payrollDue, systemAccount, splitByShare, type PayrollDue }
 import { money } from '../../../../data/documentLayouts';
 import { schemeLabel } from '../../../../data/finance';
 import type { FinanceData } from './DocList';
+import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
 const period = (r: PayrollDue['run']) => dayjs(`${r.period_year}-${String(r.period_month).padStart(2, '0')}-01`).format('MMM YYYY');
@@ -119,7 +120,7 @@ function PayModal({ data, accounts, title, amount, date, to, memo, onClose, onDo
         setSaving(false);
       }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div><Text type="secondary">Amount</Text><InputNumber style={{ width: '100%' }} min={0.01} precision={2} prefix={data.currency} value={amt} onChange={setAmt} /></div>
+        <div><Text type="secondary">Amount</Text><AmountInput style={{ width: '100%' }} min={0.01} precision={2} prefix={data.currency} value={amt} onChange={setAmt} /></div>
         <div><Text type="secondary">Paid on</Text><DatePicker style={{ width: '100%' }} allowClear={false} value={day} onChange={d => d && setDay(d)} /></div>
         <div><Text type="secondary">From</Text><Select style={{ width: '100%' }} value={from} onChange={setFrom} options={banks.map(b => ({ value: b.id, label: b.name }))} /></div>
         <div><Text type="secondary">Details</Text><Input value={note} onChange={e => setNote(e.target.value)} /></div>

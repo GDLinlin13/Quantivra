@@ -1258,3 +1258,15 @@ export const COUNTRY_PACKS: Record<string, CountryPackConfig> = {
     localisation: { address_format: 'Street, Ward, District, Province/City', postal_code_format: '6 digits', phone_format: '+84 9x xxx xxxx', national_id_format: '000 000 000 000 (CCCD)' },
   },
 };
+
+/**
+ * What the country calls its personal ID number, for labels: "NRIC / FIN" in Singapore, "MyKad" in Malaysia,
+ * "Emirates ID" in the UAE… Falls back to "National ID".
+ */
+export function nationalIdLabel(country?: string | null): string {
+  const c = (country || 'SG').toUpperCase();
+  const OWN: Record<string, string> = { SG: 'NRIC / FIN', SA: 'National ID / Iqama', AE: 'Emirates ID' };
+  if (OWN[c]) return OWN[c];
+  const fmt = COUNTRY_PACKS[c]?.localisation?.national_id_format || '';
+  return fmt.match(/\(([^)]+)\)\s*$/)?.[1] || 'National ID';
+}
