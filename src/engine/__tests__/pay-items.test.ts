@@ -67,6 +67,13 @@ describe('pay items in a payroll run', () => {
     expect(r.earnings[1].label).toBe('Reimbursement / claim – Taxi');
   });
 
+  it('pays phone claims in full with no CPF', () => {
+    const { r, cpf } = pay([item('ALLOWANCE_MOBILE', 80, { recurring: true })]);
+    expect(cpf).toBe(base.cpf);
+    expect(r.netPay).toBe(base.r.netPay + 80);
+    expect(r.earnings[1].label).toBe('Phone claim');
+  });
+
   it('takes loans and advances off take-home pay without changing CPF', () => {
     const { r, cpf } = pay([item('DEDUCTION_LOAN', 300, { recurring: true })]);
     expect(cpf).toBe(base.cpf);

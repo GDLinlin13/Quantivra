@@ -79,7 +79,7 @@
     { "componentCode": "ALLOWANCE_TRANSPORT", "classification": "ordinary_wage", "included": true },
     { "componentCode": "ALLOWANCE_HOUSING", "classification": "ordinary_wage", "included": true },
     { "componentCode": "ALLOWANCE_MEAL", "classification": "ordinary_wage", "included": true },
-    { "componentCode": "ALLOWANCE_MOBILE", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_MOBILE", "classification": "excluded", "included": false },
     { "componentCode": "ALLOWANCE_SHIFT", "classification": "ordinary_wage", "included": true },
     { "componentCode": "ALLOWANCE_NIGHT", "classification": "ordinary_wage", "included": true },
     { "componentCode": "ALLOWANCE_ATTENDANCE", "classification": "ordinary_wage", "included": true },
