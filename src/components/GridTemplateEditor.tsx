@@ -10,7 +10,7 @@ import {
   key, colName, coveredSet, mergeAt, normRange, expandRange, mergeRange, unmergeRange, insertRow, deleteRow, insertCol, deleteCol,
   styleRange, outlineRange, isLogoCell, rowUsesList, AUTO_REPEAT, moveRange, copyBlock, pasteBlock, clearArea, type Block, type GridTemplate, type GridCell, type Range,
 } from '../utils/gridTemplate';
-import { DOC_FIELDS, DOC_LISTS, STARTER_LAYOUTS, sampleData, fieldShortName, LIST_EXAMPLES, plainAmount, type DocKind } from '../data/documentLayouts';
+import { docFields, docLists, STARTER_LAYOUTS, sampleData, fieldShortName, listExample, plainAmount, type DocKind } from '../data/documentLayouts';
 import { GridDocument, cellStyle, LogoImg, spanHeight } from './GridDocument';
 
 const { Text } = Typography;
@@ -42,11 +42,12 @@ function CellText({ v, kind }: { v: string; kind: DocKind }) {
 }
 
 /** "What can I type?" — plain-language help for the fields and repeating rows. */
-function FieldGuide({ kind, onInsert, rowRepeat, sample }: {
-  kind: DocKind; onInsert: (name: string) => void; rowRepeat?: string;
+function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
+  kind: DocKind; country?: string | null; onInsert: (name: string) => void; rowRepeat?: string;
   sample: { fields: Record<string, string>; lists: Record<string, Record<string, string>[]> };
 }) {
-  const lists = DOC_LISTS[kind];
+  const lists = docLists(kind, country);
+  const sg = (country || 'SG').toUpperCase() === 'SG';
   const cellStyleTd: React.CSSProperties = { padding: '3px 8px', borderBottom: '1px solid rgba(255,255,255,0.06)', verticalAlign: 'top' };
   const code: React.CSSProperties = { fontFamily: 'monospace', fontSize: 12, color: '#91caff', cursor: 'pointer', whiteSpace: 'nowrap' };
   return (
@@ -56,7 +57,7 @@ function FieldGuide({ kind, onInsert, rowRepeat, sample }: {
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Fields — one value per {kind}</div>
           <table style={{ borderCollapse: 'collapse', width: '100%' }}>
             <tbody>
-              {DOC_FIELDS[kind].map(f => (
+              {docFields(kind, country).map(f => (
                 <tr key={f.name}>
                   <td style={cellStyleTd}><span style={code} onClick={() => onInsert(f.name)} title="Click to put it in the selected cell">{`{{${f.name}}}`}</span></td>
                   <td style={cellStyleTd}>{f.label}<div style={{ color: 'rgba(240,237,230,0.45)', fontSize: 12 }}>{f.name === 'logo' ? 'your uploaded logo' : (sample.fields[f.name] ? `e.g. ${plainAmount(sample.fields[f.name])}` : '')}</div></td>
@@ -79,11 +80,11 @@ function FieldGuide({ kind, onInsert, rowRepeat, sample }: {
                 <b>Side by side:</b> one repeating row can hold two lists — earnings on the left, deductions on the right. It is printed as many times as
                 the longer list needs; where one list has run out, its cells are left blank.
               </p>
-              <p style={{ margin: '0 0 8px' }}>
+              {sg && <p style={{ margin: '0 0 8px' }}>
                 <b>Only want certain items?</b> Don't use a list — use a single field instead. For example, for a CPF section put
                  <code style={code} onClick={() => onInsert('cpf_employer')} title="Click to put it in the selected cell">{'{{cpf_employer}}'}</code>, <code style={code} onClick={() => onInsert('cpf_employee')} title="Click to put it in the selected cell">{'{{cpf_employee}}'}</code> and <code style={code} onClick={() => onInsert('cpf_total')} title="Click to put it in the selected cell">{'{{cpf_total}}'}</code> in
                 ordinary (non-repeating) rows. SDL is a levy the company pays, not CPF; it has its own <code style={code} onClick={() => onInsert('sdl')} title="Click to put it in the selected cell">{'{{sdl}}'}</code> field.
-              </p>
+              </p>}
             </>
           ) : (
             <>
@@ -106,7 +107,7 @@ function FieldGuide({ kind, onInsert, rowRepeat, sample }: {
           )}
           {lists.map(l => (
             <div key={l.name} style={{ marginBottom: 8 }}>
-              <b>{l.label}</b> <span style={{ color: 'rgba(240,237,230,0.5)' }}>— items look like: {LIST_EXAMPLES[l.name]}</span>
+              <b>{l.label}</b> <span style={{ color: 'rgba(240,237,230,0.5)' }}>— items look like: {listExample(l.name, country)}</span>
               <div>
                 {l.fields.map(f => (
                   <span key={f.name} style={{ marginRight: 12 }}>
@@ -119,7 +120,7 @@ function FieldGuide({ kind, onInsert, rowRepeat, sample }: {
           ))}
           <p style={{ margin: '8px 0 0', color: 'rgba(240,237,230,0.55)' }}>
             {kind === 'payslip'
-              ? 'The item names come from payroll: Basic Salary from the employee record, the statutory ones (CPF, SDL, CDAC…) are worked out automatically, and the rest are whatever you add under Payroll → Pay items. You never type item codes — the payslip shows the names.'
+              ? `The item names come from payroll: Basic Salary from the employee record, the statutory ones${sg ? ' (CPF, SDL, CDAC…)' : ''} are worked out automatically, and the rest are whatever you add under Payroll → Pay items. You never type item codes — the payslip shows the names.`
               : 'The item names are whatever is typed on each invoice line.'}
           </p>
         </div>
@@ -319,11 +320,12 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
     return r >= moveTo.r && r <= moveTo.r + h && c >= moveTo.c && c <= moveTo.c + w;
   };
 
-  const lists = DOC_LISTS[kind];
+  const country = company?.country;
+  const lists = docLists(kind, country);
   const legacyList = lists.find(l => l.name === curRow.repeat);
   const fieldOptions = [
     ...(legacyList ? [{ label: `This row's item (older layouts)`, options: legacyList.fields.map(f => ({ value: `line.${f.name.split('.')[1]}`, label: `${f.label}  {{line.${f.name.split('.')[1]}}}` })) }] : []),
-    { label: 'Fields — one value', options: DOC_FIELDS[kind].map(f => ({ value: f.name, label: `${f.label}  {{${f.name}}}` })) },
+    { label: 'Fields — one value', options: docFields(kind, country).map(f => ({ value: f.name, label: `${f.label}  {{${f.name}}}` })) },
     ...lists.map(l => ({ label: `List: ${l.label} — row repeats per item`, options: l.fields.map(f => ({ value: f.name, label: `${f.label}  {{${f.name}}}` })) })),
   ];
   const insertField = (name: string) => {
@@ -346,7 +348,7 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
         <Segmented value={mode} onChange={v => { finishEdit(true); setMode(v as any); }}
           options={[{ label: 'Design', value: 'design' }, { label: 'Preview with example data', value: 'preview' }]} />
-        <Popconfirm title="Replace this layout with the starter layout?" description="Your current layout will be lost (you can still Undo)." onConfirm={() => commit({ ...STARTER_LAYOUTS[kind](), enabled: t.enabled })}>
+        <Popconfirm title="Replace this layout with the starter layout?" description="Your current layout will be lost (you can still Undo)." onConfirm={() => commit({ ...STARTER_LAYOUTS[kind](country), enabled: t.enabled })}>
           <Button size="small" icon={<ReloadOutlined />}>Start again from the starter layout</Button>
         </Popconfirm>
       </div>
@@ -355,7 +357,7 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
         <>
           <Collapse size="small" style={{ marginBottom: 8, background: '#151a1e' }} defaultActiveKey={guideOpen ? ['g'] : []}
             onChange={k => { const open = (Array.isArray(k) ? k : [k]).includes('g'); try { localStorage.setItem('qv-layout-guide', open ? '1' : '0'); } catch { /* ignore */ } }}
-            items={[{ key: 'g', label: 'Code Guide', children: <FieldGuide kind={kind} onInsert={insertField} rowRepeat={curRow.repeat} sample={sample} /> }]} />
+            items={[{ key: 'g', label: 'Code Guide', children: <FieldGuide kind={kind} country={country} onInsert={insertField} rowRepeat={curRow.repeat} sample={sample} /> }]} />
           {/* toolbar */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', padding: 6, background: '#1d2328', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px 6px 0 0' }}>
             {btn('Undo (Ctrl+Z)', <UndoOutlined />, doUndo, false, undo.current.length === 0)}

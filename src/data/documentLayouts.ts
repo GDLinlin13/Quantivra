@@ -1,5 +1,10 @@
 // Fields, lists and starter layouts for the spreadsheet-style document designer.
 import type { GridTemplate, GridCell, FieldValues, ListValues } from '../utils/gridTemplate';
+import { companyRegLabel, nationalIdLabel } from './countries';
+
+const isSG = (country?: string | null) => (country || 'SG').toUpperCase() === 'SG';
+/** Singapore-only payslip fields (CPF, SDL, self-help groups). */
+const SG_ONLY_FIELDS = new Set(['cpf_employee', 'cpf_employer', 'cpf_total', 'sdl', 'shg_name', 'shg_amount']);
 
 export type DocKind = 'payslip' | 'invoice';
 
@@ -119,6 +124,31 @@ export const DOC_LISTS: Record<DocKind, ListDef[]> = {
   ],
 };
 
+/** The fields offered for this company's country: CPF, SDL and self-help groups only in Singapore. */
+export function docFields(kind: DocKind, country?: string | null): FieldDef[] {
+  return DOC_FIELDS[kind]
+    .filter(f => isSG(country) || !SG_ONLY_FIELDS.has(f.name))
+    .map(f => f.name === 'company_reg_no' ? { ...f, label: companyRegLabel(country) }
+      : f.name === 'employee_id_no' ? { ...f, label: `${nationalIdLabel(country)} (full)` }
+      : f.name === 'employee_id_no_masked' ? { ...f, label: `${nationalIdLabel(country)} (masked)` } : f);
+}
+
+export function docLists(kind: DocKind, country?: string | null): ListDef[] {
+  return DOC_LISTS[kind].map(l => l.name === 'statutory' && !isSG(country) ? { ...l, label: 'Statutory schemes' } : l);
+}
+
+/** What each list's items look like, in this company's country. */
+export function listExample(name: string, country?: string | null): string {
+  if (isSG(country)) return LIST_EXAMPLES[name] || '';
+  const OTHER: Record<string, string> = {
+    earnings: 'Basic Salary, Housing allowance, Transport allowance, Overtime (10 hrs), Bonus, Unpaid leave (2 days)…',
+    deductions: 'Salary advance, Loan repayment, Other deduction – Uniform…',
+    employer: 'Contributions the company pays on top of salary…',
+    statutory: 'One line per government scheme, with the employee and employer share',
+  };
+  return OTHER[name] || LIST_EXAMPLES[name] || '';
+}
+
 // ---- starter layouts --------------------------------------------------------
 
 const GREY = '#666666';
@@ -132,11 +162,13 @@ function build(cols: number[], spec: { h?: number; repeat?: string; cells?: [num
   return { enabled: false, cols, rows: spec.map(({ h, repeat }) => ({ ...(h ? { h } : {}), ...(repeat ? { repeat } : {}) })), cells };
 }
 
+type RowSpec = { h?: number; repeat?: string; cells?: [number, GridCell][] }[];
+
 const label = (v: string, extra: GridCell = {}): GridCell => ({ v, b: true, c: GREY, ...extra });
 
-export const STARTER_LAYOUTS: Record<DocKind, () => GridTemplate> = {
-  payslip: () => build([130, 16, 140, 40, 130, 16, 140], [
-    { h: 30, cells: [[0, { v: '{{logo}}', rs: 3, cs: 3, va: 'middle' }], [4, { v: 'Reg. No. : {{company_reg_no}}', cs: 3, b: true, al: 'right' }]] },
+export const STARTER_LAYOUTS: Record<DocKind, (country?: string | null) => GridTemplate> = {
+  payslip: (country) => build([130, 16, 140, 40, 130, 16, 140], [
+    { h: 30, cells: [[0, { v: '{{logo}}', rs: 3, cs: 3, va: 'middle' }], [4, { v: `${companyRegLabel(country)} : {{company_reg_no}}`, cs: 3, b: true, al: 'right' }]] },
     { h: 36, cells: [[4, { v: '{{company_address}}', cs: 3, fs: 11, al: 'right' }]] },
     { cells: [[4, { v: '{{company_website}}', cs: 3, fs: 11, al: 'right' }]] },
     { h: 10 },
@@ -158,15 +190,22 @@ export const STARTER_LAYOUTS: Record<DocKind, () => GridTemplate> = {
       [4, { v: 'Total Deductions' }], [5, { v: ':' }], [6, { v: '{{total_deductions}}', b: true, bt: true, al: 'right' }],
     ] },
     { h: 12 },
-    { h: 28, cells: [[0, { v: 'STATUTORY CONTRIBUTIONS', cs: 3, ...HEAD }], [4, { v: 'NETT SALARY', cs: 2, fs: 14, ...HEAD, al: 'left' }], [6, { v: '{{net_pay}}', fs: 14, ...HEAD, al: 'right' }]] },
-    { cells: [[0, { v: 'Employer CPF' }], [1, { v: ':' }], [2, { v: '{{cpf_employer}}', al: 'right' }]] },
-    { cells: [[0, { v: 'Employee CPF' }], [1, { v: ':' }], [2, { v: '{{cpf_employee}}', al: 'right' }]] },
-    { h: 6 },
-    { cells: [[0, { v: 'Total CPF Contribution' }], [1, { v: ':' }], [2, { v: '{{cpf_total}}', b: true, bt: true, al: 'right' }]] },
+    ...(isSG(country) ? ([
+      { h: 28, cells: [[0, { v: 'STATUTORY CONTRIBUTIONS', cs: 3, ...HEAD }], [4, { v: 'NETT SALARY', cs: 2, fs: 14, ...HEAD, al: 'left' }], [6, { v: '{{net_pay}}', fs: 14, ...HEAD, al: 'right' }]] },
+      { cells: [[0, { v: 'Employer CPF' }], [1, { v: ':' }], [2, { v: '{{cpf_employer}}', al: 'right' }]] },
+      { cells: [[0, { v: 'Employee CPF' }], [1, { v: ':' }], [2, { v: '{{cpf_employee}}', al: 'right' }]] },
+      { h: 6 },
+      { cells: [[0, { v: 'Total CPF Contribution' }], [1, { v: ':' }], [2, { v: '{{cpf_total}}', b: true, bt: true, al: 'right' }]] },
+    ] as RowSpec) : ([
+      { h: 28, cells: [[0, { v: 'EMPLOYER CONTRIBUTIONS', cs: 3, ...HEAD }], [4, { v: 'NETT SALARY', cs: 2, fs: 14, ...HEAD, al: 'left' }], [6, { v: '{{net_pay}}', fs: 14, ...HEAD, al: 'right' }]] },
+      { repeat: 'auto', cells: [[0, { v: '{{employer.name}}' }], [2, { v: '{{employer.amount}}', al: 'right' }]] },
+      { h: 6 },
+      { cells: [[0, { v: 'Total' }], [1, { v: ':' }], [2, { v: '{{total_employer}}', b: true, bt: true, al: 'right' }]] },
+    ] as RowSpec)),
     { h: 14 },
     { cells: [[0, { v: '{{footer_note}}', cs: 7, fs: 10, c: GREY }]] },
   ]),
-  invoice: () => build([50, 270, 70, 140, 150], [
+  invoice: (country) => build([50, 270, 70, 140, 150], [
     { h: 28, cells: [[0, { v: '{{logo}}', rs: 3, cs: 2, va: 'middle' }], [2, { v: '{{document_title}}', cs: 3, b: true, fs: 22, al: 'right' }]] },
     { cells: [[2, { v: 'Invoice no. {{invoice_no}}', cs: 3, al: 'right' }]] },
     { cells: [[2, { v: 'Date {{invoice_date}}', cs: 3, al: 'right' }]] },
@@ -174,7 +213,7 @@ export const STARTER_LAYOUTS: Record<DocKind, () => GridTemplate> = {
     { cells: [[0, { v: '{{company_legal_name}}', cs: 2, b: true }], [2, label('Bill to', { cs: 3 })]] },
     { h: 36, cells: [[0, { v: '{{company_address}}', cs: 2, fs: 11, c: GREY }], [2, { v: '{{customer_name}}\n{{customer_address}}', cs: 3 }]] },
     { h: 36, cells: [[2, { v: 'Attn: {{customer_contact}}\n{{customer_phone}} · {{customer_email}}', cs: 3, fs: 11 }]] },
-    { cells: [[0, { v: 'Reg. No. {{company_reg_no}}', cs: 2, fs: 11, c: GREY }], [2, { v: 'Due date {{due_date}} ({{payment_terms}})', cs: 3, fs: 11, c: GREY }]] },
+    { cells: [[0, { v: `${companyRegLabel(country)} {{company_reg_no}}`, cs: 2, fs: 11, c: GREY }], [2, { v: 'Due date {{due_date}} ({{payment_terms}})', cs: 3, fs: 11, c: GREY }]] },
     { h: 14 },
     { cells: [
       [0, { v: '#', b: true, bg: SHADE, bb: true }], [1, { v: 'Description', b: true, bg: SHADE, bb: true }],
@@ -262,23 +301,28 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
   const fmt = branding?.templates?.[kind]?.amountFormat;
   const m = (n: number) => money(n, cur, fmt);
   const base = companyFields(company, branding, kind === 'payslip' ? branding?.templates?.payslip?.footerNote : branding?.templates?.invoice?.footerNote);
+  const country = (company?.country || 'SG').toUpperCase();
+  const sg = isSG(country);
   if (kind === 'payslip') {
+    const id = sg ? 'S1234567A' : country === 'AE' ? '784-1990-1234567-1' : 'A1234567';
+    const bank = sg ? 'DBS' : country === 'AE' ? 'Emirates NBD' : country === 'SA' ? 'Al Rajhi Bank' : 'HSBC';
+    const employer = sg ? [{ name: 'CPF (Employer)', amount: m(1360) }, { name: 'SDL', amount: m(11.25) }] : [{ name: 'End-of-service gratuity', amount: m(375) }];
     return {
       fields: {
-        ...base, employee_name: 'Alice Tan', employee_code: 'EMP-001', employee_designation: 'Senior Designer', employee_department: 'Creative', employee_id_no: 'S1234567A', employee_id_no_masked: '•••••567A', bank_name: 'DBS', bank_account: '012-345678-9', bank_account_masked: '•••••••78-9',
-        period: 'August 2026', pay_date: '2026-08-31', gross_pay: m(9500), total_deductions: m(1600),
-        net_pay: m(7900), total_employer: m(1371.25), paid_on_behalf: '',
-        cpf_employee: m(1600), cpf_employer: m(1360), cpf_total: m(2960), sdl: m(11.25),
-        shg_name: '', shg_amount: '',
+        ...base, employee_name: 'Alice Tan', employee_code: 'EMP-001', employee_designation: 'Senior Designer', employee_department: 'Creative',
+        employee_id_no: id, employee_id_no_masked: `•••••${id.slice(-4)}`, bank_name: bank, bank_account: '012-345678-9', bank_account_masked: '•••••••78-9',
+        period: 'August 2026', pay_date: '2026-08-31', gross_pay: m(9500), total_deductions: m(sg ? 1600 : 500),
+        net_pay: m(sg ? 7900 : 9000), total_employer: m(sg ? 1371.25 : 375), paid_on_behalf: '',
+        ...(sg ? { cpf_employee: m(1600), cpf_employer: m(1360), cpf_total: m(2960), sdl: m(11.25), shg_name: '', shg_amount: '' } : {}),
       },
       lists: {
         earnings: [{ name: 'Basic Salary', amount: m(9000) }, { name: 'Transport Allowance', amount: m(500) }],
-        deductions: [{ name: 'CPF (Employee)', amount: m(1600) }],
-        employer: [{ name: 'CPF (Employer)', amount: m(1360) }, { name: 'SDL', amount: m(11.25) }],
-        statutory: [
+        deductions: [sg ? { name: 'CPF (Employee)', amount: m(1600) } : { name: 'Salary advance', amount: m(500) }],
+        employer,
+        statutory: sg ? [
           { name: 'CPF', employee: m(1600), employer: m(1360), total: m(2960) },
           { name: 'SDL', employee: m(0), employer: m(11.25), total: m(11.25) },
-        ],
+        ] : [],
       },
     };
   }
@@ -287,12 +331,13 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
     fields: {
       ...base, document_title: 'INVOICE', reference: 'PO-1234', company_gst_no: '', amount_paid: m(0), balance_due: m(2943), notes: '', terms: '',
       invoice_no: 'INV-0001', invoice_date: '2026-08-01', due_date: '2026-08-31', payment_terms: `${terms} days`,
-      customer_name: 'Acme Trading Pte Ltd', customer_address: '1 Example Road, Singapore 123456',
-      customer_contact: 'Mr John Lee', customer_phone: '+65 6123 4567', customer_email: 'accounts@acme.example', customer_website: 'www.acme.example',
+      customer_name: sg ? 'Acme Trading Pte Ltd' : country === 'AE' ? 'Acme Trading LLC' : 'Acme Trading Ltd',
+      customer_address: sg ? '1 Example Road, Singapore 123456' : country === 'AE' ? '1 Example Road, Dubai' : '1 Example Road',
+      customer_contact: 'Mr John Lee', customer_phone: sg ? '+65 6123 4567' : country === 'AE' ? '+971 4 123 4567' : '+1 555 123 4567', customer_email: 'accounts@acme.example', customer_website: 'www.acme.example',
       subtotal: m(3000), total_discount: m(300), subtotal_after_discount: m(2700),
       tax: m(243), total: m(2943),
       bank_details: bankDetailsText(branding?.templates?.invoice),
-      payment_account: pickPaymentAccount(branding?.templates?.invoice)?.title || 'DBS Bank (SGD)',
+      payment_account: pickPaymentAccount(branding?.templates?.invoice)?.title || `Main account (${cur})`,
     },
     lists: {
       lines: [
