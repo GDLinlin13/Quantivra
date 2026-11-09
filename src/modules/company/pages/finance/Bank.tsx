@@ -91,6 +91,13 @@ export function Bank({ data }: { data: FinanceData }) {
   // amounts without the currency (it's shown once, at the top)
   const num = (n: number) => Number(n).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const PURPLE = '#b37feb';
+  // the exchange rate used last on this bank (company currency per unit), to start the next match with
+  const lastRate = useMemo(() => {
+    // newest line with a converted amount; a line of at least 1 unit gives a truer rate than a few cents
+    const withRate = [...txns].filter(x => x.base_amount != null && Number(x.amount)).sort((a, b) => b.txn_date.localeCompare(a.txn_date) || b.id - a.id);
+    const t = withRate.find(x => Math.abs(Number(x.amount)) >= 1) || withRate[0];
+    return t ? Math.round(Math.abs(Number(t.base_amount) / Number(t.amount)) * 1e6) / 1e6 : null;
+  }, [txns]);
   // for a bank in another currency: its own-currency balance from the opening balance and every matched line
   const foreignBooks = useMemo(() => Math.round(((Number(account?.opening_foreign) || 0)
     + txns.filter(t => t.status === 'matched').reduce((s, t) => s + Number(t.amount), 0)) * 100) / 100, [txns, account]);
@@ -351,7 +358,7 @@ export function Bank({ data }: { data: FinanceData }) {
       )}
       {details && <MatchDetails data={data} txn={details} look={look} accCur={accCur} onClose={() => setDetails(null)} onFilesChanged={loadWithFiles} />}
       {matching && <MatchModal data={data} txn={matching} accCur={accCur} dues={dues} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
-        recorded={expected}
+        recorded={expected} lastRate={lastRate}
         onClose={() => setMatching(null)} onDone={() => { setMatching(null); load(); data.reload(); }} />}
     </div>
   );
@@ -412,15 +419,18 @@ function AddLine({ onClose, onAdd, currency, line }: { onClose: () => void; onAd
 }
 
 /** Decide what a statement line is: a payment already recorded, an invoice / bill being paid, or money for an account. */
-function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded, onClose, onDone }: {
+function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded, lastRate, onClose, onDone }: {
   data: FinanceData; txn: BankTxn; accCur: string; dues: PayrollDue[]; payments: Payment[]; usedPayments: Set<number>;
   /** journals on this bank not on a statement yet (e.g. the other side of a transfer) */
-  recorded: BankTxn[]; onClose: () => void; onDone: () => void;
+  recorded: BankTxn[]; lastRate?: number | null; onClose: () => void; onDone: () => void;
 }) {
   const inbound = txn.amount > 0;
   const foreign = accCur !== data.currency;
   const lineAmt = Math.abs(Number(txn.amount));                 // in the bank account's currency
-  const [base, setBase] = useState<number | null>(null);        // the same in the company's currency
+  // the rate has its own box (so typing 1.29 isn't undone by rounding a small amount); starts at the last rate used
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const [rate, setRate] = useState<number | null>(foreign && lastRate ? lastRate : null);
+  const [base, setBase] = useState<number | null>(foreign && lastRate ? r2(lastRate * lineAmt) : null);  // the same in the company's currency
   const amt = foreign ? (base ?? 0) : lineAmt;                  // what goes into the books
   const ready = !foreign || (base != null && base > 0);
   const signedBase = foreign ? Math.sign(Number(txn.amount)) * amt : undefined;
@@ -475,10 +485,10 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
           <Text>In {data.currency}:</Text>{' '}
           <Space wrap>
             <AmountInput min={0} precision={6} style={{ width: 170 }} prefix={`1 ${accCur} =`} suffix={data.currency}
-              value={base != null && lineAmt ? fx(base / lineAmt) : undefined}
-              onChange={r => setBase(r ? Math.round(Number(r) * lineAmt * 100) / 100 : null)} />
+              value={rate ?? undefined}
+              onChange={r => { const v = r == null ? null : Number(r); setRate(v); setBase(v ? r2(v * lineAmt) : null); }} />
             <Text type="secondary">or</Text>
-            <AmountInput min={0} precision={2} style={{ width: 170 }} prefix={data.currency} value={base ?? undefined} onChange={v => setBase(v == null ? null : Number(v))} />
+            <AmountInput min={0} precision={2} style={{ width: 170 }} prefix={data.currency} value={base ?? undefined} onChange={v => { const b = v == null ? null : Number(v); setBase(b); setRate(b && lineAmt ? fx(b / lineAmt) : null); }} />
           </Space>
           {!ready && <div style={{ marginTop: 6 }}><Tag color="gold">Enter the exchange rate or the {data.currency} amount first</Tag></div>}
         </div>
