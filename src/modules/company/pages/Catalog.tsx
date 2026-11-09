@@ -167,13 +167,13 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
           <Form.Item name="kind" noStyle><Segmented options={[{ value: 'product', label: 'Product' }, { value: 'service', label: 'Service' }]} /></Form.Item>
           <Form.Item name="used_for" noStyle><Segmented options={[{ value: 'sales', label: 'Sales' }, { value: 'purchases', label: 'Purchases' }, { value: 'both', label: 'Both' }]} /></Form.Item>
         </Space>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="code" label="Code / SKU"><Input placeholder="optional" /></Form.Item>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
         </div>
         {/* the name is what goes on invoices; an older extra description can still be edited or cleared */}
         {item.description && <Form.Item name="description" label="Extra text after the name on invoices"><Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} /></Form.Item>}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="unit" label="Unit"><Input placeholder={kind === 'service' ? 'e.g. hour, project' : 'e.g. pc, box, kg'} /></Form.Item>
           {sells && <Form.Item name="sale_price" label="Selling price"><AmountInput min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>}
           {buys && <Form.Item name="purchase_price" label="Cost / buying price"><AmountInput min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>}
@@ -191,7 +191,7 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
             </div>
           ))}
         </Card>}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="category" label="Category">
             <Select allowClear showSearch mode={undefined} options={categories.map(c => ({ value: c, label: c }))}
               placeholder="e.g. Design, Printing" onSearch={() => null}
@@ -216,7 +216,7 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
               <Switch checkedChildren="Track stock" unCheckedChildren="Don't track stock" />
             </Form.Item>
             {track && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
                 <Form.Item name="opening_qty" label="Stock when you started" tooltip="Bills add stock, invoices take it away, and you can adjust it on the Stock tab.">
                   <InputNumber style={{ width: '100%' }} />
                 </Form.Item>

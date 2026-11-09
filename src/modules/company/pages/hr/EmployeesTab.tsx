@@ -135,7 +135,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
       <Modal title={editing ? 'Edit Employee' : 'Add Employee'} open={open} onCancel={() => setOpen(false)}
         onOk={() => form.submit()} width={640} okText="Save">
         <Form form={form} layout="vertical" onFinish={submit}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
             <Form.Item name="employee_code" label="Employee ID" tooltip="Your company's own number for this person, e.g. EMP-001" rules={[{ required: true }]}><Input /></Form.Item>
             <Form.Item name="full_name" label="Full Name" rules={[{ required: true }]}><Input /></Form.Item>
             <Form.Item name="email" label="Email"><Input /></Form.Item>
@@ -226,7 +226,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
           ))}
           {canViewPay && <div style={{ color: 'rgba(240,237,230,0.4)', fontSize: 12, margin: '4px 0 8px' }}>PII below is encrypted at rest.</div>}
           {canViewPay && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
             <Form.Item name="national_id" label={nationalIdLabel(country)}><Input /></Form.Item>
             <Form.Item name="tax_id" label="Tax ID"><Input /></Form.Item>
             <Form.Item name="bank_name" label="Bank"><Input /></Form.Item>

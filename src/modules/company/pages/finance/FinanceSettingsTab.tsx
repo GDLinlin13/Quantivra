@@ -24,7 +24,7 @@ export function FinanceSettingsTab({ companyId, settings, onSaved }: { companyId
           <Text type="secondary" style={{ marginLeft: 10 }}>{s.gstRegistered ? 'Invoices and bills add GST' : 'No GST on invoices'}</Text>
         </Form.Item>
         {s.gstRegistered && (
-          <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 12, alignItems: 'end' }}>
             <Form.Item label="GST rate (%)"><InputNumber min={0} max={100} value={s.gstRate} onChange={v => setS({ ...s, gstRate: Number(v) || 0 })} style={{ width: '100%' }} /></Form.Item>
             <Form.Item label="GST registration no."><Input value={s.gstNumber || ''} onChange={e => setS({ ...s, gstNumber: e.target.value })} /></Form.Item>
           </div>
