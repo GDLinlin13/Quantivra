@@ -13,12 +13,20 @@ export function PlatformAuditPage() {
       .then(({ data }) => { setLogs(data || []); setLoading(false); });
   }, []);
 
+  // plain words for what happened, and the useful details (no user / record numbers)
+  const ACTIONS: Record<string, string> = { 'company.provisioned': 'Company created' };
+  const what = (a: string) => ACTIONS[a] || a.replace(/[._]/g, ' ').replace(/^./, c => c.toUpperCase());
+  const details = (r: any) => {
+    const v = r.new_value || r.old_value;
+    if (!v || typeof v !== 'object') return v ? String(v) : '';
+    const bits = [v.name?.trim(), v.country, Array.isArray(v.modules) ? `${v.modules.length} modules` : null].filter(Boolean);
+    return bits.length ? bits.join(' · ') : JSON.stringify(v).slice(0, 100);
+  };
+
   const columns = [
-    { title: 'Time', dataIndex: 'created_at', key: 'time', render: (v: string) => new Date(v).toLocaleString(), width: 180 },
-    { title: 'User', dataIndex: 'user_id', key: 'user', width: 80 },
-    { title: 'Action', dataIndex: 'action', key: 'action', render: (v: string) => <Tag>{v}</Tag>, width: 120 },
-    { title: 'Entity', key: 'entity', render: (_: any, r: any) => `${r.entity_type} #${r.entity_id || ''}`, width: 150 },
-    { title: 'Details', key: 'details', render: (_: any, r: any) => JSON.stringify(r.new_value || r.old_value || '').slice(0, 100) },
+    { title: 'Time', dataIndex: 'created_at', key: 'time', render: (v: string) => new Date(v).toLocaleString(), width: 200 },
+    { title: 'Action', dataIndex: 'action', key: 'action', render: (v: string) => <Tag>{what(v)}</Tag>, width: 180 },
+    { title: 'Details', key: 'details', render: (_: any, r: any) => details(r) },
   ];
 
   return (
