@@ -213,10 +213,9 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
                   <Button danger icon={<DeleteOutlined />} />
                 </Popconfirm>
               </Space>
-              <div style={{ fontSize: 12, color: 'rgba(240,237,230,0.45)', marginTop: 6 }}>
-                {t?.help}
-                {calc && <div style={{ color: r.auto ? '#91caff' : 'rgba(240,237,230,0.45)' }}>Worked out: {calc}{!r.auto && ' (you changed the amount)'}</div>}
-              </div>
+              {calc && (
+                <div style={{ fontSize: 12, marginTop: 6, color: r.auto ? '#91caff' : 'rgba(240,237,230,0.45)' }}>Worked out: {calc}{!r.auto && ' (you changed the amount)'}</div>
+              )}
             </div>
           );
         })}
