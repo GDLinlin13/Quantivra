@@ -20,7 +20,9 @@ describe('importing a statement over lines keyed in by hand', () => {
     expect(nothingNew(plan)).toBe(false);
   });
   it('a file already imported word for word has nothing new', () => {
-    const again = planImport([{ txn_date: '2026-06-30', description: 'Fall Below Fees', amount: -35 }], existing);
+    const again = planImport([{ txn_date: '2026-06-30', description: 'Fall Below Fees', amount: -35 }], existing.map(e => ({ ...e, source: 'statement' })));
     expect(nothingNew(again)).toBe(true);
+    // the same line keyed in by hand: importing the statement confirms it
+    expect(nothingNew(planImport([{ txn_date: '2026-06-30', description: 'Fall Below Fees', amount: -35 }], existing))).toBe(false);
   });
 });
