@@ -470,8 +470,8 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
 export const DEFAULT_PAYMENT_LABELS = ['Account Name:', 'Bank:', 'Account No:', 'Bank Code:', 'Branch Code:', 'S.W.I.F.T Code:', 'Branch Address:'];
 
 const EXAMPLE_PAYMENT = [
-  { label: 'Account Name:', value: 'Your Company Pte Ltd' }, { label: 'Bank:', value: 'DBS Bank' },
-  { label: 'Account No:', value: '012-345678-9' }, { label: 'S.W.I.F.T Code:', value: 'DBSSSGSG' },
+  { label: 'Account Name:', value: 'Your Company' }, { label: 'Bank:', value: 'Your Bank' },
+  { label: 'Account No:', value: '012-345678-9' }, { label: 'S.W.I.F.T Code:', value: 'ABCDEFGH' },
 ];
 
 export interface PaymentLine { label: string; value: string }
