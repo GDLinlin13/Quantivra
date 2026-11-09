@@ -10,7 +10,10 @@ export interface LedgerEntry {
 }
 
 /** A payroll run broken down from its payslips: directors' pay and the employee / employer contribution shares. */
-export interface PayrollSplit { directorGross: number; eeCpf: number; erCpf: number; sdl?: number }
+export interface PayrollSplit { directorGross: number; eeCpf: number; erCpf: number; sdl?: number; /** end-of-service gratuity set aside (Gulf) */ gratuity?: number }
+
+/** Pay items that are deductions but not contributions to an authority. */
+const PAY_ITEM_DEDUCTIONS = new Set(['DEDUCTION_LOAN', 'DEDUCTION_ADVANCE', 'DEDUCTION_OTHER']);
 
 /**
  * Works out a run's split from its payslips. `directors` holds the ids of employees whose type is Director.
@@ -19,16 +22,18 @@ export interface PayrollSplit { directorGross: number; eeCpf: number; erCpf: num
 export function payrollSplit(slips: { employee_id: number; gross_pay: number; deductions_json?: any[]; employer_json?: any[] }[], directors: Set<number>, country = 'SG'): PayrollSplit {
   const sg = (country || 'SG').toUpperCase() === 'SG';
   const match = (code: string, want: string) => (sg ? code === want
-    : want.startsWith('DEDUCTION_') ? code.startsWith('DEDUCTION_') && !code.endsWith('_ABSORBED') : /^COST_.*_EMPLOYER$/.test(code));
+    : want.startsWith('DEDUCTION_') ? code.startsWith('DEDUCTION_') && !code.endsWith('_ABSORBED') && !PAY_ITEM_DEDUCTIONS.has(code)
+      : /^COST_.*_EMPLOYER$/.test(code) && code !== 'COST_EOSB_EMPLOYER');
   const sum = (items: any[] | undefined, code: string) => (items || []).filter(i => match(String(i?.componentCode || ''), code)).reduce((t, i) => t + (Number(i.amount) || 0), 0);
-  let directorGross = 0, eeCpf = 0, erCpf = 0, sdl = 0;
+  let directorGross = 0, eeCpf = 0, erCpf = 0, sdl = 0, gratuity = 0;
   for (const p of slips) {
     if (directors.has(Number(p.employee_id))) directorGross += Number(p.gross_pay) || 0;
     eeCpf += sum(p.deductions_json, 'DEDUCTION_CPF');
     erCpf += sum(p.employer_json, 'COST_CPF_EMPLOYER');
     if (sg) sdl += sum(p.employer_json, 'COST_SDL_EMPLOYER');
+    gratuity += (p.employer_json || []).filter(i => i?.componentCode === 'COST_EOSB_EMPLOYER').reduce((t, i) => t + (Number(i.amount) || 0), 0);
   }
-  return { directorGross: r2(directorGross), eeCpf: r2(eeCpf), erCpf: r2(erCpf), sdl: r2(sdl) };
+  return { directorGross: r2(directorGross), eeCpf: r2(eeCpf), erCpf: r2(erCpf), sdl: r2(sdl), ...(gratuity ? { gratuity: r2(gratuity) } : {}) };
 }
 
 /** Split `amount` over accounts in proportion to their shares, keeping cents exact. */
@@ -51,21 +56,26 @@ export function payrollLines(r: LedgerInput['payroll'][number], accounts: Accoun
   const ER_CPF = id('payroll_employer') || WAGES, ER_OTHER = id('payroll_employer_other') || ER_CPF;
   const SALARIES = id('payroll_payable') || BANK;
   const EE_PAY = id('statutory_payable'), ER_PAY = id('cpf_employer_payable') || EE_PAY, OTHER_PAY = id('other_payroll_payable') || EE_PAY;
+  // end-of-service gratuity: a cost set aside each month, owed only when the employee leaves (not paid monthly)
+  const GRAT_EXP = id('gratuity_expense') || ER_OTHER, GRAT_PROV = id('gratuity_provision') || OTHER_PAY;
   const gross = r2(r.total_gross), employer = r2(r.total_employer), net = r2(r.total_net), ded = r2(r.total_deductions);
   const sp = r.split;
   const dirGross = r2(Math.min(gross, sp?.directorGross || 0));
   const eeCpf = sp ? r2(Math.min(ded, sp.eeCpf)) : ded, erCpf = sp ? r2(Math.min(employer, sp.erCpf)) : employer;
   // CPF Board drops the cents from the month's total SDL (e.g. 53.75 → 53.00), so that's what is owed
   const sdlCents = r2((sp?.sdl || 0) - Math.floor((sp?.sdl || 0) + 1e-9));
+  const grat = r2(Math.min(Math.max(0, employer - erCpf), sp?.gratuity || 0));
   const lines: LedgerLine[] = [
     { account_id: WAGES, debit: r2(gross - dirGross), credit: 0, description: 'Employee salaries' },
     { account_id: DIRECTOR, debit: dirGross, credit: 0, description: "Director's salary" },
     { account_id: ER_CPF, debit: erCpf, credit: 0, description: 'Employer contributions' },
-    { account_id: ER_OTHER, debit: r2(employer - erCpf - sdlCents), credit: 0, description: 'Other employer contributions' },
+    { account_id: ER_OTHER, debit: r2(employer - erCpf - sdlCents - grat), credit: 0, description: 'Other employer contributions' },
+    { account_id: GRAT_EXP, debit: grat, credit: 0, description: 'End-of-service gratuity' },
     { account_id: SALARIES, debit: 0, credit: net, description: 'Net salaries owed' },
     { account_id: EE_PAY, debit: 0, credit: eeCpf, description: 'Employee contributions owed' },
     { account_id: ER_PAY, debit: 0, credit: erCpf, description: 'Employer contributions owed' },
-    { account_id: OTHER_PAY, debit: 0, credit: r2(ded - eeCpf + employer - erCpf - sdlCents), description: 'Other deductions owed' },
+    { account_id: OTHER_PAY, debit: 0, credit: r2(ded - eeCpf + employer - erCpf - sdlCents - grat), description: 'Other deductions owed' },
+    { account_id: GRAT_PROV, debit: 0, credit: grat, description: 'End-of-service gratuity set aside' },
   ];
   // anything that doesn't add up stays with the other deductions
   const diff = r2(lines.reduce((s, l) => s + l.debit - l.credit, 0));

@@ -172,7 +172,7 @@ export function PayrollTab({ companyId }: { companyId: number }) {
               columns={[
                 { title: 'Employee', key: 'e', render: (_, p) => <span style={{ color: '#f0ede6' }}>{p.employee_name} <span style={{ color: 'rgba(240,237,230,0.4)' }}>{p.employee_code}</span></span> },
                 { title: 'Gross', key: 'g', render: (_, p) => money(p.gross_pay, cur) },
-                { title: 'CPF (EE)', key: 'cpf', render: (_, p) => money((p.deductions_json.find(d => d.componentCode === 'DEDUCTION_CPF')?.amount) || 0, cur) },
+                ...((company?.country || 'SG').toUpperCase() === 'SG' ? [{ title: 'CPF (EE)', key: 'cpf', render: (_: any, p: PayslipRow) => money((p.deductions_json.find(d => d.componentCode === 'DEDUCTION_CPF')?.amount) || 0, cur) }] : []),
                 { title: 'Tax', key: 't', render: (_, p) => money(p.tax_withheld, cur) },
                 { title: 'Net', key: 'n', render: (_, p) => <b style={{ color: '#4fc3f7' }}>{money(p.net_pay, cur)}</b> },
                 { title: '', key: 'a', render: (_, p) => <Button size="small" icon={<FileTextOutlined />} onClick={() => setSlip(p)}>Payslip</Button> },

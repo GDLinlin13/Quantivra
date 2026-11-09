@@ -132,4 +132,21 @@ describe('ledger', () => {
       employer_json: [{ componentCode: 'COST_EPF_EMPLOYER', amount: 650 }, { componentCode: 'COST_SOCSO_EMPLOYER', amount: 86.65 }] }], new Set(), 'MY');
     expect(split).toEqual({ directorGross: 0, eeCpf: 574.75, erCpf: 736.65, sdl: 0 });
   });
+
+  it('end-of-service gratuity is set aside, not owed each month', async () => {
+    const { defaultAccountsFor } = await import('../finance');
+    const ae = defaultAccountsFor('AE').map((a, i) => ({ ...a, id: i + 1, company_id: 1, archived: false, opening_balance: 0 }));
+    const idOf = (sub: string) => ae.find(a => a.subtype === sub)!.id;
+    const split = payrollSplit([{ employee_id: 1, gross_pay: 55000, deductions_json: [], employer_json: [{ componentCode: 'COST_EOSB_EMPLOYER', amount: 3206.5 }] }], new Set(), 'AE');
+    expect(split.gratuity).toBe(3206.5);
+    expect(split.erCpf).toBe(0);
+    const run = { id: 1, period_year: 2026, period_month: 10, pay_date: '2026-10-31', status: 'finalised', total_gross: 55000, total_deductions: 0, total_employer: 3206.5, total_net: 55000, split };
+    const lines = payrollLines(run as any, ae as any);
+    const on = (sub: string) => lines.filter(l => l.account_id === idOf(sub)).reduce((t, l) => t + l.debit - l.credit, 0);
+    expect([on('gratuity_expense'), on('gratuity_provision'), on('payroll_payable')]).toEqual([3206.5, -3206.5, -55000]);
+    const due = payrollDue({ accounts: ae as any, payroll: [run as any] }, buildLedger({ ...input, accounts: ae, payroll: [run] } as any));
+    expect(due[0].statDue).toBe(0);
+    // Singapore companies don't get the gratuity accounts
+    expect(defaultAccountsFor('SG').some(a => a.subtype === 'gratuity_provision')).toBe(false);
+  });
 });

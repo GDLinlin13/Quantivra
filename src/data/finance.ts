@@ -148,6 +148,7 @@ export const DEFAULT_ACCOUNTS: Omit<Account, 'id' | 'company_id' | 'archived'>[]
   { code: '2210', name: "Employee's CPF contribution payable", type: 'liability', subtype: 'statutory_payable', is_system: true },
   { code: '2220', name: "Employer's CPF contribution payable", type: 'liability', subtype: 'cpf_employer_payable', is_system: true },
   { code: '2230', name: 'SDL, CDAC/SINDA/MBMF/ECF and other deductions payable', type: 'liability', subtype: 'other_payroll_payable', is_system: true },
+  { code: '2240', name: 'End-of-service gratuity provision', type: 'liability', subtype: 'gratuity_provision', is_system: true },
   { code: '2300', name: 'Staff claims payable', type: 'liability', subtype: 'claims_payable', is_system: true },
   { code: '3000', name: 'Share capital', type: 'equity', subtype: null, is_system: false },
   { code: '3100', name: 'Retained earnings', type: 'equity', subtype: 'retained', is_system: true },
@@ -159,6 +160,7 @@ export const DEFAULT_ACCOUNTS: Omit<Account, 'id' | 'company_id' | 'archived'>[]
   { code: '6008', name: "Director's fees", type: 'expense', subtype: 'director_fees', is_system: false },
   { code: '6010', name: "Employer's CPF contributions", type: 'expense', subtype: 'payroll_employer', is_system: true },
   { code: '6015', name: 'SDL and other employer contributions', type: 'expense', subtype: 'payroll_employer_other', is_system: true },
+  { code: '6020', name: 'End-of-service gratuity', type: 'expense', subtype: 'gratuity_expense', is_system: true },
   { code: '6100', name: 'Rent', type: 'expense', subtype: null, is_system: false },
   { code: '6200', name: 'Utilities', type: 'expense', subtype: null, is_system: false },
   { code: '6300', name: 'Office supplies', type: 'expense', subtype: null, is_system: false },
@@ -217,18 +219,24 @@ export function localAccountNames(country?: string | null): Record<string, strin
   };
 }
 /** The standard chart of accounts with the country's names. */
+/** Countries where employers set aside an end-of-service gratuity each month (Gulf states). */
+export const GRATUITY_COUNTRIES = ['AE', 'SA', 'QA', 'KW', 'BH', 'OM'];
+const GRATUITY = ['gratuity_provision', 'gratuity_expense'];
 export function defaultAccountsFor(country?: string | null) {
   const names = localAccountNames(country);
-  return DEFAULT_ACCOUNTS.map(a => (a.subtype && names[a.subtype] ? { ...a, name: names[a.subtype] } : a));
+  const gulf = GRATUITY_COUNTRIES.includes((country || 'SG').toUpperCase());
+  return DEFAULT_ACCOUNTS.filter(a => gulf || !GRATUITY.includes(a.subtype || ''))
+    .map(a => (a.subtype && names[a.subtype] ? { ...a, name: names[a.subtype] } : a));
 }
 
 /**
  * Accounts added to the standard chart after companies were set up. Each group is added once: when its
  * `marker` account is missing (the payroll split also renames untouched old names).
  */
-const CHART_UPGRADES: { marker: string; subtypes: string[]; renames?: Record<string, [string, string]> }[] = [
+const CHART_UPGRADES: { marker: string; subtypes: string[]; renames?: Record<string, [string, string]>; countries?: string[] }[] = [
   { marker: 'cpf_employer_payable', subtypes: ['cpf_employer_payable', 'other_payroll_payable', 'payroll_director', 'director_fees', 'payroll_employer_other'], renames: PAYROLL_RENAMES },
   { marker: 'fees_tax_agent', subtypes: ['fees_secretarial', 'fees_tax_agent', 'fees_accounting'] },
+  { marker: 'gratuity_provision', subtypes: ['gratuity_provision', 'gratuity_expense'], countries: ['AE', 'SA', 'QA', 'KW', 'BH', 'OM'] },
 ];
 
 /**
@@ -245,6 +253,7 @@ export function chartUpgrade(rows: Pick<Account, 'id' | 'code' | 'name' | 'subty
   const used = new Set(rows.map(r => r.code));
   for (const g of CHART_UPGRADES) {
     if (rows.some(r => r.subtype === g.marker)) continue;
+    if (g.countries && !g.countries.includes((country || 'SG').toUpperCase())) continue;
     for (const d of defaults.filter(a => g.subtypes.includes(a.subtype || ''))) {
       if (rows.some(r => r.subtype === d.subtype)) continue;
       let c = Number(d.code);

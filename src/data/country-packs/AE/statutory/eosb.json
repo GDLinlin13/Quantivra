@@ -14,7 +14,7 @@
     "visaTypes": ["EXPAT"],
     "employmentTypes": [],
     "minimumServiceMonths": 12,
-    "excludedCategories": ["UAE_NATIONAL", "GCC_NATIONAL"],
+    "excludedCategories": ["UAE_NATIONAL", "GCC_NATIONAL", "DIRECTOR"],
     "notes": "Expatriate employees who have completed at least one year of continuous service. Nationals are covered by GPSSA instead. Gratuity is paid on termination; the monthly figure here is an accrual/provision for the employer."
   },
   "employeeCategories": [
