@@ -26,6 +26,8 @@ async function loadCountryPack(code: string): Promise<CountryPackDef> {
 const STATUS_MAP: Record<string, string> = {
   full_time: 'FULL_TIME', part_time: 'PART_TIME', contract: 'FIXED_TERM',
   intern: 'INTERNSHIP', casual: 'CASUAL',
+  // directors (owners / shareholder-directors) are left out of end-of-service gratuity
+  director: 'DIRECTOR',
 };
 
 function toEngineInput(e: Employee, periodEnd: string, items: PayItemRow[] = []): EmployeePayrollInput {

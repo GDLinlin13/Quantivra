@@ -14,7 +14,7 @@
     "visaTypes": ["EXPAT"],
     "employmentTypes": [],
     "minimumServiceMonths": 24,
-    "excludedCategories": ["SAUDI_NATIONAL", "GCC_NATIONAL"],
+    "excludedCategories": ["SAUDI_NATIONAL", "GCC_NATIONAL", "DIRECTOR"],
     "notes": "Primarily accrued for expatriate employees (Saudi nationals draw a GOSI pension). Award is on the last full wage; the monthly figure here is an employer accrual, not an employee deduction."
   },
   "employeeCategories": [
