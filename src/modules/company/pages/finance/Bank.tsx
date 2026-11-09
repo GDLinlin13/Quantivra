@@ -439,6 +439,17 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
     .sort((a, b) => Number(Math.abs(balanceDue(a) - amt) > 0.005) - Number(Math.abs(balanceDue(b) - amt) > 0.005));
   const contact = (id: number | null) => data.contacts.find(c => c.id === id)?.name || '';
   const bookable = data.accounts.filter((a: Account) => !a.archived && a.id !== txn.account_id);
+  // money in: income first, never expenses; money out: expenses first, never income — then banks, loans, capital…
+  const groupsFor = (): { label: string; types: string[] }[] => [
+    inbound ? { label: 'Income', types: ['income'] } : { label: 'Expenses', types: ['expense'] },
+    { label: 'Banks, cash and other things you own', types: ['asset'] },
+    { label: 'Owed (loans, payables, tax)', types: ['liability'] },
+    { label: 'Capital', types: ['equity'] },
+  ];
+  const accountGroups = groupsFor().map(g => ({
+    label: g.label,
+    options: bookable.filter(a => g.types.includes(a.type)).map(a => ({ value: a.id, label: `${a.code} ${a.name}` })),
+  })).filter(g => g.options.length);
   const salId = systemAccount(data.accounts, 'payroll_payable')?.id;
   // salaries / CPF of exactly this amount: open the Payroll tab first
   const payrollHit = !inbound && dues.some(d => Math.abs(d.netDue - lineAmt) < 0.005 || Math.abs(d.statDue - lineAmt) < 0.005);
@@ -540,7 +551,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
               <Form layout="vertical">
                 <Form.Item label="Account">
                   <Select showSearch optionFilterProp="label" value={accountId ?? undefined} onChange={setAccountId}
-                    options={bookable.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))} />
+                    options={accountGroups} />
                 </Form.Item>
                 <Form.Item label="Details"><Input value={memo} onChange={e => setMemo(e.target.value)} /></Form.Item>
               </Form>
