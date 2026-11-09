@@ -193,7 +193,8 @@ export function Bank({ data }: { data: FinanceData }) {
         <Upload accept=".csv,text/csv,.pdf,application/pdf" showUploadList={false} beforeUpload={onFile}><Button icon={<UploadOutlined />}>Import statement (PDF or CSV)</Button></Upload>
         <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>Add a line</Button>
       </Space>
-      <Space size={16} wrap style={{ marginBottom: 12 }}>
+      {/* the summary cards share one row and are all the same height */}
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 12 }}>
         <Card size="small" style={{ minWidth: 110 }}><Statistic title="Currency" value={accCur} /></Card>
         <Card size="small" style={{ minWidth: 200 }}><Statistic title="Balance per statement" value={num(statementBalance)} styles={{ content: { color: PURPLE } }} /></Card>
         {/* a bank in another currency: the balance in that currency (opening + matched lines); the books' amount below */}
@@ -202,7 +203,7 @@ export function Bank({ data }: { data: FinanceData }) {
           {foreign && <Text type="secondary" style={{ fontSize: 12 }}>= {money(booksBalance, currency)} in the books</Text>}
         </Card>
         <Card size="small" style={{ minWidth: 200 }}><Statistic title="Lines to match" value={unmatched} styles={{ content: { color: unmatched ? '#faad14' : undefined } }} /></Card>
-      </Space>
+      </div>
       {booksBalance < 0 && !Number(account?.opening_balance) && (
         <Alert type="info" showIcon style={{ marginBottom: 12 }}
           title="The System Balance is negative because this account has no opening balance yet."
