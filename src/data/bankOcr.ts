@@ -65,12 +65,17 @@ export function wordsToRows(words: OcrWord[], scale = 1): PdfRow[] {
 }
 
 const A4_WIDTH = 595;
+/** Pages are read at least this many pixels wide. */
+const READ_WIDTH = 2000;
 
 async function canvasesFromFile(file: File): Promise<HTMLCanvasElement[]> {
   if (/^image\//.test(file.type) || /\.(png|jpe?g|webp)$/i.test(file.name)) {
     const img = await createImageBitmap(file);
-    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
-    c.getContext('2d')!.drawImage(img, 0, 0);
+    // small pictures are enlarged: the reader misses commas and digits in small print
+    const k = Math.max(1, READ_WIDTH / img.width);
+    const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    const g = c.getContext('2d')!; g.imageSmoothingQuality = 'high';
+    g.drawImage(img, 0, 0, c.width, c.height);
     return [c];
   }
   const pdfjs = await import('pdfjs-dist');
@@ -80,7 +85,7 @@ async function canvasesFromFile(file: File): Promise<HTMLCanvasElement[]> {
   const out: HTMLCanvasElement[] = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
-    const vp = page.getViewport({ scale: 2.5 }); // enough detail for small print
+    const vp = page.getViewport({ scale: Math.max(2.5, READ_WIDTH / page.getViewport({ scale: 1 }).width) }); // enough detail for small print
     const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
     await page.render({ canvas: c, canvasContext: c.getContext('2d')!, viewport: vp } as any).promise;
     out.push(c);
