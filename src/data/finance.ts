@@ -150,8 +150,10 @@ export const DEFAULT_ACCOUNTS: Omit<Account, 'id' | 'company_id' | 'archived'>[]
   { code: '2230', name: 'SDL, CDAC/SINDA/MBMF/ECF and other deductions payable', type: 'liability', subtype: 'other_payroll_payable', is_system: true },
   { code: '2240', name: 'End-of-service gratuity provision', type: 'liability', subtype: 'gratuity_provision', is_system: true },
   { code: '2300', name: 'Staff claims payable', type: 'liability', subtype: 'claims_payable', is_system: true },
+  { code: '2400', name: 'Dividends payable', type: 'liability', subtype: 'dividends_payable', is_system: false },
   { code: '3000', name: 'Share capital', type: 'equity', subtype: null, is_system: false },
   { code: '3100', name: 'Retained earnings', type: 'equity', subtype: 'retained', is_system: true },
+  { code: '3200', name: 'Dividends', type: 'equity', subtype: 'dividends', is_system: false },
   { code: '4000', name: 'Sales', type: 'income', subtype: 'sales', is_system: true },
   { code: '4100', name: 'Other income', type: 'income', subtype: null, is_system: false },
   { code: '5000', name: 'Cost of sales', type: 'expense', subtype: null, is_system: false },
@@ -233,10 +235,12 @@ export function defaultAccountsFor(country?: string | null) {
  * Accounts added to the standard chart after companies were set up. Each group is added once: when its
  * `marker` account is missing (the payroll split also renames untouched old names).
  */
-const CHART_UPGRADES: { marker: string; subtypes: string[]; renames?: Record<string, [string, string]>; countries?: string[] }[] = [
+const CHART_UPGRADES: { marker: string; subtypes: string[]; renames?: Record<string, [string, string]>; countries?: string[]; sameAs?: Record<string, RegExp> }[] = [
   { marker: 'cpf_employer_payable', subtypes: ['cpf_employer_payable', 'other_payroll_payable', 'payroll_director', 'director_fees', 'payroll_employer_other'], renames: PAYROLL_RENAMES },
   { marker: 'fees_tax_agent', subtypes: ['fees_secretarial', 'fees_tax_agent', 'fees_accounting'] },
   { marker: 'gratuity_provision', subtypes: ['gratuity_provision', 'gratuity_expense'], countries: ['AE', 'SA', 'QA', 'KW', 'BH', 'OM'] },
+  // a company that already made its own dividend account keeps it (no second one)
+  { marker: 'dividends', subtypes: ['dividends', 'dividends_payable'], sameAs: { dividends: /dividend(?!s?\s+payable)/i, dividends_payable: /dividends?\s+payable/i } },
 ];
 
 /**
@@ -256,6 +260,8 @@ export function chartUpgrade(rows: Pick<Account, 'id' | 'code' | 'name' | 'subty
     if (g.countries && !g.countries.includes((country || 'SG').toUpperCase())) continue;
     for (const d of defaults.filter(a => g.subtypes.includes(a.subtype || ''))) {
       if (rows.some(r => r.subtype === d.subtype)) continue;
+      const like = g.sameAs?.[d.subtype || ''];
+      if (like && rows.some(r => like.test(r.name || ''))) continue;
       let c = Number(d.code);
       while (used.has(String(c))) c++;
       used.add(String(c));
