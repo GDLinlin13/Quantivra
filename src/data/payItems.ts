@@ -29,7 +29,7 @@ export const PAY_ITEM_TYPES: PayItemType[] = [
   { code: 'ALLOWANCE_TRANSPORT', label: 'Transport allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
   { code: 'ALLOWANCE_HOUSING', label: 'Housing allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
   { code: 'ALLOWANCE_MEAL', label: 'Meal allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
-  { code: 'ALLOWANCE_MOBILE', label: 'Phone allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
+  { code: 'ALLOWANCE_MOBILE', label: 'Phone claim', kind: 'earning', canRecur: true, taxable: false, help: 'Paying back phone bills. No CPF, not taxed.' },
   { code: 'ALLOWANCE_SHIFT', label: 'Shift allowance', kind: 'earning', canRecur: true, help: 'Counts as wages for CPF.' },
   { code: 'ALLOWANCE_OTHER', label: 'Other allowance', kind: 'earning', canRecur: true, classifyAs: 'ALLOWANCE_TRANSPORT',
     help: 'Any other cash allowance. Counts as wages for CPF. Use the note to say what it is.' },
