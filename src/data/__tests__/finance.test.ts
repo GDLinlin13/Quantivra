@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { lineAmount, docTotals, balanceDue, statusAfterPayment, isOverdue, addDays, bankCodePlan } from '../finance';
+import { lineAmount, docTotals, balanceDue, statusAfterPayment, isOverdue, addDays, bankCodePlan, defaultAccountsFor, chartUpgrade } from '../finance';
 
 describe('finance maths', () => {
   it('works out line amounts with a line discount', () => {
@@ -73,5 +73,16 @@ describe('company and tax registration names', () => {
     const { companyRegLabel, taxRegLabel } = await import('../countries');
     expect([companyRegLabel('SG'), companyRegLabel('AE'), companyRegLabel('MY'), companyRegLabel('ZZ')]).toEqual(['UEN', 'Trade Licence No.', 'SSM Registration No.', 'Company Registration No.']);
     expect([taxRegLabel('SG'), taxRegLabel('AE'), taxRegLabel('ZZ')]).toEqual(['GST Reg. No.', 'TRN', 'Tax Registration No.']);
+  });
+});
+
+describe('dividend accounts', () => {
+  it('are added to older charts once, unless the company made its own', () => {
+    const rows = defaultAccountsFor('SG').filter(a => !String(a.subtype).startsWith('dividend')).map((a, i) => ({ ...a, id: i + 1 }));
+    const add = chartUpgrade(rows, 'SG').add.map(a => `${a.code} ${a.name}`);
+    expect(add).toEqual(['2400 Dividends payable', '3200 Dividends']);
+    const own = [...rows, { id: 99, code: '3300', name: 'Dividend paid', subtype: null }];
+    expect(chartUpgrade(own, 'SG').add.map(a => a.name)).toEqual(['Dividends payable']);
+    expect(chartUpgrade(defaultAccountsFor('SG').map((a, i) => ({ ...a, id: i + 1 })), 'SG').add).toEqual([]);
   });
 });
