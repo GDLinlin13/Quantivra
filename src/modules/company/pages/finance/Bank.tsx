@@ -138,6 +138,19 @@ export function Bank({ data }: { data: FinanceData }) {
     );
   }
 
+  // the way this bank was taught, else read automatically; Teach only when neither finds anything
+  const readRows = (rows: PdfRow[]) => {
+    let taught = layouts[String(accountId)];
+    if (taught) {
+      // taught on a picture before positions were put on an A4-wide page
+      const widest = Math.max(...rows.flat().map(p => p.x + (p.w || 0)));
+      if (Math.max(...taught.columns.map(c => c.x)) > 700 && widest <= 700) taught = { columns: taught.columns.map(c => ({ ...c, x: c.x / 2.5 })) };
+      const byLayout = parseWithLayout(rows, taught);
+      if (byLayout.lines.length) return byLayout;
+    }
+    return parseStatementText(rowsToLines(rows));
+  };
+
   // picture statements (scans, images, "Print to PDF"): read with OCR, then the same steps as a PDF
   const readPicture = async (file: File) => {
     const hide = message.loading('Reading the picture… (the first time also downloads the reader)', 0);
@@ -147,8 +160,7 @@ export function Bank({ data }: { data: FinanceData }) {
       hide();
       if (!rows.length) { message.error('No text could be read from that picture'); return; }
       setPdfRows(rows);
-      const taught = layouts[String(accountId)];
-      const parsed = taught ? parseWithLayout(rows, taught) : parseStatementText(rowsToLines(rows));
+      const parsed = readRows(rows);
       if (!parsed.lines.length) { setTeaching(true); return; }
       // OCR can misread: every line is marked to check
       showImport(parsed.lines.map(l => ({ ...l, sure: false })));
@@ -174,8 +186,7 @@ export function Bank({ data }: { data: FinanceData }) {
           return false;
         }
         setPdfRows(rows);
-        const taught = layouts[String(accountId)];
-        const parsed = taught ? parseWithLayout(rows, taught) : parseStatementText(rowsToLines(rows));
+        const parsed = readRows(rows);
         if (!parsed.lines.length) { setTeaching(true); return false; }
         r = { lines: parsed.lines };
       } catch (e: any) { hide(); r = { lines: [], error: `Couldn’t read the PDF: ${e.message}` }; }

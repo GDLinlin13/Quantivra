@@ -1,6 +1,6 @@
 // Fields, lists and starter layouts for the spreadsheet-style document designer.
 import type { GridTemplate, GridCell, FieldValues, ListValues } from '../utils/gridTemplate';
-import { companyRegLabel, nationalIdLabel } from './countries';
+import { companyRegLabel, nationalIdLabel, taxRegLabel } from './countries';
 
 const isSG = (country?: string | null) => (country || 'SG').toUpperCase() === 'SG';
 /** Singapore-only payslip fields (CPF, SDL, self-help groups). */
@@ -166,9 +166,10 @@ type RowSpec = { h?: number; repeat?: string; cells?: [number, GridCell][] }[];
 
 const label = (v: string, extra: GridCell = {}): GridCell => ({ v, b: true, c: GREY, ...extra });
 
-export const STARTER_LAYOUTS: Record<DocKind, (country?: string | null) => GridTemplate> = {
-  payslip: (country) => build([130, 16, 140, 40, 130, 16, 140], [
-    { h: 30, cells: [[0, { v: '{{logo}}', rs: 3, cs: 3, va: 'middle' }], [4, { v: `${companyRegLabel(country)} : {{company_reg_no}}`, cs: 3, b: true, al: 'right' }]] },
+/** The older grid starters (one company's own design). Kept only to recognise untouched copies of them. */
+export const LEGACY: Record<DocKind, (sg: boolean, reg: string) => GridTemplate> = {
+  payslip: (sg, reg) => build([130, 16, 140, 40, 130, 16, 140], [
+    { h: 30, cells: [[0, { v: '{{logo}}', rs: 3, cs: 3, va: 'middle' }], [4, { v: `${reg} : {{company_reg_no}}`, cs: 3, b: true, al: 'right' }]] },
     { h: 36, cells: [[4, { v: '{{company_address}}', cs: 3, fs: 11, al: 'right' }]] },
     { cells: [[4, { v: '{{company_website}}', cs: 3, fs: 11, al: 'right' }]] },
     { h: 10 },
@@ -190,7 +191,7 @@ export const STARTER_LAYOUTS: Record<DocKind, (country?: string | null) => GridT
       [4, { v: 'Total Deductions' }], [5, { v: ':' }], [6, { v: '{{total_deductions}}', b: true, bt: true, al: 'right' }],
     ] },
     { h: 12 },
-    ...(isSG(country) ? ([
+    ...(sg ? ([
       { h: 28, cells: [[0, { v: 'STATUTORY CONTRIBUTIONS', cs: 3, ...HEAD }], [4, { v: 'NETT SALARY', cs: 2, fs: 14, ...HEAD, al: 'left' }], [6, { v: '{{net_pay}}', fs: 14, ...HEAD, al: 'right' }]] },
       { cells: [[0, { v: 'Employer CPF' }], [1, { v: ':' }], [2, { v: '{{cpf_employer}}', al: 'right' }]] },
       { cells: [[0, { v: 'Employee CPF' }], [1, { v: ':' }], [2, { v: '{{cpf_employee}}', al: 'right' }]] },
@@ -205,7 +206,7 @@ export const STARTER_LAYOUTS: Record<DocKind, (country?: string | null) => GridT
     { h: 14 },
     { cells: [[0, { v: '{{footer_note}}', cs: 7, fs: 10, c: GREY }]] },
   ]),
-  invoice: (country) => build([50, 270, 70, 140, 150], [
+  invoice: (_sg, reg) => build([50, 270, 70, 140, 150], [
     { h: 28, cells: [[0, { v: '{{logo}}', rs: 3, cs: 2, va: 'middle' }], [2, { v: '{{document_title}}', cs: 3, b: true, fs: 22, al: 'right' }]] },
     { cells: [[2, { v: 'Invoice no. {{invoice_no}}', cs: 3, al: 'right' }]] },
     { cells: [[2, { v: 'Date {{invoice_date}}', cs: 3, al: 'right' }]] },
@@ -213,7 +214,7 @@ export const STARTER_LAYOUTS: Record<DocKind, (country?: string | null) => GridT
     { cells: [[0, { v: '{{company_legal_name}}', cs: 2, b: true }], [2, label('Bill to', { cs: 3 })]] },
     { h: 36, cells: [[0, { v: '{{company_address}}', cs: 2, fs: 11, c: GREY }], [2, { v: '{{customer_name}}\n{{customer_address}}', cs: 3 }]] },
     { h: 36, cells: [[2, { v: 'Attn: {{customer_contact}}\n{{customer_phone}} · {{customer_email}}', cs: 3, fs: 11 }]] },
-    { cells: [[0, { v: `${companyRegLabel(country)} {{company_reg_no}}`, cs: 2, fs: 11, c: GREY }], [2, { v: 'Due date {{due_date}} ({{payment_terms}})', cs: 3, fs: 11, c: GREY }]] },
+    { cells: [[0, { v: `${reg} {{company_reg_no}}`, cs: 2, fs: 11, c: GREY }], [2, { v: 'Due date {{due_date}} ({{payment_terms}})', cs: 3, fs: 11, c: GREY }]] },
     { h: 14 },
     { cells: [
       [0, { v: '#', b: true, bg: SHADE, bb: true }], [1, { v: 'Description', b: true, bg: SHADE, bb: true }],
@@ -234,6 +235,122 @@ export const STARTER_LAYOUTS: Record<DocKind, (country?: string | null) => GridT
     { h: 14 },
     { cells: [[0, { v: '{{footer_note}}', cs: 5, fs: 10, c: GREY }]] },
   ]),
+};
+
+/** True when a saved layout is an untouched copy of one of the older grid starters. */
+export function isLegacyStarter(kind: DocKind, t: GridTemplate | null | undefined, country?: string | null): boolean {
+  if (!t) return false;
+  const key = (x: GridTemplate) => canonical({ cols: x.cols.map(w => Math.max(20, w)), rows: x.rows, cells: x.cells });
+  const mine = key(t);
+  return [true, false].some(sg => ['UEN', 'Reg. No.', companyRegLabel(country)].some(reg => key(LEGACY[kind](sg, reg)) === mine));
+}
+
+/** Key order does not matter (the database reorders keys). */
+function canonical(v: any): string {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`;
+  if (v && typeof v === 'object') return `{${Object.keys(v).sort().filter(k => v[k] !== undefined).map(k => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}`;
+  return JSON.stringify(v);
+}
+
+/** The company header of the pre-built design: logo, name and details on the left, title and dates on the right. */
+function headerRows(country: string | null | undefined, branding: any, title: string, meta: string[], logoCols: number, nameCols: number, rightCols: number): RowSpec {
+  const kindKey = title === 'PAYSLIP' ? 'payslip' : 'invoice';
+  const opts = branding?.templates?.[kindKey] || {};
+  const logo = (opts.showLogo ?? true);
+  const block = (opts.showCompanyBlock ?? true);
+  const accent = branding?.accent_color || '#1677ff';
+  const contact = [['phone', '{{company_phone}}'], ['email', '{{company_email}}'], ['website', '{{company_website}}']].filter(([k]) => branding?.[k]).map(([, v]) => v).join('  ·  ');
+  const lines = block ? [
+    branding?.registration_no ? `${companyRegLabel(country)} {{company_reg_no}}` : '',
+    branding?.address ? '{{company_address}}' : '',
+    contact,
+  ].filter(Boolean) : [];
+  const leftAt = logo ? logoCols : 0;
+  const leftSpan = logo ? nameCols : logoCols + nameCols;
+  const right = logoCols + nameCols;
+  const h = Math.max(18, 16 * Math.max(lines.length, meta.length) + 4);
+  return [
+    { h: 26, cells: [
+      ...(logo ? [[0, { v: '{{logo}}', rs: 2, cs: logoCols, va: 'top', bb: true }] as [number, GridCell]] : []),
+      [leftAt, { v: '{{company_legal_name}}', cs: leftSpan, b: true, fs: 16 }],
+      [right, { v: title, cs: rightCols, b: true, fs: 15, c: accent, al: 'right' }],
+    ] },
+    { h, cells: [
+      [leftAt, { v: lines.join('\n'), cs: leftSpan, fs: 11, c: GREY, va: 'top', bb: true }],
+      [right, { v: meta.join('\n'), cs: rightCols, fs: 11, c: GREY, al: 'right', va: 'top', bb: true }],
+    ] },
+    { h: 14 },
+  ];
+}
+
+function footerRows(branding: any, kind: DocKind, width: number): RowSpec {
+  const has = !!((branding?.templates?.[kind]?.footerNote || '').trim() || (branding?.footer_note || '').trim());
+  return [{ h: 16 }, { cells: [[0, { v: '{{footer_note}}', cs: width, fs: 10, c: GREY, ...(has ? { bt: true } : {}) }]] }];
+}
+
+/**
+ * What "Custom template" starts from: the pre-built design as an editable grid, with this company's own
+ * choices (what to show, its details, its country's terms). Nothing from any other company.
+ */
+export const STARTER_LAYOUTS: Record<DocKind, (country?: string | null, branding?: any) => GridTemplate> = {
+  payslip: (country, branding) => {
+    const t = branding?.templates?.payslip || {};
+    const accent = branding?.accent_color || '#0369a1';
+    const row = (label: string, value: string, extra: GridCell = {}, valueExtra: GridCell = {}): RowSpec[number] =>
+      ({ cells: [[0, { v: label, cs: 2, ...extra }], [2, { v: value, al: 'right', ...extra, ...valueExtra }]] });
+    const muted: GridCell = { c: GREY };
+    return build([150, 330, 200], [
+      ...headerRows(country, branding, 'PAYSLIP', ['{{period}}', 'Pay date {{pay_date}}'], 1, 1, 1),
+      row('Employee', (t.showEmployeeId ?? true) ? '{{employee_name}} · {{employee_code}}' : '{{employee_name}}', {}, {}),
+      ...((t.showDesignation ?? true) ? [row('Designation', '{{employee_designation}}')] : []),
+      ...(t.showNationalId ? [row(nationalIdLabel(country), t.nationalIdFull ? '{{employee_id_no}}' : '{{employee_id_no_masked}}')] : []),
+      ...(t.showBankAccount ? [row('Bank account', t.bankAccountFull ? '{{bank_name}} {{bank_account}}' : '{{bank_name}} {{bank_account_masked}}')] : []),
+      { h: 10 },
+      { cells: [[0, { v: 'Earnings', cs: 3, c: '#888888' }]] },
+      { repeat: 'auto', cells: [[0, { v: '{{earnings.name}}', cs: 2 }], [2, { v: '{{earnings.amount}}', al: 'right' }]] },
+      row('Gross Pay', '{{gross_pay}}', { bt: true }),
+      { h: 10 },
+      { cells: [[0, { v: 'Deductions', cs: 3, c: '#888888' }]] },
+      { repeat: 'auto', cells: [[0, { v: '{{deductions.name}}', cs: 2 }], [2, { v: '{{deductions.amount}}', al: 'right' }]] },
+      row('Net Pay', '{{net_pay}}', { bt: true, b: true }, { c: accent }),
+      { h: 10 },
+      { cells: [[0, { v: 'Employer contributions', cs: 3, fs: 12, ...muted }]] },
+      { repeat: 'auto', cells: [[0, { v: '{{employer.name}}', cs: 2, fs: 12, ...muted }], [2, { v: '{{employer.amount}}', al: 'right', fs: 12, ...muted }]] },
+      ...footerRows(branding, 'payslip', 3),
+    ]);
+  },
+  invoice: (country, branding) => {
+    const accent = branding?.accent_color || '#1677ff';
+    const sum = (label: string, value: string, extra: GridCell = {}): RowSpec[number] =>
+      ({ cells: [[0, { v: label, cs: 4, al: 'right', ...extra }], [4, { v: value, al: 'right', ...extra }]] });
+    const head: GridCell = { b: true, bg: SHADE, bb: true };
+    return build([150, 200, 70, 130, 130], [
+      ...headerRows(country, branding, '{{document_title}}', ['{{invoice_no}}', 'Date {{invoice_date}}', 'Due {{due_date}}'], 1, 2, 2),
+      { cells: [[0, { v: 'Bill to', cs: 5, fs: 12, c: GREY }]] },
+      { cells: [[0, { v: '{{customer_name}}', cs: 5, b: true }]] },
+      { cells: [[0, { v: '{{customer_address}}', cs: 5 }]] },
+      { cells: [[0, { v: 'Attn: {{customer_contact}} · {{customer_phone}} · {{customer_email}}', cs: 5, fs: 12 }]] },
+      { cells: [[0, { v: `Our ${taxRegLabel(country)} {{company_gst_no}}`, cs: 5, fs: 11, c: GREY }]] },
+      { h: 12 },
+      { cells: [[0, { v: 'Description', cs: 2, ...head }], [2, { v: 'Qty', ...head, al: 'right' }], [3, { v: 'Unit price', ...head, al: 'right' }], [4, { v: 'Amount', ...head, al: 'right' }]] },
+      { repeat: 'lines', cells: [
+        [0, { v: '{{lines.description}}', cs: 2, bb: true }], [2, { v: '{{lines.qty}}', al: 'right', bb: true }],
+        [3, { v: '{{lines.unit_price}}', al: 'right', bb: true }], [4, { v: '{{lines.amount}}', al: 'right', bb: true }],
+      ] },
+      sum('Subtotal', '{{subtotal}}'),
+      { repeat: 'auto', cells: [[0, { v: '{{discounts.name}}', cs: 4, al: 'right', c: '#15803d' }], [4, { v: '-{{discounts.amount}}', al: 'right', c: '#15803d' }]] },
+      sum('Tax', '{{tax}}'),
+      sum('Total', '{{total}}', { b: true }),
+      sum('Balance due', '{{balance_due}}', { b: true, c: accent }),
+      { h: 12 },
+      { cells: [[0, { v: '{{notes}}', cs: 5, fs: 12 }]] },
+      { cells: [[0, { v: '{{terms}}', cs: 5, fs: 12 }]] },
+      { h: 10 },
+      { cells: [[0, { v: 'Payment details', cs: 5, b: true, fs: 12 }]] },
+      { repeat: 'auto', cells: [[0, { v: '{{payment.label}}', fs: 12 }], [1, { v: '{{payment.value}}', cs: 4, fs: 12 }]] },
+      ...footerRows(branding, 'invoice', 5),
+    ]);
+  },
 };
 
 // ---- filling in -------------------------------------------------------------
@@ -353,8 +470,8 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
 export const DEFAULT_PAYMENT_LABELS = ['Account Name:', 'Bank:', 'Account No:', 'Bank Code:', 'Branch Code:', 'S.W.I.F.T Code:', 'Branch Address:'];
 
 const EXAMPLE_PAYMENT = [
-  { label: 'Account Name:', value: 'Your Company Pte Ltd' }, { label: 'Bank:', value: 'DBS Bank' },
-  { label: 'Account No:', value: '012-345678-9' }, { label: 'S.W.I.F.T Code:', value: 'DBSSSGSG' },
+  { label: 'Account Name:', value: 'Your Company' }, { label: 'Bank:', value: 'Your Bank' },
+  { label: 'Account No:', value: '012-345678-9' }, { label: 'S.W.I.F.T Code:', value: 'ABCDEFGH' },
 ];
 
 export interface PaymentLine { label: string; value: string }

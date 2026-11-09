@@ -92,7 +92,7 @@ export function CompanyProfilePage() {
 
   /** Pre-built or custom, then the matching editor. */
   const templateTab = (kind: DocKind, what: string, prebuilt: ReactNode, note?: string, customExtra?: ReactNode, common?: ReactNode) => {
-    const layout: GridTemplate = tpl[kind].layout || STARTER_LAYOUTS[kind](company.country);
+    const layout: GridTemplate = tpl[kind].layout || STARTER_LAYOUTS[kind](company.country, previewBranding);
     const setLayout = (next: GridTemplate) => setTpl(p => ({ ...p, [kind]: { ...p[kind], layout: next } }));
     return (
       <div>

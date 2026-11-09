@@ -9,19 +9,49 @@ interface OcrWord { text: string; bbox: { x0: number; y0: number; x1: number; y1
  * Words of one printed line → pieces like a PDF's text items: words close together stay one piece, a wide
  * gap (a new column) starts the next. x / w are in the page's pixels.
  */
-export function wordsToRow(words: OcrWord[]): PdfRow {
-  const ws = words.filter(w => w.text.trim()).sort((a, b) => a.bbox.x0 - b.bbox.x0);
+export function wordsToRow(words: OcrWord[], scale = 1): PdfRow {
+  const ws = words.filter(w => w.text.trim()).map(w => ({ ...w, text: fixDate(w.text.trim()) })).sort((a, b) => a.bbox.x0 - b.bbox.x0);
   if (!ws.length) return [];
   const charW = ws.reduce((t, w) => t + (w.bbox.x1 - w.bbox.x0) / Math.max(1, w.text.length), 0) / ws.length;
   const row: PdfRow = [];
   let cur = { s: ws[0].text, x: ws[0].bbox.x0, end: ws[0].bbox.x1 };
   for (const w of ws.slice(1)) {
-    if (w.bbox.x0 - cur.end > charW * 2.2) { row.push({ s: cur.s, x: cur.x, w: cur.end - cur.x }); cur = { s: w.text, x: w.bbox.x0, end: w.bbox.x1 }; }
+    if (w.bbox.x0 - cur.end > charW * 2.2) { row.push(piece(cur)); cur = { s: w.text, x: w.bbox.x0, end: w.bbox.x1 }; }
     else { cur.s += ` ${w.text}`; cur.end = w.bbox.x1; }
   }
-  row.push({ s: cur.s, x: cur.x, w: cur.end - cur.x });
+  row.push(piece(cur));
   return row;
+  // OCR sometimes leaves a space inside a number: "10,408, 519.33"
+  function piece(c: { s: string; x: number; end: number }) { return { s: c.s.replace(/(\d,)\s+(\d{3}\b)/g, '$1$2'), x: c.x * scale, w: (c.end - c.x) * scale }; }
 }
+
+/** OCR often reads the O of OCT as a zero: 01-0CT-2025 → 01-OCT-2025. */
+export function fixDate(t: string): string {
+  const m = t.match(/^(\d{1,2})([-/. ])([A-Za-z0-9]{3})([-/. ]\d{2,4})$/);
+  if (!m || !/[A-Za-z]/.test(m[3])) return t;
+  return `${m[1]}${m[2]}${m[3].replace(/0/g, 'O').replace(/5/g, 'S')}${m[4]}`;
+}
+
+/**
+ * All the words of a page → printed lines, by their height on the page. Tesseract's own lines follow its
+ * text blocks, which can put a table's date, description and amounts on separate lines; a statement row is
+ * everything at the same height, across the whole page.
+ */
+export function wordsToRows(words: OcrWord[], scale = 1): PdfRow[] {
+  const ws = words.filter(w => w.text.trim()).map(w => ({ w, mid: (w.bbox.y0 + w.bbox.y1) / 2, h: w.bbox.y1 - w.bbox.y0 }))
+    .sort((a, b) => a.mid - b.mid);
+  const lines: { mid: number; h: number; words: OcrWord[] }[] = [];
+  for (const x of ws) {
+    const last = lines[lines.length - 1];
+    if (last && Math.abs(x.mid - last.mid) <= Math.max(3, Math.min(last.h, x.h) * 0.5)) {
+      last.words.push(x.w);
+      last.mid = (last.mid * (last.words.length - 1) + x.mid) / last.words.length;
+    } else lines.push({ mid: x.mid, h: x.h, words: [x.w] });
+  }
+  return lines.map(l => wordsToRow(l.words, scale)).filter(r => r.length);
+}
+
+const A4_WIDTH = 595;
 
 async function canvasesFromFile(file: File): Promise<HTMLCanvasElement[]> {
   if (/^image\//.test(file.type) || /\.(png|jpe?g|webp)$/i.test(file.name)) {
@@ -55,14 +85,14 @@ export async function ocrToRows(file: File, onProgress?: (done: number, total: n
     for (let i = 0; i < pages.length; i++) {
       onProgress?.(i, pages.length);
       const { data } = await worker.recognize(pages[i], {}, { blocks: true });
+      const words: OcrWord[] = [];
       for (const block of (data as any).blocks || []) {
         for (const para of block.paragraphs || []) {
-          for (const line of para.lines || []) {
-            const row = wordsToRow(line.words || []);
-            if (row.length) rows.push(row);
-          }
+          for (const line of para.lines || []) words.push(...(line.words || []));
         }
       }
+      // positions on an A4-wide page (like a PDF's), so a taught layout fits every scan whatever its resolution
+      rows.push(...wordsToRows(words, A4_WIDTH / pages[i].width));
     }
     onProgress?.(pages.length, pages.length);
   } finally {
