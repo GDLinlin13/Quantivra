@@ -135,8 +135,8 @@ function ContactDrawer({ companyId, contact, word, currency, docs, onClose, onSa
       <Form form={form} layout="vertical">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="name" label="Company / name" rules={[{ required: true }]} style={{ gridColumn: '1 / -1' }}><Input /></Form.Item>
-          <Form.Item name="reg_no" label="Registration / UEN"><Input /></Form.Item>
-          <Form.Item name="tax_no" label="GST registration no."><Input /></Form.Item>
+          <Form.Item name="reg_no" label="Company registration no."><Input /></Form.Item>
+          <Form.Item name="tax_no" label="Tax registration no."><Input /></Form.Item>
           <Form.Item name="email" label="Email"><Input /></Form.Item>
           <Form.Item name="phone" label="Phone"><Input /></Form.Item>
           <Form.Item name="website" label="Website"><Input /></Form.Item>

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Branding } from '../services/branding';
+import { companyRegLabel } from '../data/countries';
 
 /**
  * Branded wrapper for generated documents (payslip, invoice, letter…).
@@ -7,8 +8,10 @@ import type { Branding } from '../services/branding';
  * survives being serialised into a print/PDF window verbatim.
  */
 export function DocumentShell({
-  branding, companyName, title, meta, showLogo = true, showCompanyBlock = true, footerNote, children, forPrint = false,
+  branding, companyName, title, meta, showLogo = true, showCompanyBlock = true, footerNote, children, forPrint = false, country,
 }: {
+  /** the company's country, for what its registration number is called (UEN, Trade Licence No.…) */
+  country?: string | null;
   branding: Branding | null;
   companyName: string;
   title: string;
@@ -37,7 +40,7 @@ export function DocumentShell({
             <div style={{ fontWeight: 700, fontSize: 16 }}>{legalName}</div>
             {showCompanyBlock && (
               <div style={{ fontSize: 11, color: sub, lineHeight: 1.5, whiteSpace: 'pre-line' }}>
-                {branding?.registration_no ? `Reg. No. ${branding.registration_no}\n` : ''}
+                {branding?.registration_no ? `${companyRegLabel(country)} ${branding.registration_no}\n` : ''}
                 {branding?.address ? `${branding.address}\n` : ''}
                 {[branding?.phone, branding?.email, branding?.website].filter(Boolean).join('  ·  ')}
               </div>

@@ -3,11 +3,12 @@ import { Card, Form, Switch, InputNumber, Input, Button, message, Typography } f
 import { SaveOutlined } from '@ant-design/icons';
 import { financeSettingsService } from '../../../../services/finance';
 import type { FinanceSettings } from '../../../../data/finance';
+import { taxRegLabel } from '../../../../data/countries';
 
 const { Text } = Typography;
 
 /** GST and defaults for quotations and invoices. */
-export function FinanceSettingsTab({ companyId, settings, onSaved }: { companyId: number; settings: FinanceSettings; onSaved: () => void }) {
+export function FinanceSettingsTab({ companyId, country, settings, onSaved }: { companyId: number; country?: string | null; settings: FinanceSettings; onSaved: () => void }) {
   const [s, setS] = useState<FinanceSettings>(settings);
   const [saving, setSaving] = useState(false);
   useEffect(() => setS(settings), [settings]);
@@ -26,7 +27,7 @@ export function FinanceSettingsTab({ companyId, settings, onSaved }: { companyId
         {s.gstRegistered && (
           <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 12, alignItems: 'end' }}>
             <Form.Item label="GST rate (%)"><InputNumber min={0} max={100} value={s.gstRate} onChange={v => setS({ ...s, gstRate: Number(v) || 0 })} style={{ width: '100%' }} /></Form.Item>
-            <Form.Item label="GST registration no."><Input value={s.gstNumber || ''} onChange={e => setS({ ...s, gstNumber: e.target.value })} /></Form.Item>
+            <Form.Item label={taxRegLabel(country)}><Input value={s.gstNumber || ''} onChange={e => setS({ ...s, gstNumber: e.target.value })} /></Form.Item>
           </div>
         )}
         <Form.Item label="Quotations are valid for (days)">

@@ -66,7 +66,21 @@ export const DEFAULT_TEMPLATES: Templates = {
   document: { showLogo: true, showLetterhead: true, footerNote: '' },
 };
 
-function withDefaults(row: any, companyId: number): Branding {
+/** Key order does not matter (the database reorders keys). */
+const canon = (v: any): string => Array.isArray(v) ? `[${v.map(canon).join(',')}]`
+  : v && typeof v === 'object' ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canon(v[k])}`).join(',')}}` : JSON.stringify(v);
+
+/** A company outside Singapore still holding the untouched Singapore starter (UEN, CPF) gets its own country's starter. */
+export function ownLayout(kind: 'payslip' | 'invoice', saved: any, country?: string | null): GridTemplate {
+  const starter = STARTER_LAYOUTS[kind](country);
+  const t = normalizeTemplate(saved, starter);
+  if ((country || 'SG').toUpperCase() === 'SG' || t === starter) return t;
+  const sg = normalizeTemplate(STARTER_LAYOUTS[kind]('SG'), starter);
+  const same = canon({ cols: t.cols, rows: t.rows, cells: t.cells }) === canon({ cols: sg.cols, rows: sg.rows, cells: sg.cells });
+  return same ? { ...starter, enabled: t.enabled } : t;
+}
+
+function withDefaults(row: any, companyId: number, country?: string | null): Branding {
   const t = row?.templates || {};
   return {
     company_id: companyId,
@@ -80,8 +94,8 @@ function withDefaults(row: any, companyId: number): Branding {
     accent_color: row?.accent_color ?? '#1677ff',
     footer_note: row?.footer_note ?? null,
     templates: {
-      payslip: { ...DEFAULT_TEMPLATES.payslip, ...(t.payslip || {}), layout: normalizeTemplate(t.payslip?.layout, STARTER_LAYOUTS.payslip()) },
-      invoice: { ...DEFAULT_TEMPLATES.invoice, ...(t.invoice || {}), layout: normalizeTemplate(t.invoice?.layout, STARTER_LAYOUTS.invoice()) },
+      payslip: { ...DEFAULT_TEMPLATES.payslip, ...(t.payslip || {}), layout: ownLayout('payslip', t.payslip?.layout, country) },
+      invoice: { ...DEFAULT_TEMPLATES.invoice, ...(t.invoice || {}), layout: ownLayout('invoice', t.invoice?.layout, country) },
       document: { ...DEFAULT_TEMPLATES.document, ...(t.document || {}) },
     },
   };
@@ -89,8 +103,12 @@ function withDefaults(row: any, companyId: number): Branding {
 
 export const brandingService = {
   async get(companyId: number): Promise<Branding> {
-    const { data } = await supabase.from('company_branding').select('*').eq('company_id', companyId).maybeSingle();
-    return withDefaults(data, companyId);
+    // each company's own templates; one it has not designed yet starts from its own country's layout
+    const [{ data }, co] = await Promise.all([
+      supabase.from('company_branding').select('*').eq('company_id', companyId).maybeSingle(),
+      supabase.from('companies').select('country').eq('id', companyId).maybeSingle(),
+    ]);
+    return withDefaults(data, companyId, co.data?.country);
   },
 
   async save(companyId: number, patch: Partial<Omit<Branding, 'company_id'>>): Promise<void> {
