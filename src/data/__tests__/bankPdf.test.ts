@@ -87,3 +87,14 @@ describe('DBS statements (19-May-26 dates)', () => {
     expect(r.lines.map(l => ({ txn_date: l.txn_date, amount: l.amount }))).toEqual(expected);
   });
 });
+
+describe('closing balance line', () => {
+  it('is not a transaction', () => {
+    const r = parseStatementText([
+      ['01-MAY-2026', '**', 'OPENING', 'BALANCE', '**', '10,052,994.33'],
+      ['05-MAY-2026', 'REF', 'FT', '55,000.00', '9,997,994.33'],
+      ['31-MAY-2026', '**', 'CLOSING', 'BALANCE', '**', '9,997,994.33'],
+    ]);
+    expect(r.lines.map(l => l.amount)).toEqual([-55000]);
+  });
+});
