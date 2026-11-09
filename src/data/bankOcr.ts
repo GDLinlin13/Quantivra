@@ -10,7 +10,7 @@ interface OcrWord { text: string; bbox: { x0: number; y0: number; x1: number; y1
  * gap (a new column) starts the next. x / w are in the page's pixels.
  */
 export function wordsToRow(words: OcrWord[], scale = 1): PdfRow {
-  const ws = words.filter(w => w.text.trim()).map(w => ({ ...w, text: fixDate(w.text.trim()) })).sort((a, b) => a.bbox.x0 - b.bbox.x0);
+  const ws = words.filter(w => w.text.trim()).map(w => ({ ...w, text: cleanWord(w.text) })).filter(w => w.text).sort((a, b) => a.bbox.x0 - b.bbox.x0);
   if (!ws.length) return [];
   const charW = ws.reduce((t, w) => t + (w.bbox.x1 - w.bbox.x0) / Math.max(1, w.text.length), 0) / ws.length;
   const row: PdfRow = [];
@@ -23,6 +23,16 @@ export function wordsToRow(words: OcrWord[], scale = 1): PdfRow {
   return row;
   // OCR sometimes leaves a space inside a number: "10,408, 519.33"
   function piece(c: { s: string; x: number; end: number }) { return { s: c.s.replace(/(\d,)\s+(\d{3}\b)/g, '$1$2'), x: c.x * scale, w: (c.end - c.x) * scale }; }
+}
+
+/** Scan noise around a word: table lines read as | [ ], quotes; letters misread inside amounts. */
+export function cleanWord(raw: string): string {
+  let t = raw.trim().replace(/^[|[\]{}'"‘’“”_!]+|[|[\]{}'"‘’“”_!]+$/g, '');
+  if (/\d/.test(t) && /^[\d,.OoIlS]+$/.test(t) && /[.,][\dOo]{2}$/.test(t)) {
+    t = t.replace(/[Oo]/g, '0').replace(/[Il]/g, '1').replace(/S/g, '5');
+    if (/^\d{1,3}(,\d{3})*,\d{2}$/.test(t)) t = `${t.slice(0, -3)}.${t.slice(-2)}`; // 105,00 → 105.00
+  }
+  return fixDate(t);
 }
 
 /** OCR often reads the O of OCT as a zero: 01-0CT-2025 → 01-OCT-2025. */

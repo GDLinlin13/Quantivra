@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { wordsToRow, wordsToRows } from '../bankOcr';
+import { wordsToRow, wordsToRows, cleanWord } from '../bankOcr';
 
 const w = (text: string, x0: number) => ({ text, bbox: { x0, y0: 0, x1: x0 + text.length * 10, y1: 12 } });
 
@@ -19,5 +19,16 @@ describe('picture statements: rows and numbers', () => {
   });
   it('joins numbers split by a space', () => {
     expect(wordsToRow([at('10,408,', 500, 0), at('519.33', 572, 0)])[0].s).toBe('10,408,519.33');
+  });
+});
+
+describe('scan noise', () => {
+  it('cleans table lines and misread amounts', () => {
+    expect(cleanWord('|105.00')).toBe('105.00');
+    expect(cleanWord('1O5.0O|')).toBe('105.00');
+    expect(cleanWord('[02-0CT-2025')).toBe('02-OCT-2025');
+    expect(cleanWord('1,234,56')).toBe('1,234.56');
+    expect(cleanWord('1,000')).toBe('1,000');
+    expect(cleanWord('|')).toBe('');
   });
 });
