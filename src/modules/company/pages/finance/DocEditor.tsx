@@ -12,6 +12,7 @@ import {
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
 import { priceFor, type CatalogItem, type CustomerPrice } from '../../../../data/catalog';
+import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
 
@@ -216,7 +217,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
               options={accountOptions as any} placeholder="General expenses" />
           ) }] : []),
           { title: 'Qty', width: 80, render: (_, l, i) => <InputNumber style={{ width: '100%' }} value={l.quantity} onChange={v => setLine(i, { quantity: Number(v) || 0 })} /> },
-          { title: 'Unit price', width: 120, render: (_, l, i) => <InputNumber style={{ width: '100%' }} precision={2} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} /> },
+          { title: 'Unit price', width: 120, render: (_, l, i) => <AmountInput style={{ width: '100%' }} precision={2} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} /> },
           { title: 'Disc %', width: 80, render: (_, l, i) => <InputNumber style={{ width: '100%' }} min={0} max={100} value={l.discount_pct} onChange={v => setLine(i, { discount_pct: Number(v) || 0 })} /> },
           ...(settings.gstRegistered ? [{ title: 'GST %', width: 90, render: (_: any, l: DocLine, i: number) => (
             <Select style={{ width: '100%' }} value={Number(l.tax_rate)} onChange={v => setLine(i, { tax_rate: v })}

@@ -14,6 +14,7 @@ import { DocEditor } from './DocEditor';
 import { DocumentView } from './DocumentView';
 import { PRINT_CSS } from '../hr/PayslipView';
 import { elementsToPdf, downloadBlob, formatDocFileName } from '../../../../utils/payslipFiles';
+import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
 
@@ -223,7 +224,7 @@ export function PaymentModal({ data, doc, onClose, onDone }: { data: FinanceData
       <Form form={form} layout="vertical" style={{ marginTop: 12 }}
         initialValues={{ amount: due, date: dayjs(), method: 'Bank transfer', account_id: cashAccounts.find(a => a.subtype === 'bank')?.id }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <Form.Item name="amount" label="Amount" rules={[{ required: true }]}><InputNumber min={0.01} precision={2} style={{ width: '100%' }} prefix={doc.currency} /></Form.Item>
+          <Form.Item name="amount" label="Amount" rules={[{ required: true }]}><AmountInput min={0.01} precision={2} style={{ width: '100%' }} prefix={doc.currency} /></Form.Item>
           <Form.Item name="date" label="Date" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} allowClear={false} /></Form.Item>
           <Form.Item name="method" label="How"><Select options={PAYMENT_METHODS.map(m => ({ value: m, label: m }))} /></Form.Item>
           <Form.Item name="account_id" label={inbound ? 'Into' : 'From'}><Select allowClear options={cashAccounts.map(a => ({ value: a.id, label: a.name }))} /></Form.Item>

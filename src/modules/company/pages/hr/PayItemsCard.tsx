@@ -8,6 +8,7 @@ import { payItemService } from '../../../../services/payroll';
 import {
   PAY_ITEM_TYPES, PAY_ITEM_BY_CODE, hourlyRate, DEFAULT_OT_MULTIPLIER, dailyRate, overtimeDaysAmount, isOvertime, overtimeAmount, unpaidLeaveAmount, workingDaysInMonth, payItemLabel, type PayItemRow,
 } from '../../../../data/payItems';
+import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
 const money = (n: number, c: string) => `${c} ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -184,7 +185,7 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
                     <Tooltip title={t.code === 'OVERTIME_DAYS'
                       ? `Daily rate. Leave empty to use ${money(dayRate, currency)} (basic salary ÷ ${monthDays} working days in ${period}).`
                       : `Hourly rate. Leave empty to use ${money(hourlyRate(basic), currency)} (from the basic salary, MOM formula).`}>
-                      <InputNumber style={{ width: 160 }} min={0} precision={2} value={r.rate ?? undefined} prefix={currency}
+                      <AmountInput style={{ width: 160 }} min={0} precision={2} value={r.rate ?? undefined} prefix={currency}
                         suffix={t.code === 'OVERTIME_DAYS' ? '/day' : '/hr'}
                         placeholder={(t.code === 'OVERTIME_DAYS' ? dayRate : hourlyRate(basic)).toFixed(2)}
                         onChange={v => update(r.key, { rate: v == null ? null : Number(v) })} />
@@ -205,7 +206,7 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
                     </Tooltip>
                   </>
                 )}
-                <InputNumber style={{ width: 160 }} min={0} precision={2} value={r.amount} prefix={currency}
+                <AmountInput style={{ width: 160 }} min={0} precision={2} value={r.amount} prefix={currency}
                   onChange={v => update(r.key, { amount: Number(v) || 0 })} />
                 <Input style={{ width: 200 }} placeholder="Note (optional)" value={r.note || ''} onChange={e => update(r.key, { note: e.target.value })} />
                 <Popconfirm title="Remove this item?" onConfirm={() => setRows(rs => rs.filter(x => x.key !== r.key))}>

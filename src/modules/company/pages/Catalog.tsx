@@ -11,6 +11,7 @@ import { catalogService, accountService, financeSettingsService, loadLedgerInput
 import { stockMoves, onHand, type CatalogItem, type StockAdjustment } from '../../../data/catalog';
 import { DEFAULT_FINANCE_SETTINGS, type Account, type Contact, type FinanceSettings } from '../../../data/finance';
 import { money } from '../../../data/documentLayouts';
+import { AmountInput } from '../../../components/AmountInput';
 
 const { Title, Text } = Typography;
 
@@ -174,8 +175,8 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
         {item.description && <Form.Item name="description" label="Extra text after the name on invoices"><Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} /></Form.Item>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
           <Form.Item name="unit" label="Unit"><Input placeholder={kind === 'service' ? 'e.g. hour, project' : 'e.g. pc, box, kg'} /></Form.Item>
-          {sells && <Form.Item name="sale_price" label="Selling price"><InputNumber min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>}
-          {buys && <Form.Item name="purchase_price" label="Cost / buying price"><InputNumber min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>}
+          {sells && <Form.Item name="sale_price" label="Selling price"><AmountInput min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>}
+          {buys && <Form.Item name="purchase_price" label="Cost / buying price"><AmountInput min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>}
         </div>
         {sells && <Card size="small" style={{ background: 'transparent', marginBottom: 16 }} title="Customer prices"
           extra={<Button size="small" icon={<PlusOutlined />} onClick={() => setCustPrices(ps => [...ps, { contact_id: null, price: Number(form.getFieldValue('sale_price')) || 0 }])}>Customer</Button>}>
@@ -184,7 +185,7 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
               <Select showSearch optionFilterProp="label" placeholder="Customer" value={p.contact_id ?? undefined}
                 onChange={v => setCustPrices(ps => ps.map((x, j) => (j === i ? { ...x, contact_id: v } : x)))}
                 options={customers.filter(c => c.id === p.contact_id || !custPrices.some(x => x.contact_id === c.id)).map(c => ({ value: c.id, label: c.name }))} />
-              <InputNumber min={0} precision={2} prefix={currency} style={{ width: '100%' }} value={p.price}
+              <AmountInput min={0} precision={2} prefix={currency} style={{ width: '100%' }} value={p.price}
                 onChange={v => setCustPrices(ps => ps.map((x, j) => (j === i ? { ...x, price: v } : x)))} />
               <Button icon={<DeleteOutlined />} onClick={() => setCustPrices(ps => ps.filter((_, j) => j !== i))} />
             </div>
