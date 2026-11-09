@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Row, Col, Card, Statistic, Typography } from 'antd';
+import { Card, Statistic, Typography } from 'antd';
 import { TeamOutlined, IdcardOutlined, CalendarOutlined, ArrowDownOutlined, ArrowUpOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -66,9 +66,10 @@ export function CompanyDashboard() {
   return (
     <div>
       <Title level={4} style={{ color: '#f0ede6', marginBottom: 24 }}>Company Overview</Title>
-      <Row gutter={[16, 16]}>
+      {/* every card the same width and height, as many per row as fit */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, alignItems: 'stretch' }}>
         {cards.map((card) => (
-          <Col xs={24} sm={12} lg={8} xl={card.title.startsWith('Outstanding') ? 6 : 4} key={card.title}>
+          <div key={card.title}>
             <Card style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, height: '100%' }}>
               <Statistic
                 title={<Text style={{ color: 'rgba(240,237,230,0.6)' }}>{card.title}</Text>}
@@ -78,9 +79,9 @@ export function CompanyDashboard() {
               />
               {card.note && <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>{card.note}</Text>}
             </Card>
-          </Col>
+          </div>
         ))}
-      </Row>
+      </div>
     </div>
   );
 }
