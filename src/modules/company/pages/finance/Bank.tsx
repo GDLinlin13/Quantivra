@@ -91,6 +91,9 @@ export function Bank({ data }: { data: FinanceData }) {
   // amounts without the currency (it's shown once, at the top)
   const num = (n: number) => Number(n).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const PURPLE = '#b37feb';
+  // for a bank in another currency: its own-currency balance from the opening balance and every matched line
+  const foreignBooks = useMemo(() => Math.round(((Number(account?.opening_foreign) || 0)
+    + txns.filter(t => t.status === 'matched').reduce((s, t) => s + Number(t.amount), 0)) * 100) / 100, [txns, account]);
   // Recorded in Quantivra for this bank but not on any statement line yet (e.g. a transfer booked from
   // another bank, a payment recorded by hand): shown so the statement line can be matched to it.
   const expected = useMemo(() => accountId ? recordedNotOnStatement(accountId, look, allTxns, data) : [], [accountId, look, allTxns, data]);
@@ -193,7 +196,11 @@ export function Bank({ data }: { data: FinanceData }) {
       <Space size={16} wrap style={{ marginBottom: 12 }}>
         <Card size="small" style={{ minWidth: 110 }}><Statistic title="Currency" value={accCur} /></Card>
         <Card size="small" style={{ minWidth: 200 }}><Statistic title="Balance per statement" value={num(statementBalance)} styles={{ content: { color: PURPLE } }} /></Card>
-        <Card size="small" style={{ minWidth: 200 }}><Statistic title={foreign ? `System Balance (in ${currency})` : 'System Balance'} value={foreign ? money(booksBalance, currency) : num(booksBalance)} /></Card>
+        {/* a bank in another currency: the balance in that currency (opening + matched lines); the books' amount below */}
+        <Card size="small" style={{ minWidth: 200 }}>
+          <Statistic title="System Balance" value={num(foreign ? foreignBooks : booksBalance)} />
+          {foreign && <Text type="secondary" style={{ fontSize: 12 }}>= {money(booksBalance, currency)} in the books</Text>}
+        </Card>
         <Card size="small" style={{ minWidth: 200 }}><Statistic title="Lines to match" value={unmatched} styles={{ content: { color: unmatched ? '#faad14' : undefined } }} /></Card>
       </Space>
       {booksBalance < 0 && !Number(account?.opening_balance) && (
