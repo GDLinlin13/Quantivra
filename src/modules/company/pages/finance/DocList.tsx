@@ -223,7 +223,7 @@ export function PaymentModal({ data, doc, onClose, onDone }: { data: FinanceData
       <Text type="secondary">Still owed: <b>{money(due, doc.currency)}</b></Text>
       <Form form={form} layout="vertical" style={{ marginTop: 12 }}
         initialValues={{ amount: due, date: dayjs(), method: 'Bank transfer', account_id: cashAccounts.find(a => a.subtype === 'bank')?.id }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="amount" label="Amount" rules={[{ required: true }]}><AmountInput min={0.01} precision={2} style={{ width: '100%' }} prefix={doc.currency} /></Form.Item>
           <Form.Item name="date" label="Date" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} allowClear={false} /></Form.Item>
           <Form.Item name="method" label="How"><Select options={PAYMENT_METHODS.map(m => ({ value: m, label: m }))} /></Form.Item>

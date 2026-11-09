@@ -297,25 +297,25 @@ function AccountModal({ data, account, onClose, onSaved }: { data: FinanceData; 
   return (
     <Modal open onCancel={onClose} onOk={submit} confirmLoading={saving} title={account.id ? `Edit ${account.name}` : 'New account'} width={560}>
       <Form form={form} layout="vertical" initialValues={{ ...account, subtype: account.subtype || '', opening_date: account.opening_date ? dayjs(account.opening_date) : null }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="code" label="Code" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="type" label="Type" rules={[{ required: true }]}>
             <Select disabled={account.is_system} options={Object.entries(ACCOUNT_TYPE_LABEL).map(([value, label]) => ({ value, label }))} />
           </Form.Item>
           {type === 'asset' && !account.is_system && <Form.Item name="subtype" label="Kind"><Select options={SUBTYPE_OPTIONS} /></Form.Item>}
         </div>
         {(subtype === 'bank' || account.subtype === 'bank') && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
             <Form.Item name="bank_name" label="Bank"><Input /></Form.Item>
             <Form.Item name="bank_account_no" label="Account no."><Input /></Form.Item>
           </div>
         )}
         <Form.Item name="description" label="Description"><Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} /></Form.Item>
         {['asset', 'liability', 'equity'].includes(type) && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
             <Form.Item name="opening_balance" label="Opening balance" tooltip="What the account held when you started using Quantivra (e.g. your bank balance)."><AmountInput precision={2} style={{ width: '100%' }} /></Form.Item>
             <Form.Item name="opening_date" label="As at"><DatePicker style={{ width: '100%' }} /></Form.Item>
           </div>
@@ -448,7 +448,7 @@ function PayLiability({ data, accounts, account, amount, onClose, onDone }: {
       <Text type="secondary">Owed: {money(amount, data.currency)}. If you match bank statement lines in Bank instead, don't record it here as well.</Text>
       <Form form={form} layout="vertical" style={{ marginTop: 12 }}
         initialValues={{ amount, date: dayjs(), bank: banks.find(b => b.subtype === 'bank')?.id, memo: `Paid ${account.name}` }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="amount" label="Amount" rules={[{ required: true }]}><AmountInput min={0.01} precision={2} style={{ width: '100%' }} prefix={data.currency} /></Form.Item>
           <Form.Item name="date" label="Paid on" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} allowClear={false} /></Form.Item>
           <Form.Item name="bank" label="From" rules={[{ required: true }]}><Select options={banks.map(b => ({ value: b.id, label: b.name }))} /></Form.Item>

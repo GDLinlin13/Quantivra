@@ -15,7 +15,7 @@ import {
 import { DEFAULT_FINANCE_SETTINGS, DOC_LABEL, type FinDocument, type FinanceSettings, type Contact, type ContactPerson } from '../../../data/finance';
 import { lineText, type CatalogItem } from '../../../data/catalog';
 import { buildFolders, type Folder, type DocFile } from '../../../data/documents';
-import { downloadBlob, formatFileName, formatDocFileName } from '../../../utils/payslipFiles';
+import { downloadBlob, formatFileName, formatDocFileName, zipFiles } from '../../../utils/payslipFiles';
 import { PayslipView } from './hr/PayslipView';
 import { DocumentView } from './finance/DocumentView';
 import { FileViewer } from '../../../components/FileViewer';
@@ -179,6 +179,38 @@ export function CompanyDocumentsPage() {
     }
     return { name: r.name, blob: await companyFileService.blob(r.path) };
   };
+  // Download all: every folder and file, laid out as on the left, in one .zip
+  const [zipping, setZipping] = useState<{ done: number; total: number } | null>(null);
+  const downloadAll = async () => {
+    const all: { path: string; row: Row }[] = [];
+    const safe = (t: string) => t.replace(/[\\/:*?"<>|]/g, '-').trim() || 'Untitled';
+    const walk = (list: Folder[], base: string) => list.forEach(f => {
+      const here = `${base}${safe(f.title)}/`;
+      f.files.forEach(r => all.push({ path: here, row: r }));
+      walk(f.children, here);
+    });
+    walk(folders, '');
+    if (!all.length) { message.info('No documents yet'); return; }
+    setZipping({ done: 0, total: all.length });
+    const out: { name: string; blob: Blob }[] = [], used = new Set<string>(), failed: string[] = [];
+    for (let i = 0; i < all.length; i++) {
+      const { path, row } = all[i];
+      try {
+        const { blob, name } = await fileOf(row);
+        // the same name twice in a folder gets (2), (3)…
+        let n = `${path}${safe(name)}`, k = 2;
+        while (used.has(n.toLowerCase())) n = `${path}${safe(name).replace(/(\.[^.]+)?$/, m => ` (${k}${')'}${m}`)}`, k++;
+        used.add(n.toLowerCase()); out.push({ name: n, blob });
+      } catch { failed.push(row.name); }
+      setZipping({ done: i + 1, total: all.length });
+    }
+    try {
+      const zip = await zipFiles(out);
+      downloadBlob(zip, `${safe(coName || 'Company')} documents ${dayjs().format('YYYY-MM-DD')}.zip`);
+      if (failed.length) message.warning(`${failed.length} file${failed.length === 1 ? '' : 's'} couldn't be added: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '…' : ''}`);
+    } catch (e: any) { message.error(e.message); }
+    setZipping(null);
+  };
   // open: show it in the viewer popup; download: save it
   const [viewing, setViewing] = useState<Row | null>(null);
   const act = async (r: Row, how: 'open' | 'download') => {
@@ -196,6 +228,9 @@ export function CompanyDocumentsPage() {
       <Space style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }} wrap>
         <Title level={4} style={{ color: '#f0ede6', margin: 0 }}>Documents</Title>
         <Space>
+        <Button icon={<DownloadOutlined />} loading={!!zipping} onClick={downloadAll}>
+          {zipping ? `Preparing ${zipping.done} / ${zipping.total}` : 'Download all'}
+        </Button>
         <Button icon={<FolderAddOutlined />} onClick={() => { setFolderParent(''); setNewFolder(''); setAddingFolder(true); }}>New folder</Button>
         <Select style={{ width: 140 }} value={by} onChange={v => changeBy(v)}
           options={[{ value: 'date', label: 'Date' }, { value: 'name', label: 'Name' }]} />

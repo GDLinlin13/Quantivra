@@ -133,7 +133,7 @@ function ContactDrawer({ companyId, contact, word, currency, docs, onClose, onSa
     <Drawer open onClose={onClose} size={720} title={contact.id ? contact.name : `New ${word}`}
       extra={<Button type="primary" loading={saving} onClick={save}>Save</Button>}>
       <Form form={form} layout="vertical">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="name" label="Company / name" rules={[{ required: true }]} style={{ gridColumn: '1 / -1' }}><Input /></Form.Item>
           <Form.Item name="reg_no" label="Registration / UEN"><Input /></Form.Item>
           <Form.Item name="tax_no" label="GST registration no."><Input /></Form.Item>

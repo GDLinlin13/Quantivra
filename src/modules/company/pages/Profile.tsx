@@ -386,7 +386,7 @@ export function CompanyProfilePage() {
                   <Form.Item name="legal_name" label="Legal name (on documents)"><Input /></Form.Item>
                   <Form.Item name="registration_no" label="Registration / UEN"><Input /></Form.Item>
                   <Form.Item name="address" label="Address"><Input.TextArea rows={2} /></Form.Item>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
                     <Form.Item name="phone" label="Phone"><Input /></Form.Item>
                     <Form.Item name="email" label="Email"><Input /></Form.Item>
                   </div>

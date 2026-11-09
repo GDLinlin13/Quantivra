@@ -393,7 +393,7 @@ function AddLine({ onClose, onAdd, currency, line }: { onClose: () => void; onAd
           { value: 'out', label: <span style={{ color: '#ff7875' }}>Debit</span> },
           { value: 'in', label: <span style={{ color: '#73d13d' }}>Credit</span> },
         ]} /></Form.Item>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="date" label="Date" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="amount" label="Amount" rules={[{ required: true }]}><AmountInput min={0.01} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>
         </div>
@@ -575,7 +575,7 @@ function BankAccountModal({ data, account, onClose, onSaved }: { data: FinanceDa
     <Modal open onCancel={onClose} onOk={submit} confirmLoading={saving} title={account.id ? `Edit ${account.name}` : 'New bank account'}>
       <Form form={form} layout="vertical" initialValues={{ ...account, currency: account.currency || data.currency, opening_date: account.opening_date ? dayjs(account.opening_date) : null }}>
         <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="bank_name" label="Bank"><Input /></Form.Item>
           <Form.Item name="bank_account_no" label="Account no."><Input /></Form.Item>
           <Form.Item name="currency" label="Currency" style={{ gridColumn: '1 / -1' }}>

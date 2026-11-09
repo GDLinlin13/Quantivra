@@ -93,7 +93,8 @@ export function LeaveTypesTab({ companyId }: { companyId: number }) {
               </Form.Item>
             )}
           </Form.Item>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {/* boxes side by side line up at the bottom, even when one label wraps onto two lines */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
             <Form.Item name="default_days" label="Per year (starting) — days, or weeks if counted in weeks"><InputNumber style={{ width: '100%' }} min={0} /></Form.Item>
             <Form.Item name="statutory_min" label="Statutory minimum (days/yr)"><InputNumber style={{ width: '100%' }} min={0} /></Form.Item>
             <Form.Item name="increment_per_year" label="Extra days per completed year of service"
