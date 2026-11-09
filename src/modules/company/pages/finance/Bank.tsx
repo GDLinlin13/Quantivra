@@ -21,6 +21,7 @@ import { money } from '../../../../data/documentLayouts';
 import { currencyOptions } from '../../../../utils/currencies';
 import type { FinanceData } from './DocList';
 import { AmountInput } from '../../../../components/AmountInput';
+import { payrollService } from '../../../../services/payroll';
 
 const { Text } = Typography;
 
@@ -550,7 +551,11 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                 {
                   title: 'Salaries to pay', key: 'n', align: 'right' as const, render: (_: any, d: PayrollDue) => d.netDue > 0 ? (
                     <Button size="small" type={ready && Math.abs(d.netDue - amt) < 0.005 ? 'primary' : 'default'} disabled={!ready || !salId} loading={busy}
-                      onClick={() => run(() => bankService.categorise(data.companyId, txn, salId!, `Salaries — ${dayjs(`${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}-01`).format('MMMM YYYY')}`, foreign ? amt : undefined))}>
+                      onClick={() => run(async () => {
+                        await bankService.categorise(data.companyId, txn, salId!, `Salaries — ${dayjs(`${d.run.period_year}-${String(d.run.period_month).padStart(2, '0')}-01`).format('MMMM YYYY')}`, foreign ? amt : undefined);
+                        // the payroll's pay date becomes the day the bank paid it out
+                        await payrollService.setPayDate(d.run.id, txn.txn_date).catch(() => null);
+                      })}>
                       {money(d.netDue, data.currency)}
                     </Button>) : <Tag color="green">Paid</Tag>,
                 },

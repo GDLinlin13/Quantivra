@@ -112,7 +112,7 @@ export const payrollService = {
   },
 
   /** Run (or re-run, if still draft) payroll for a period. Returns the run id. */
-  async run(opts: { companyId: number; countryCode: string; currency: string; year: number; month: number; createdBy?: number }): Promise<{ runId: number; result: PayrollRunResult }> {
+  async run(opts: { companyId: number; countryCode: string; currency: string; year: number; month: number; createdBy?: number; payDate?: string | null }): Promise<{ runId: number; result: PayrollRunResult }> {
     const { companyId, countryCode, currency, year, month, createdBy } = opts;
 
     const existing = await supabase.from('payroll_runs').select('id, status')
@@ -129,7 +129,8 @@ export const payrollService = {
     const period: PayrollPeriod = {
       startDate: start.format('YYYY-MM-DD'),
       endDate: start.endOf('month').format('YYYY-MM-DD'),
-      payDate: start.endOf('month').format('YYYY-MM-DD'),
+      // the day salaries actually go out (HR picks it); last day of the month if not given
+      payDate: opts.payDate || start.endOf('month').format('YYYY-MM-DD'),
       frequency: 'monthly',
       payYear: year, payMonth: month, payPeriod: month,
     };
@@ -207,6 +208,11 @@ export const payrollService = {
   },
 
   /** Back to draft, so the run can be calculated again (e.g. after a rule fix). */
+  /** The day the salaries actually left the bank (set when they're matched to the bank statement). */
+  async setPayDate(runId: number, date: string) {
+    const { error } = await supabase.from('payroll_runs').update({ pay_date: date }).eq('id', runId);
+    if (error) throw new Error(error.message);
+  },
   async reopen(runId: number) {
     const { error } = await supabase.from('payroll_runs').update({ status: 'draft', finalised_at: null }).eq('id', runId);
     if (error) throw new Error(error.message);
