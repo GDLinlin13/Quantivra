@@ -605,16 +605,24 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
       { label: 'Owed', options: bookable.filter(a => a.type === 'liability' && !['payable'].includes(a.subtype || '')).map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
     ] : [],
   ];
+  // how much of the document this pays off, in the document's currency: in the bank's currency, what came in;
+  // in another currency, at the document's rate (close to the whole balance counts as all of it — the rest is
+  // an exchange difference). It can be typed in instead (a partial payment of an exact amount).
+  const autoPortion = (d: FinDocument) => {
+    const due = balanceDue(d);
+    if (diff > 0 && diffAccount !== 'keep') return due;
+    const worth = inBankCur(d) ? lineAmt : isForeignDoc(d, data.currency) ? amt / docRate(d) : amt;
+    return isForeignDoc(d, data.currency) && !inBankCur(d) && worth >= due * 0.95 ? due : Math.min(Math.round(worth * 100) / 100, due);
+  };
+  const [payOff, setPayOff] = useState<number | null>(null);
+  useEffect(() => { setPayOff(null); }, [docId]);
   const payDoc = () => run(async () => {
     const d = data.docs.find(x => x.id === docId)!;
     const due = balanceDue(d);
-    const booked = diff > 0 && diffAccount !== 'keep';
-    // how much of the document this pays off, in the document's currency: in the bank's currency, what came in;
-    // in another currency, at the document's rate (close to the whole balance counts as all of it — the rest is
-    // an exchange difference)
-    const worth = inBankCur(d) ? lineAmt : isForeignDoc(d, data.currency) ? amt / docRate(d) : amt;
-    const portion = booked ? due
-      : isForeignDoc(d, data.currency) && !inBankCur(d) && worth >= due * 0.95 ? due : Math.min(Math.round(worth * 100) / 100, due);
+    if (payOff != null && (payOff <= 0 || payOff > due + 0.005)) throw new Error(`Pays off must be between 0 and ${money(due, d.currency || data.currency)}`);
+    // a typed-in amount: exactly that is paid off; the difference is booked only for the automatic full amount
+    const booked = payOff == null && diff > 0 && diffAccount !== 'keep';
+    const portion = payOff ?? autoPortion(d);
     const pid = await paymentService.record(data.companyId, {
       direction: inbound ? 'in' : 'out', amount: amt, contact_id: d.contact_id, payment_date: txn.txn_date,
       method: 'Bank transfer', reference: txn.description || undefined, account_id: txn.account_id,
@@ -663,7 +671,15 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                     { title: 'Still owed', key: 'b', align: 'right' as const, render: (_, d) => <span style={{ fontWeight: sameAmount(d) ? 700 : 400 }}>{money(balanceDue(d), d.currency || data.currency)}{isForeignDoc(d, data.currency) && !inBankCur(d) && <Text type="secondary"> ≈ {money(inBase(d, balanceDue(d)), data.currency)}</Text>}</span> },
                   ]} />
               )}
-              {diff > 0.004 && (
+              {chosen && (
+                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Text>Pays off</Text>
+                  <AmountInput min={0} precision={2} style={{ width: 200 }} prefix={chosen.currency || data.currency}
+                    value={payOff ?? autoPortion(chosen)} onChange={v => setPayOff(v == null ? null : Number(v))} />
+                  <Text type="secondary">of {money(balanceDue(chosen), chosen.currency || data.currency)} still owed</Text>
+                </div>
+              )}
+              {diff > 0.004 && payOff == null && (
                 <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Text>{inbound ? 'Short by' : 'Difference'} <b>{money(diff, diffInDocCur ? accCur : data.currency)}</b>{diffInDocCur && diffBase > 0 ? ` (${money(diffBase, data.currency)})` : ''}:</Text>
                   <Select style={{ minWidth: 340 }} showSearch optionFilterProp="label" value={diffAccount} onChange={v => setDiffTo(v)} options={diffOptions} />
