@@ -138,7 +138,8 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
       const keep = new Set(rows.filter(r => r.id).map(r => r.id));
       for (const old of items) if (old.id && !keep.has(old.id)) await payItemService.remove(old.id);
       for (const r of rows) {
-        if (!(Number(r.amount) > 0)) continue;
+        // empty items are dropped, but a contribution set by hand can be 0 (e.g. no employer MPF this month)
+        if (!(Number(r.amount) > 0) && PAY_ITEM_BY_CODE[r.item_code]?.kind !== 'override') continue;
         const { key: _k, auto: _a, ...row } = r;
         await payItemService.save(row);
       }
