@@ -90,7 +90,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
   const rateFor = async (cur: string) => {
     if (cur === currency) return null;
     if (rates[cur] !== undefined) return rates[cur];
-    const r = await latestRate(companyId, cur).catch(() => null);
+    const r = await latestRate(companyId, cur, currency).catch(() => null);
     setRates(x => ({ ...x, [cur]: r }));
     return r;
   };
@@ -102,7 +102,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
     const toRate = cur === currency ? 1 : r;
     if (fromRate && toRate) setLines(ls => ls.map(l => (Number(l.unit_price) ? { ...l, unit_price: Math.round(Number(l.unit_price) * fromRate / toRate * 100) / 100 } : l)));
     set({ currency: cur, fx_rate: cur === currency ? null : r });
-    if (!quiet && cur !== currency && !r) message.info(`Enter the exchange rate: 1 ${cur} = ? ${currency}`);
+    void quiet;
   };
   /** an item's price in this document's currency */
   const inDocCurrency = (price: number, itemCur: string | null | undefined) => {
@@ -159,10 +159,16 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
     if (docType !== 'expense' && !doc.contact_id) { message.error(sales ? 'Choose a customer' : 'Choose a supplier'); return; }
     if (!lines.some(l => (l.description || '').trim() || l.item_id || Number(l.unit_price))) { message.error('Add at least one line'); return; }
     if (typedNumber && !(doc.number || '').trim()) { message.error(`Enter the ${DOC_LABEL[docType].toLowerCase()} number`); return; }
-    if (foreign && !(Number(doc.fx_rate) > 0)) { message.error(`Enter the exchange rate: 1 ${docCur} = ? ${currency}`); return; }
+    // the books (in the company's currency) need a rate; none typed: the latest known, else today's market rate
+    let fx = doc.fx_rate;
+    if (foreign && !(Number(fx) > 0)) {
+      fx = await latestRate(companyId, docCur, currency).catch(() => null);
+      if (!fx) { message.error(`Couldn't find a ${docCur} rate — enter it: 1 ${docCur} = ? ${currency}`); return; }
+      set({ fx_rate: fx });
+    }
     setSaving(true);
     try {
-      const id = await docService.save(companyId, { ...doc, ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines);
+      const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines);
       // An expense paid on the spot (from a bank / cash account) is recorded as paid straight away.
       if (docType === 'expense' && doc.paid_from_account_id && (status === 'approved' || doc.status === 'approved')) {
         const { doc: fresh } = await docService.get(id);
@@ -172,7 +178,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
           const from = accounts.find(a => a.id === doc.paid_from_account_id);
           const sameCur = foreign && from?.currency === docCur;
           await paymentService.record(companyId, {
-            direction: 'out', amount: foreign ? Math.round(owed * Number(doc.fx_rate) * 100) / 100 : owed, contact_id: fresh.contact_id, payment_date: fresh.issue_date,
+            direction: 'out', amount: foreign ? Math.round(owed * Number(fx) * 100) / 100 : owed, contact_id: fresh.contact_id, payment_date: fresh.issue_date,
             method: 'Paid on the spot', account_id: doc.paid_from_account_id,
             ...(sameCur ? { currency: docCur, foreign_amount: owed } : {}),
           }, [{ document_id: id, amount: owed }]);
@@ -261,7 +267,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
               options={currencies.map(c => ({ value: c, label: c }))} />
             {foreign && (
               <AmountInput min={0} precision={6} style={{ width: 230 }} prefix={`1 ${docCur} =`} suffix={currency}
-                value={doc.fx_rate ?? undefined} disabled={Number(doc.amount_paid) > 0}
+                value={doc.fx_rate ?? undefined} disabled={Number(doc.amount_paid) > 0} placeholder="today's rate"
                 onChange={v => set({ fx_rate: v == null ? null : Number(v) })} />
             )}
             {foreign && Number(doc.fx_rate) > 0 && <Text type="secondary">= {money(Math.round(t.total * Number(doc.fx_rate) * 100) / 100, currency)}</Text>}
