@@ -7,7 +7,7 @@ import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteO
 import dayjs from 'dayjs';
 import { bankService, paymentService, marketRate, loadLedgerInput, accountService, pdfLayoutService, pictureStatementPref, companyFileService, type BankTxn, type Payment } from '../../../../services/finance';
 import { statementPeriod, statementMonthFromText } from '../../../../data/documents';
-import { rowsForCurrency, statementCurrencies } from '../../../../data/bankCurrency';
+import { rowsForCurrency, statementCurrencies, rateFromText } from '../../../../data/bankCurrency';
 import { planImport, nothingNew } from '../../../../data/bankImport';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
 import { balanceDue, inBase, docRate, isForeignDoc, schemeLabel, type Account, type FinDocument } from '../../../../data/finance';
@@ -564,15 +564,17 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   const lineAmt = Math.abs(Number(txn.amount));                 // in the bank account's currency
   // the rate has its own box (so typing 1.29 isn't undone by rounding a small amount); starts at the last rate used
   const r2 = (n: number) => Math.round(n * 100) / 100;
-  const [rate, setRate] = useState<number | null>(foreign && lastRate ? lastRate : null);
-  const [base, setBase] = useState<number | null>(foreign && lastRate ? r2(lastRate * lineAmt) : null);  // the same in the company's currency
+  // the bank's own rate when the line states it ("1 HKD=0.129016 USD"), else the last rate used on this bank
+  const textRate = foreign ? rateFromText(txn.description, accCur, data.currency, lineAmt) : null;
+  const [rate, setRate] = useState<number | null>(textRate?.rate ?? (foreign && lastRate ? lastRate : null));
+  const [base, setBase] = useState<number | null>(textRate?.base ?? (foreign && lastRate ? r2(lastRate * lineAmt) : null));  // the same in the company's currency
   // no rate keyed: the last rate used on this bank is used (only the very first line needs one)
   const effBase = base ?? (foreign && lastRate ? r2(lastRate * lineAmt) : null);
-  const [editRate, setEditRate] = useState(!lastRate);
+  const [editRate, setEditRate] = useState(!lastRate && !textRate);
   // no rate used on this bank yet: the market rate on the line's date
   const [looking, setLooking] = useState(false);
   useEffect(() => {
-    if (!foreign || lastRate) return;
+    if (!foreign || lastRate || textRate) return;
     setLooking(true);
     marketRate(accCur, data.currency, txn.txn_date).then(r => {
       if (r) { setRate(x => x ?? r); setBase(x => x ?? r2(r * lineAmt)); }
@@ -675,7 +677,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
       title={<span>{inbound ? 'Money in' : 'Money out'} {money(lineAmt, accCur)} on {txn.txn_date}<div style={{ fontSize: 12, fontWeight: 400, color: '#999' }}>{txn.description}</div></span>}>
       {foreign && !editRate && (
         <div style={{ marginBottom: 12 }}>
-          <Text type="secondary">1 {accCur} = {lastRate} {data.currency}</Text>{' '}
+          <Text type="secondary">1 {accCur} = {rate ?? lastRate} {data.currency}{textRate ? ` = ${money(textRate.base, data.currency)} (the bank's rate)` : ''}</Text>{' '}
           <Button size="small" type="link" onClick={() => setEditRate(true)}>Change rate</Button>
         </div>
       )}

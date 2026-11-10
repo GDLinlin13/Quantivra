@@ -653,6 +653,34 @@ export const bankService = {
     const r = await supabase.from('fin_bank_transactions').update({ journal_id: journalId, payment_id: null, status: 'matched', journal_existing: true, ...(baseAmount != null ? { base_amount: baseAmount } : {}) }).eq('id', txnId);
     if (r.error) throw new Error(/journal_existing/i.test(r.error.message) ? 'This needs database update 031 — ask your administrator to run it in Supabase.' : r.error.message);
   },
+  /**
+   * A matched line in a bank in another currency: change what it is in the company's currency (the rate). The line's
+   * own amount stays; what it was matched to follows — a transfer / booking at the new amount, a payment's value.
+   */
+  async changeBaseAmount(companyId: number, txn: BankTxn, newBase: number) {
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const v = r2(Math.abs(newBase));
+    if (!(v > 0)) throw new Error('Enter an amount');
+    if (txn.journal_id) {
+      // a booking another line made (e.g. the transfer recorded from the other bank) is changed from that line
+      if (txn.journal_existing) throw new Error('This was recorded from the other bank — change it there');
+      const j = must(await supabase.from('fin_journals').select('id, journal_date, memo').eq('id', txn.journal_id).single());
+      const ls: any[] = must(await supabase.from('fin_journal_lines').select('*').eq('journal_id', txn.journal_id)) || [];
+      const old = r2(ls.filter(l => l.account_id === txn.account_id).reduce((t, l) => t + Number(l.debit) + Number(l.credit), 0));
+      if (!old) throw new Error('This line has no amount in the books to change');
+      // every line scales by the same factor (a transfer: both banks; a split booking: each part), cents kept exact
+      const parts = ls.map(l => r2((Number(l.debit) + Number(l.credit)) * v / old));
+      const lines = ls.map((l, i) => ({ account_id: l.account_id, description: l.description,
+        debit: Number(l.debit) ? parts[i] : 0, credit: Number(l.credit) ? parts[i] : 0 }));
+      // the two sides must still balance (rounding goes on the biggest line)
+      const gap = r2(lines.reduce((t, l) => t + l.debit - l.credit, 0));
+      if (gap) { const k = lines.reduce((m, l, i) => (l.debit + l.credit > lines[m].debit + lines[m].credit ? i : m), 0); if (lines[k].debit) lines[k].debit = r2(lines[k].debit - gap); else lines[k].credit = r2(lines[k].credit + gap); }
+      await journalService.save(companyId, j, lines);
+    } else if (txn.payment_id) {
+      must(await supabase.from('fin_payments').update({ amount: v }).eq('id', txn.payment_id));
+    }
+    await this.update(txn.id, { base_amount: Math.sign(Number(txn.amount)) * v });
+  },
   async matchPayment(txnId: number, paymentId: number, baseAmount?: number) {
     await this.update(txnId, { payment_id: paymentId, journal_id: null, status: 'matched', ...(baseAmount != null ? { base_amount: baseAmount } : {}) });
   },

@@ -56,3 +56,18 @@ export function rowsForCurrency(rows: PdfRow[], currency: string): PdfRow[] {
 function stripCodes(rows: PdfRow[]): PdfRow[] {
   return rows.map(r => r.map(p => ({ ...p, s: p.s.split(/\s+/).filter(w => !CODES.has(w.toUpperCase())).join(' ') })).filter(p => p.s.trim()));
 }
+
+/**
+ * The exchange rate a bank line states (e.g. "Exchange rate 匯率: 1 HKD=0.129016 USD"), as the company currency per 1 unit
+ * of the account's currency, and the company-currency amount it gives for `amount`; null if the text has none.
+ */
+export function rateFromText(text: string | null | undefined, accCur: string, base: string, amount: number): { rate: number; base: number } | null {
+  const m = (text || '').match(/1\s*([A-Za-z]{3})\s*=\s*([\d,]*\.?\d+)\s*([A-Za-z]{3})/);
+  if (!m) return null;
+  const [from, x, to] = [norm(m[1].toUpperCase()), Number(m[2].replace(/,/g, '')), norm(m[3].toUpperCase())];
+  if (!(x > 0)) return null;
+  const r2 = (n: number) => Math.round(n * 100) / 100, r6 = (n: number) => Math.round(n * 1e6) / 1e6;
+  if (from === accCur && to === base) return { rate: r6(x), base: r2(amount * x) };
+  if (from === base && to === accCur) return { rate: r6(1 / x), base: r2(amount / x) };
+  return null;
+}
