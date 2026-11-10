@@ -40,3 +40,15 @@ export function residencyOptions(countryCode?: string | null): ResidencyOption[]
 export function defaultResidency(countryCode?: string | null): string {
   return residencyOptions(countryCode)[0].value;
 }
+
+/**
+ * The residency the payroll engine uses. Hong Kong staff saved before Hong Kong had its own choices (or with
+ * none) still hold another country's or the generic value: citizens and permanent residents count as Hong Kong
+ * permanent residents, everyone else as non-permanent residents, so all are in MPF unless marked exempt.
+ */
+export function payrollResidency(countryCode: string | null | undefined, value: string | null | undefined): string {
+  const c = (countryCode || 'SG').toUpperCase();
+  const v = value || '';
+  if (c !== 'HK' || OPTIONS.HK.some(o => o.value === v)) return v || defaultResidency(c);
+  return ['', 'SC', 'CITIZEN', 'PR'].includes(v) ? 'HK_PR' : 'HK_NON_PR';
+}
