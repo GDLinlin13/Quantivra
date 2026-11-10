@@ -104,6 +104,22 @@ export const statutorySettingsService = {
   },
 };
 
+/** The bank accounts a run's payslips were paid to (full numbers, pay users only), by employee. */
+const paidToCache = new Map<number, Promise<Map<number, { bank_account: string | null; bank_name: string | null }>>>();
+export function payslipBankAccounts(runId: number) {
+  if (!paidToCache.has(runId)) {
+    paidToCache.set(runId, Promise.resolve(supabase.rpc('payroll_bank_accounts', { p_run_id: runId })).then(r =>
+      new Map(((r.error ? [] : r.data) || []).map((x: any) => [Number(x.employee_id), { bank_account: x.bank_account ?? null, bank_name: x.bank_name ?? null }]))));
+  }
+  return paidToCache.get(runId)!;
+}
+/** Set the account an older payslip was paid to (database update 038). */
+export async function setPayslipBank(runId: number, employeeId: number, bankAccount: string, bankName: string | null) {
+  const r = await supabase.rpc('payroll_set_bank', { p_run_id: runId, p_employee_id: employeeId, p_bank_account: bankAccount, p_bank_name: bankName });
+  if (r.error) throw new Error(/payroll_set_bank|function/i.test(r.error.message) ? 'This needs database update 038 — ask your administrator to run it in Supabase.' : r.error.message);
+  paidToCache.delete(runId);
+}
+
 export const payrollService = {
   async listRuns(companyId: number): Promise<PayrollRunRow[]> {
     const { data } = await supabase.from('payroll_runs').select('*')
@@ -204,6 +220,10 @@ export const payrollService = {
     });
     const { error: slipErr } = await supabase.from('payslips').insert(slips);
     if (slipErr) throw new Error(slipErr.message);
+    // keep the bank account each payslip was paid to (database update 038; a re-run keeps the first one)
+    const kept = await supabase.rpc('payroll_keep_bank', { p_run_id: runId });
+    if (kept.error && !/payroll_keep_bank|function/i.test(kept.error.message)) throw new Error(kept.error.message);
+    paidToCache.delete(runId);
 
     return { runId, result };
   },
