@@ -131,7 +131,9 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
   const { accounts } = input;
   const acc = (sub: string, type?: Account['type']) => systemAccount(accounts, sub, type)?.id ?? 0;
   const AR = acc('receivable', 'asset'), AP = acc('payable', 'liability'), GST = acc('tax', 'liability');
-  const SALES = acc('sales', 'income'), GENERAL = acc('general', 'expense'), BANK = acc('bank', 'asset');
+  const SALES = acc('sales', 'income'), GENERAL = acc('general', 'expense');
+  // money with no bank named goes to the first bank account — open or closed, so closing it never moves history
+  const BANK = [...accounts].filter(a => a.subtype === 'bank').sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }) || a.id - b.id)[0]?.id || acc('bank', 'asset');
   const CLAIMS = acc('claims_payable', 'liability') || AP;
   const RETAINED = acc('retained', 'equity');
   const FX = acc('fx_gain_loss') || acc('general', 'expense');

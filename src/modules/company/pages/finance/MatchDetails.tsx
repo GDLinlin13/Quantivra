@@ -45,7 +45,7 @@ export function matchLabel(t: BankTxn, data: FinanceData, look: MatchLookup): { 
 }
 
 /** Click a matched bank line: what it was booked to, and the invoices / bills it paid with their files. */
-export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged, onChanged }: { data: FinanceData; txn: BankTxn; look: MatchLookup; accCur: string; onClose: () => void; onFilesChanged?: () => void; onChanged?: () => void }) {
+export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged, onChanged, readOnly }: { data: FinanceData; txn: BankTxn; look: MatchLookup; accCur: string; onClose: () => void; onFilesChanged?: () => void; onChanged?: () => void; /** a closed bank account: view only */ readOnly?: boolean }) {
   const acc = (id: number) => data.accounts.find(a => a.id === id);
   const M = (n: number) => money(n, data.currency);
   const label = matchLabel(txn, data, look);
@@ -122,19 +122,19 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged,
                 <Space key={f.id} size={4}>
                   <PaperClipOutlined />
                   <a onClick={() => setViewFile({ name: f.file_name, load: () => companyFileService.blob(f.path) })}>{f.file_name}</a>
-                  <Popconfirm title={`Remove ${f.file_name}?`} onConfirm={async () => { try { await companyFileService.remove(f); loadSupport(); onFilesChanged?.(); } catch (e: any) { message.error(e.message); } }}>
+                  {!readOnly && <Popconfirm title={`Remove ${f.file_name}?`} onConfirm={async () => { try { await companyFileService.remove(f); loadSupport(); onFilesChanged?.(); } catch (e: any) { message.error(e.message); } }}>
                     <Button size="small" type="text" danger icon={<DeleteOutlined />} />
-                  </Popconfirm>
+                  </Popconfirm>}
                 </Space>
               ))}
-              <Upload accept={ATTACH_TYPES} multiple showUploadList={false} beforeUpload={file => {
+              {!readOnly && <Upload accept={ATTACH_TYPES} multiple showUploadList={false} beforeUpload={file => {
                 companyFileService.add(data.companyId, file, { folder: 'journal', journal_id: journal.id, period: journal.journal_date.slice(0, 7) })
                   .then(() => { loadSupport(); onFilesChanged?.(); })
                   .catch(e => message.error(/journal_id|folder_check/i.test(e.message) ? 'Supporting documents need database update 033 — ask your administrator to run it in Supabase.' : e.message));
                 return false;
               }}>
                 <Button size="small" icon={<UploadOutlined />}>Attach file</Button>
-              </Upload>
+              </Upload>}
             </Space>
           </div>
         </>
@@ -176,7 +176,7 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged,
           {Number(payment.charges) > 0 && (
             <div style={{ marginTop: 8 }}><Text type="secondary">{payment.direction === 'out' ? 'Also paid' : 'Kept by the bank'}: {M(Number(payment.charges))} → {(() => { const a = data.accounts.find(x => x.id === payment.charges_account_id); return a ? `${a.code} ${a.name}` : '—'; })()}</Text></div>
           )}
-          {gap > 0.004 && (
+          {gap > 0.004 && !readOnly && (
             <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <Text>{payment.direction === 'out' ? 'Not for the bills' : `Still owed on ${shortDoc?.number}`}: <b>{M(gap)}</b> — book it to</Text>
               <Select style={{ minWidth: 280 }} showSearch optionFilterProp="label" value={gapTo} onChange={setGapTo} options={gapOptions} placeholder="Choose an account" />
