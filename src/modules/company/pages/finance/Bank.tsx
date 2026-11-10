@@ -3,7 +3,7 @@ import {
   Select, Space, Button, Table, Tag, Card, Statistic, Upload, Modal, Form, DatePicker, Input, InputNumber, Segmented, message, Empty,
   Typography, Popconfirm, Tabs, Alert, Checkbox,
 } from 'antd';
-import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined, EditOutlined , PaperClipOutlined } from '@ant-design/icons';
+import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined, EditOutlined, PaperClipOutlined, StopOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, pictureStatementPref, companyFileService, type BankTxn, type Payment } from '../../../../services/finance';
 import { statementPeriod } from '../../../../data/documents';
@@ -28,8 +28,11 @@ const { Text } = Typography;
 /** Bank: statement lines (typed in or imported from CSV), matched to payments, invoices, bills or accounts. */
 export function Bank({ data }: { data: FinanceData }) {
   const { companyId, currency, accounts } = data;
-  const banks = accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash'));
-  const [accountId, setAccountId] = useState<number | null>(() => banks.find(b => b.subtype === 'bank')?.id ?? banks[0]?.id ?? null);
+  // open accounts first; closed ones stay listed to look back at, but take nothing new
+  const allBanks = accounts.filter(a => a.subtype === 'bank' || a.subtype === 'cash');
+  const banks = allBanks.filter(a => !a.archived);
+  const closedBanks = allBanks.filter(a => a.archived);
+  const [accountId, setAccountId] = useState<number | null>(() => banks.find(b => b.subtype === 'bank')?.id ?? banks[0]?.id ?? closedBanks[0]?.id ?? null);
   const [txns, setTxns] = useState<BankTxn[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [look, setLook] = useState<MatchLookup>({ journals: [], payments: [], allocations: [], docs: [] });
@@ -63,6 +66,9 @@ export function Bank({ data }: { data: FinanceData }) {
   const [fxMatch, setFxMatch] = useState<BankTxn | null>(null);
   const [matching, setMatching] = useState<BankTxn | null>(null);
   const account = accounts.find(a => a.id === accountId);
+  // a closed account: its history can be viewed, nothing new added or changed
+  const closed = !!account?.archived;
+  const bankLabel = (b: Account) => `${b.name}${b.bank_account_no ? ` (${b.bank_account_no})` : ''}${b.currency && b.currency !== currency ? ` · ${b.currency}` : ''}`;
   // a bank account can be in another currency; the books stay in the company's currency
   const accCur = account?.currency || currency;
   const foreign = accCur !== currency;
@@ -228,9 +234,29 @@ export function Bank({ data }: { data: FinanceData }) {
     <div>
       <Space wrap style={{ marginBottom: 12 }}>
         <Select style={{ width: 280 }} value={accountId ?? undefined} onChange={setAccountId}
-          options={banks.map(b => ({ value: b.id, label: `${b.name}${b.bank_account_no ? ` (${b.bank_account_no})` : ''}${b.currency && b.currency !== currency ? ` · ${b.currency}` : ''}` }))} />
-        <Button icon={<EditOutlined />} onClick={() => account && setBankEdit(account)} title="Edit this bank account" />
-        {account && !used && !Number(account.opening_balance) && !Number(account.opening_foreign) && banks.length > 1 && (
+          options={[
+            ...banks.map(b => ({ value: b.id, label: bankLabel(b) })),
+            ...(closedBanks.length ? [{ label: 'Closed', options: closedBanks.map(b => ({ value: b.id, label: `${bankLabel(b)} · closed` })) }] : []),
+          ] as any} />
+        {!closed && <Button icon={<EditOutlined />} onClick={() => account && setBankEdit(account)} title="Edit this bank account" />}
+        {account && !closed && used && (
+          <Popconfirm title={`Close ${account.name}?`} okText="Close account"
+            description={<div style={{ maxWidth: 320 }}>Its lines and history stay and can still be viewed; no new lines, imports or matches.
+              {Math.abs(statementBalance) > 0.004 && <div style={{ marginTop: 6, color: '#faad14' }}>The balance per statement is {num(statementBalance)}, not 0.</div>}</div>}
+            onConfirm={async () => { try { await accountService.setClosed(account.id, true); message.success(`${account.name} closed`); data.reload(); } catch (e: any) { message.error(e.message); } }}>
+            <Button icon={<StopOutlined />}>Close account</Button>
+          </Popconfirm>
+        )}
+        {account && closed && (
+          <>
+            <Tag color="default" style={{ marginInlineEnd: 0 }}>Closed — view only</Tag>
+            <Popconfirm title={`Reopen ${account.name}?`} okText="Reopen"
+              onConfirm={async () => { try { await accountService.setClosed(account.id, false); message.success(`${account.name} reopened`); data.reload(); } catch (e: any) { message.error(e.message); } }}>
+              <Button>Reopen</Button>
+            </Popconfirm>
+          </>
+        )}
+        {account && !closed && !used && !Number(account.opening_balance) && !Number(account.opening_foreign) && banks.length > 1 && (
           <Popconfirm title={`Delete ${account.name}?`} description="It has no activity, so nothing else changes."
             onConfirm={async () => {
               try {
@@ -244,8 +270,8 @@ export function Bank({ data }: { data: FinanceData }) {
           </Popconfirm>
         )}
         <Button icon={<PlusOutlined />} onClick={() => setBankEdit({})}>Bank account</Button>
-        <Upload accept=".csv,text/csv,.pdf,application/pdf,.png,.jpg,.jpeg,.webp" showUploadList={false} beforeUpload={onFile}><Button icon={<UploadOutlined />}>Import statement (PDF or CSV)</Button></Upload>
-        <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>Add a line</Button>
+        {!closed && <Upload accept=".csv,text/csv,.pdf,application/pdf,.png,.jpg,.jpeg,.webp" showUploadList={false} beforeUpload={onFile}><Button icon={<UploadOutlined />}>Import statement (PDF or CSV)</Button></Upload>}
+        {!closed && <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>Add a line</Button>}
       </Space>
       {/* the summary cards share one row and are all the same height */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 12 }}>
@@ -282,7 +308,7 @@ export function Bank({ data }: { data: FinanceData }) {
           { title: 'Balance', key: 'bal', align: 'right' as const, width: 150, render: (_, t) => (running.has(t.id) ? num(running.get(t.id)!) : '') },
           { title: 'Matched to', key: 'm', width: 220, render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : matchLabel(t, data, look)?.accounts || '' },
           {
-            title: '', key: 'a', width: 210, render: (_, t) => t.status === ('expected' as any) ? (
+            title: '', key: 'a', width: 210, render: (_, t) => closed ? null : t.status === ('expected' as any) ? (
               // recorded in Quantivra (e.g. a transfer from another bank): Match = it's on the statement
               foreign ? <Button size="small" type="primary" icon={<LinkOutlined />} onClick={() => setFxMatch(t)}>Match</Button> : (
               <Popconfirm title="Is this on the bank statement?" okText="Yes, match"
@@ -403,7 +429,7 @@ export function Bank({ data }: { data: FinanceData }) {
             showImport(lines);
           }} />
       )}
-      {details && <MatchDetails data={data} txn={details} look={look} accCur={accCur} onClose={() => setDetails(null)} onFilesChanged={loadWithFiles}
+      {details && <MatchDetails data={data} txn={details} look={look} accCur={accCur} onClose={() => setDetails(null)} onFilesChanged={loadWithFiles} readOnly={closed}
         onChanged={() => { setDetails(null); load(); data.reload(); }} />}
       {matching && <MatchModal data={data} txn={matching} accCur={accCur} dues={dues} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
         recorded={expected} lastRate={lastRate}

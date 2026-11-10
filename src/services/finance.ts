@@ -263,6 +263,10 @@ export const accountService = {
     if (a.id) { must(await supabase.from('fin_accounts').update(row).eq('id', a.id)); return a.id; }
     return must(await supabase.from('fin_accounts').insert(row).select('id').single()).id;
   },
+  /** Close a bank account (its history stays; nothing new can be added) or reopen it. */
+  async setClosed(id: number, closed: boolean) {
+    must(await supabase.from('fin_accounts').update({ archived: closed }).eq('id', id));
+  },
   async remove(id: number) {
     const { error } = await supabase.from('fin_accounts').delete().eq('id', id);
     if (error) throw new Error(/foreign key|violates/i.test(error.message) ? 'This account is used, so it can’t be deleted. Archive it instead.' : error.message);

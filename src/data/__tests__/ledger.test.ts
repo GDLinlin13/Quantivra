@@ -224,3 +224,13 @@ describe('a payment with a difference booked elsewhere', () => {
     expect(bal(es, '1000')).toBe(6165);
   });
 });
+
+describe('closing a bank account', () => {
+  it('keeps its history where it was', () => {
+    const closed = input.accounts.map(a => (a.code === '1000' ? { ...a, archived: true } : a));
+    const other = [...closed, { ...closed.find(a => a.code === '1000')!, id: 999, code: '1001', name: 'New bank', archived: false, opening_balance: 0 }];
+    const es = buildLedger({ ...input, accounts: other } as any);
+    expect(balances(other, es).find(b => b.account.code === '1000')!.balance).toBe(10000 + 1000 - 50 - 10);
+    expect(balances(other, es).find(b => b.account.code === '1001')!.balance).toBe(0);
+  });
+});
