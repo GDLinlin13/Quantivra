@@ -1,4 +1,5 @@
 import type { CatalogItem, StockAdjustment, CustomerPrice } from '../data/catalog';
+import { shrinkFile } from '../utils/shrinkFile';
 import { supabase } from '../utils/supabase';
 import {
   docTotals, statusAfterPayment, bankCodePlan, chartUpgrade, defaultAccountsFor, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
@@ -82,7 +83,17 @@ export const contentTypeOf = (file: File) => {
   const ext = (file.name.split('.').pop() || '').toLowerCase();
   return MIME_BY_EXT[ext] || file.type || 'application/octet-stream';
 };
-export const ATTACH_MAX_MB = 10;
+export const ATTACH_MAX_MB = 50;
+
+/** Shrink pictures, then check the size; storage's own limit is 50 MB from database update 035 (10 MB before). */
+async function readyToUpload(original: File): Promise<File> {
+  const file = await shrinkFile(original);
+  if (file.size > ATTACH_MAX_MB * 1024 * 1024) throw new Error(`${original.name} is bigger than ${ATTACH_MAX_MB} MB`);
+  return file;
+}
+const uploadError = (file: File, msg: string) =>
+  /exceed|too large|maximum allowed size|payload/i.test(msg) ? `${file.name} is too big for the current limit (10 MB). Files up to 50 MB need database update 035 — ask your administrator to run it in Supabase.`
+    : /mime|type/i.test(msg) ? `${file.name}: only PDF, pictures and Microsoft Office (Word, Excel, PowerPoint) files can be uploaded` : msg;
 
 export const attachmentService = {
   async list(documentId: number): Promise<Attachment[]> {
@@ -90,12 +101,12 @@ export const attachmentService = {
     return r.error ? [] : r.data || [];
   },
   /** Upload a file into "<company>/<document>/…" and record it. */
-  async add(companyId: number, documentId: number, file: File): Promise<void> {
-    if (file.size > ATTACH_MAX_MB * 1024 * 1024) throw new Error(`${file.name} is bigger than ${ATTACH_MAX_MB} MB`);
+  async add(companyId: number, documentId: number, original: File): Promise<void> {
+    const file = await readyToUpload(original);
     const safe = file.name.replace(/[^\w.\- ]+/g, '_').slice(-80);
     const path = `${companyId}/${documentId}/${Date.now()}-${safe}`;
     const up = await supabase.storage.from(ATTACH_BUCKET).upload(path, file, { contentType: contentTypeOf(file), upsert: false });
-    if (up.error) throw new Error(/bucket|not found/i.test(up.error.message) ? 'Attachments need database update 028 — ask your administrator to run it in Supabase.' : /mime|type/i.test(up.error.message) ? `${file.name}: only PDF, pictures and Microsoft Office (Word, Excel, PowerPoint) files can be uploaded` : up.error.message);
+    if (up.error) throw new Error(/bucket|not found/i.test(up.error.message) ? 'Attachments need database update 028 — ask your administrator to run it in Supabase.' : uploadError(file, up.error.message));
     const r = await supabase.from('fin_attachments').insert({ company_id: companyId, document_id: documentId, path, file_name: file.name, content_type: contentTypeOf(file), size_bytes: file.size });
     if (r.error) { await supabase.storage.from(ATTACH_BUCKET).remove([path]); throw new Error(r.error.message); }
   },
@@ -132,12 +143,12 @@ export const companyFileService = {
     const r = await supabase.from('company_files').select('*').eq('company_id', companyId).order('created_at', { ascending: false });
     return r.error ? [] : r.data || [];
   },
-  async add(companyId: number, file: File, meta: { folder: 'bank' | 'other' | 'journal'; account_id?: number | null; period?: string | null; subfolder?: string | null; journal_id?: number | null }) {
-    if (file.size > ATTACH_MAX_MB * 1024 * 1024) throw new Error(`${file.name} is bigger than ${ATTACH_MAX_MB} MB`);
+  async add(companyId: number, original: File, meta: { folder: 'bank' | 'other' | 'journal'; account_id?: number | null; period?: string | null; subfolder?: string | null; journal_id?: number | null }) {
+    const file = await readyToUpload(original);
     const safe = file.name.replace(/[^\w.\- ]+/g, '_').slice(-80);
     const path = `${companyId}/files/${Date.now()}-${safe}`;
     const up = await supabase.storage.from(ATTACH_BUCKET).upload(path, file, { contentType: contentTypeOf(file), upsert: false });
-    if (up.error) throw new Error(/mime|type/i.test(up.error.message) ? `${file.name}: only PDF, pictures and Microsoft Office (Word, Excel, PowerPoint) files can be uploaded` : up.error.message);
+    if (up.error) throw new Error(uploadError(file, up.error.message));
     const r = await supabase.from('company_files').insert({
       company_id: companyId, folder: meta.folder, account_id: meta.account_id ?? null, period: meta.period ?? null,
       path, file_name: file.name, content_type: contentTypeOf(file), size_bytes: file.size,
