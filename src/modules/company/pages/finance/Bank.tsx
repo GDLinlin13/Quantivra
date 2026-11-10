@@ -558,9 +558,14 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   // a document in the bank's own currency is compared in that currency; anything else in the company's currency
   const inBankCur = (d: FinDocument) => isForeignDoc(d, data.currency) && d.currency === accCur;
   const sameAmount = (d: FinDocument) => inBankCur(d) ? Math.abs(balanceDue(d) - lineAmt) < 0.005 : Math.abs(inBase(d, balanceDue(d)) - amt) < 0.005;
+  // a bill is known by the supplier's invoice number (its reference); an invoice by our own number
+  const docNo = (d: FinDocument) => (!inbound && d.reference ? d.reference : d.number);
+  const bankText = (txn.description || '').toUpperCase().replace(/\s+/g, '');
+  const named = (d: FinDocument) => [d.reference, d.number].some(n => n && n.replace(/\s+/g, '').length >= 3 && bankText.includes(n.toUpperCase().replace(/\s+/g, '')));
   const openDocs: FinDocument[] = data.docs.filter(d => (inbound ? d.doc_type === 'invoice' : ['bill', 'expense'].includes(d.doc_type))
     && !['draft', 'void', 'paid'].includes(d.status) && balanceDue(d) > 0)
-    .sort((a, b) => Number(!sameAmount(a)) - Number(!sameAmount(b)));
+    // the bill / invoice the bank text names (e.g. "INV25-A03") first, then the same amount
+    .sort((a, b) => Number(!named(a)) - Number(!named(b)) || Number(!sameAmount(a)) - Number(!sameAmount(b)));
   const contact = (id: number | null) => data.contacts.find(c => c.id === id)?.name || '';
   const bookable = data.accounts.filter((a: Account) => !a.archived && a.id !== txn.account_id);
   // money in: income first, never expenses; money out: expenses first, never income — then banks, loans, capital…
@@ -652,7 +657,8 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                 <Table rowKey="id" size="small" pagination={{ pageSize: 8, hideOnSinglePage: true }} dataSource={openDocs}
                   rowSelection={{ type: 'radio', selectedRowKeys: docId ? [docId] : [], onChange: k => setDocId(Number(k[0])) }}
                   columns={[
-                    { title: 'Number', dataIndex: 'number' }, { title: 'Date', dataIndex: 'issue_date' },
+                    { title: inbound ? 'Number' : 'Invoice no.', key: 'no', render: (_, d) => <span style={{ fontWeight: named(d) ? 700 : 400 }}>{docNo(d)}</span> },
+                    { title: 'Date', dataIndex: 'issue_date' },
                     { title: inbound ? 'Customer' : 'Supplier', key: 'c', render: (_, d) => contact(d.contact_id) },
                     { title: 'Still owed', key: 'b', align: 'right' as const, render: (_, d) => <span style={{ fontWeight: sameAmount(d) ? 700 : 400 }}>{money(balanceDue(d), d.currency || data.currency)}{isForeignDoc(d, data.currency) && !inBankCur(d) && <Text type="secondary"> ≈ {money(inBase(d, balanceDue(d)), data.currency)}</Text>}</span> },
                   ]} />
