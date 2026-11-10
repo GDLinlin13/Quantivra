@@ -34,3 +34,14 @@ describe('templates belong to each company', () => {
     expect(ownLayout('payslip', null, 'AE')).toBeUndefined();
   });
 });
+
+describe('Hong Kong payslip MPF', () => {
+  it('has MPF fields, an MPF section to start from, and example figures', () => {
+    expect(docFields('payslip', 'HK').map(f => f.name)).toEqual(expect.arrayContaining(['mpf_employer', 'mpf_employee', 'mpf_total']));
+    expect(docFields('payslip', 'SG').some(f => f.name.startsWith('mpf'))).toBe(false);
+    expect(texts(STARTER_LAYOUTS.payslip('HK', null))).toMatch(/Employer MPF.*mpf_employer.*Employee MPF.*mpf_employee.*Total MPF contribution.*mpf_total/);
+    const s = sampleData('payslip', { country: 'HK', currency: 'HKD' }, null);
+    expect(s.fields.mpf_total).toBe('HKD 950.00');
+    expect(s.lists.statutory[0].name).toBe('MPF');
+  });
+});
