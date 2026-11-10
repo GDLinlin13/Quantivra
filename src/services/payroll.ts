@@ -166,8 +166,13 @@ export const payrollService = {
       created_by: createdBy ?? null,
     };
     let runId: number;
+    // re-running a month keeps the bank details each payslip was paid to (not the employee's newer account)
+    let paidTo = new Map<number, { bankMasked: string | null; bankName: string | null }>();
     if (existing.data) {
       runId = existing.data.id;
+      const old = await supabase.from('payslips').select('employee_id, result_json').eq('run_id', runId);
+      paidTo = new Map((old.data || []).filter((p: any) => p.result_json?.bankMasked)
+        .map((p: any) => [Number(p.employee_id), { bankMasked: p.result_json.bankMasked, bankName: p.result_json.bankName ?? null }]));
       await supabase.from('payroll_runs').update(runPayload).eq('id', runId);
       await supabase.from('payslips').delete().eq('run_id', runId);
     } else {
@@ -191,7 +196,7 @@ export const payrollService = {
         earnings_json: r.earnings, deductions_json: r.deductions, employer_json: r.employerCosts,
         statutory_json: r.statutoryContributions,
         result_json: {
-          ...r, bankMasked: mask(e?.bank_account), bankName: e?.bank_name ?? null,
+          ...r, ...(paidTo.get(Number(r.employeeId)) || { bankMasked: mask(e?.bank_account), bankName: e?.bank_name ?? null }),
           designation: e?.job_title ?? null, department: e?.department_name ?? null, idMasked: mask(e?.national_id),
         },
         status: r.status, errors: r.errors ?? null,
