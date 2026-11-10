@@ -9,6 +9,8 @@ export interface NumberingFormat {
   format: string;
   next: number;
   reset?: NumberReset;
+  /** typed in by hand on each document instead of counted (sales documents) */
+  manual?: boolean;
 }
 
 export function formatDocumentNumber(format: string, n: number, date = new Date()): string {

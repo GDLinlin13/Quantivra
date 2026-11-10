@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Card, Table, Input, InputNumber, Select, Button, Space, Typography, message, Tooltip } from 'antd';
+import { Card, Table, Input, InputNumber, Select, Button, Space, Typography, message, Tooltip, Switch } from 'antd';
 import { PlusOutlined, DeleteOutlined, WarningOutlined } from '@ant-design/icons';
 import { supabase } from '../../../../utils/supabase';
 import { formatDocumentNumber, validateFormat, DOCUMENT_LABELS, type NumberingFormat } from '../../../../utils/numbering';
 
 const { Text, Title } = Typography;
+/** documents whose number can be typed in on each one instead (the editor has a box for it) */
+const CAN_TYPE = ['invoice', 'quotation', 'credit_note'];
 
 const DEFAULTS: NumberingFormat[] = [
   { entity: 'employee', format: 'EMP-{0000}', next: 1, reset: 'never' },
@@ -62,21 +64,25 @@ export function DocumentNumbersCard({ companyId }: { companyId: number }) {
               const issues = validateFormat(r.format);
               return (
                 <Space>
-                  <Input value={r.format} style={{ fontFamily: 'monospace', width: 200 }} status={issues.length ? 'error' : undefined}
+                  <Input value={r.format} disabled={r.manual} style={{ fontFamily: 'monospace', width: 200 }} status={issues.length ? 'error' : undefined}
                     onChange={e => update(i, { format: e.target.value })} />
                   {issues.length > 0 && <Tooltip title={issues.join('. ')}><WarningOutlined style={{ color: '#ff9aa2' }} /></Tooltip>}
                 </Space>
               );
             },
           },
-          { title: 'Next number', key: 'next', render: (_, r, i) => <InputNumber min={1} value={r.next} onChange={v => update(i, { next: Number(v) || 1 })} /> },
+          { title: 'Next number', key: 'next', render: (_, r, i) => <InputNumber min={1} value={r.next} disabled={r.manual} onChange={v => update(i, { next: Number(v) || 1 })} /> },
           {
             title: 'Start again from 1', key: 'reset', render: (_, r, i) => (
-              <Select value={r.reset || 'never'} style={{ width: 140 }} onChange={v => update(i, { reset: v })}
+              <Select value={r.reset || 'never'} disabled={r.manual} style={{ width: 140 }} onChange={v => update(i, { reset: v })}
                 options={[{ value: 'never', label: 'Never' }, { value: 'yearly', label: 'Every year' }, { value: 'monthly', label: 'Every month' }]} />
             ),
           },
-          { title: 'Next one will be', key: 'preview', render: (_, r) => <Text code>{validateFormat(r.format).length ? '—' : formatDocumentNumber(r.format, r.next)}</Text> },
+          {
+            title: 'Typed in', key: 'manual', render: (_, r, i) => CAN_TYPE.includes(r.entity)
+              ? <Switch checked={!!r.manual} onChange={v => update(i, { manual: v })} /> : null,
+          },
+          { title: 'Next one will be', key: 'preview', render: (_, r) => r.manual ? <Text type="secondary">Typed in on each one</Text> : <Text code>{validateFormat(r.format).length ? '—' : formatDocumentNumber(r.format, r.next)}</Text> },
           { title: '', key: 'del', render: (_, _r, i) => <Button size="small" icon={<DeleteOutlined />} onClick={() => setRows(rs => rs.filter((_, j) => j !== i))} /> },
         ]}
       />

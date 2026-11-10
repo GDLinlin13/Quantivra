@@ -6,7 +6,7 @@ import { docService, paymentService, catalogService, attachmentService, latestRa
 import { companyFileService } from '../../../../services/finance';
 import { FileViewer } from '../../../../components/FileViewer';
 import {
-  docTotals, addDays, today, DOC_LABEL, STATUS_LABEL, STATUS_COLOR,
+  docTotals, addDays, today, DOC_LABEL, DOC_NUMBER_ENTITY, STATUS_LABEL, STATUS_COLOR,
   type DocType, type FinDocument, type DocLine, type DocDiscount, type Contact, type ContactPerson, type FinanceSettings, type Account,
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
@@ -57,6 +57,10 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
   }, [docId]);
 
   const set = (patch: Partial<FinDocument>) => setDoc(d => ({ ...d, ...patch }));
+  // the number typed in on each document instead of counted (Settings → Document numbers), for sales documents
+  const [typed, setTyped] = useState<Set<string>>(new Set());
+  useEffect(() => { docService.typedNumbers(companyId).then(setTyped).catch(() => null); }, [companyId]);
+  const typedNumber = sales && typed.has(DOC_NUMBER_ENTITY[docType]);
   const setLine = (i: number, patch: Partial<DocLine>) => setLines(ls => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   const t = useMemo(() => docTotals(lines, discounts, !!doc.tax_inclusive), [lines, discounts, doc.tax_inclusive]);
   const M = (n: number) => money(n, doc.currency || currency);
@@ -154,10 +158,11 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
   const save = async (status?: string) => {
     if (docType !== 'expense' && !doc.contact_id) { message.error(sales ? 'Choose a customer' : 'Choose a supplier'); return; }
     if (!lines.some(l => (l.description || '').trim() || l.item_id || Number(l.unit_price))) { message.error('Add at least one line'); return; }
+    if (typedNumber && !(doc.number || '').trim()) { message.error(`Enter the ${DOC_LABEL[docType].toLowerCase()} number`); return; }
     if (foreign && !(Number(doc.fx_rate) > 0)) { message.error(`Enter the exchange rate: 1 ${docCur} = ? ${currency}`); return; }
     setSaving(true);
     try {
-      const id = await docService.save(companyId, { ...doc, doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines);
+      const id = await docService.save(companyId, { ...doc, ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines);
       // An expense paid on the spot (from a bank / cash account) is recorded as paid straight away.
       if (docType === 'expense' && doc.paid_from_account_id && (status === 'approved' || doc.status === 'approved')) {
         const { doc: fresh } = await docService.get(id);
@@ -177,7 +182,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
       for (const f of pendingFiles) { try { await attachmentService.add(companyId, id, f); } catch (e: any) { message.error(e.message); } }
       message.success(`${DOC_LABEL[docType]} saved`);
       onSaved(id);
-    } catch (e: any) { message.error(e.message); }
+    } catch (e: any) { message.error(/duplicate|unique/i.test(e.message) ? `${DOC_LABEL[docType]} number ${doc.number} is already used` : e.message); }
     setSaving(false);
   };
 
@@ -239,9 +244,15 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
                 options={payFrom.map(a => ({ value: a.id, label: a.name }))} placeholder="Not paid yet" />
             </Form.Item>
           )}
-          <Form.Item label={sales ? 'Reference / PO no.' : 'Invoice no.'}>
-            <Input value={doc.reference || ''} onChange={e => set({ reference: e.target.value })} />
-          </Form.Item>
+          {typedNumber ? (
+            <Form.Item label={`${DOC_LABEL[docType]} no.`} required>
+              <Input value={doc.number || ''} onChange={e => set({ number: e.target.value })} />
+            </Form.Item>
+          ) : (
+            <Form.Item label={sales ? 'Reference / PO no.' : 'Invoice no.'}>
+              <Input value={doc.reference || ''} onChange={e => set({ reference: e.target.value })} />
+            </Form.Item>
+          )}
         </div>
         {currencies.length > 1 && (
           <Space wrap align="center" style={{ marginBottom: 12 }}>
@@ -256,7 +267,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
             {foreign && Number(doc.fx_rate) > 0 && <Text type="secondary">= {money(Math.round(t.total * Number(doc.fx_rate) * 100) / 100, currency)}</Text>}
           </Space>
         )}
-        {docId && doc.number && <Text type="secondary" style={{ display: 'block', marginTop: -8, marginBottom: 8 }}>Number {doc.number}</Text>}
+        {docId && doc.number && !typedNumber && <Text type="secondary" style={{ display: 'block', marginTop: -8, marginBottom: 8 }}>Number {doc.number}</Text>}
       </Form>
 
       <Table rowKey="_row" size="small" pagination={false} dataSource={lines.map((l, i) => ({ ...l, _row: i }))}

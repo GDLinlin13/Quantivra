@@ -287,6 +287,12 @@ export const docService = {
     const lines = must(await supabase.from('fin_document_lines').select('*').eq('document_id', id).order('position')) || [];
     return { doc, lines };
   },
+  /** Document kinds whose number is typed in on each document (Settings → Document numbers → Typed in). */
+  async typedNumbers(companyId: number): Promise<Set<string>> {
+    const { data } = await supabase.from('company_settings').select('value')
+      .eq('company_id', companyId).eq('category', 'company').eq('key', 'numbering_formats').maybeSingle();
+    return new Set((Array.isArray(data?.value) ? data!.value as any[] : []).filter(r => r?.manual).map(r => String(r.entity)));
+  },
   async nextNumber(companyId: number, type: DocType, date?: string): Promise<string> {
     return must(await supabase.rpc('fin_next_number', { p_company_id: companyId, p_entity: DOC_NUMBER_ENTITY[type], ...(date ? { p_date: date } : {}) }));
   },
