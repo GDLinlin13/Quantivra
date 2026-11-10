@@ -423,7 +423,7 @@ export function Bank({ data }: { data: FinanceData }) {
             <Alert type="warning" showIcon style={{ marginBottom: 8 }}
               title={`${importing.filter(l => !l.sure).length} lines are marked “check”: the statement didn't show a running balance for them, so money in / out was guessed. Flip any that are wrong.`} />
           )}
-          <Table size="small" rowKey={(_l: ImportLine) => importing.indexOf(_l)} pagination={{ pageSize: 12 }} dataSource={importing}
+          <Table size="small" tableLayout="fixed" rowKey={(_l: ImportLine) => importing.indexOf(_l)} pagination={{ pageSize: 12 }} dataSource={importing}
             columns={[
               { title: 'Date', dataIndex: 'txn_date', width: 110 },
               { title: 'Description', dataIndex: 'description' },
@@ -431,7 +431,9 @@ export function Bank({ data }: { data: FinanceData }) {
               {
                 title: 'Matches', key: 'm', width: 170, render: (_: any, l: ImportLine) => {
                   const p = plan[importing.indexOf(l)];
-                  return p?.kind === 'keyed' ? <Tag color="blue">Your line: {p.existing.description || '—'}</Tag>
+                  // long texts wrap inside the column instead of stretching the table
+                  const d = p?.kind === 'keyed' ? p.existing.description || '—' : '';
+                  return p?.kind === 'keyed' ? <Tag color="blue" title={d} style={{ whiteSpace: 'normal', maxWidth: '100%' }}>Your line: {d.length > 60 ? `${d.slice(0, 60)}…` : d}</Tag>
                     : p?.kind === 'recorded' ? <Tag color="green">Recorded transfer</Tag> : '';
                 },
               },
