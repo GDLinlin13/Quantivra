@@ -60,7 +60,7 @@ const th = { textAlign: 'left' as const, padding: '6px 8px', borderBottom: '2px 
 const td = { padding: '4px 8px', borderBottom: '1px solid #eee', fontSize: 13 };
 const num = { ...td, textAlign: 'right' as const, whiteSpace: 'nowrap' as const };
 
-function Sheet({ id, title, subtitle, company, children }: { id: string; title: string; subtitle: string; company: string; children: ReactNode }) {
+function Sheet({ id, title, subtitle, company, currency, children }: { id: string; title: string; subtitle: string; company: string; currency?: string; children: ReactNode }) {
   const print = () => {
     const el = document.getElementById(id);
     const w = el && window.open('', '_blank', 'width=900,height=1000');
@@ -73,7 +73,8 @@ function Sheet({ id, title, subtitle, company, children }: { id: string; title: 
       <div id={id} style={sheet}>
         <div style={{ fontSize: 12, color: '#666' }}>{company}</div>
         <div style={{ fontSize: 18, fontWeight: 700 }}>{title}</div>
-        <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>{subtitle}</div>
+        {/* the currency once, at the top (the amounts below are plain numbers) */}
+        <div style={{ fontSize: 12, color: '#666', marginBottom: 12, display: 'flex', justifyContent: 'space-between' }}><span>{subtitle}</span>{currency && <b style={{ color: '#333' }}>{currency}</b>}</div>
         {children}
       </div>
       <Button icon={<PrinterOutlined />} style={{ marginTop: 8 }} onClick={print}>Print / save as PDF</Button>
@@ -88,7 +89,8 @@ function Reports({ data, input, entries, reload }: { data: FinanceData; input: L
   const [report, setReport] = useState('pl');
   const [range, setRange] = useState<[Dayjs, Dayjs]>(PRESETS['This year']());
   const cur = data.currency;
-  const M = (n: number) => money(n, cur);
+  // amounts without the currency: it is shown once at the top of each report
+  const M = (n: number) => money(n, cur, 'number');
   const from = range[0].format('YYYY-MM-DD'), to = range[1].format('YYYY-MM-DD');
   const period = `${range[0].format('D MMM YYYY')} – ${range[1].format('D MMM YYYY')}`;
   const asAt = `As at ${range[1].format('D MMM YYYY')}`;
@@ -108,7 +110,7 @@ function Reports({ data, input, entries, reload }: { data: FinanceData; input: L
   if (report === 'pl') {
     const pl = profitAndLoss(input.accounts, entries, from, to);
     body = (
-      <Sheet id="rep-pl" title="Profit and loss" subtitle={period} company={company}>
+      <Sheet id="rep-pl" title="Profit and loss" subtitle={period} company={company} currency={cur}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>
           {section('Income', pl.income, pl.totalIncome)}
           {section('Expenses', pl.expenses, pl.totalExpenses)}
@@ -120,14 +122,19 @@ function Reports({ data, input, entries, reload }: { data: FinanceData; input: L
   } else if (report === 'bs') {
     const bs = balanceSheet(input.accounts, entries, to);
     body = (
-      <Sheet id="rep-bs" title="Balance sheet" subtitle={asAt} company={company}>
+      <Sheet id="rep-bs" title="Balance sheet" subtitle={asAt} company={company} currency={cur}>
         {!bs.balanced && <Alert type="warning" showIcon style={{ marginBottom: 8 }} title="The balance sheet doesn't balance — check journal entries and opening balances." />}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>
           {section('Assets', bs.assets, bs.totalAssets)}
           {section('Liabilities', bs.liabilities, bs.totalLiabilities)}
           <tr><td colSpan={2} style={{ ...td, fontWeight: 700, padding: '12px 8px 4px', borderBottom: 'none' }}>Equity</td></tr>
-          {bs.equity.map(r => <tr key={r.account.id}><td style={{ ...td, padding: '4px 8px 4px 20px' }}>{r.account.code} {r.account.name}</td><td style={num}>{M(r.balance)}</td></tr>)}
-          <tr><td style={{ ...td, padding: '4px 8px 4px 20px' }}>Profit to date (not yet moved to retained earnings)</td><td style={num}>{M(bs.earnings)}</td></tr>
+          {bs.equity.filter(r => r.account.subtype !== 'retained').map(r => <tr key={r.account.id}><td style={{ ...td, padding: '4px 8px 4px 20px' }}>{r.account.code} {r.account.name}</td><td style={num}>{M(r.balance)}</td></tr>)}
+          {/* retained earnings: what was carried in plus every profit / loss so far (nothing to move by hand) */}
+          {(() => {
+            const acc = input.accounts.find(a => a.subtype === 'retained');
+            const carried = bs.equity.find(r => r.account.subtype === 'retained')?.balance || 0;
+            return <tr><td style={{ ...td, padding: '4px 8px 4px 20px' }}>{acc ? `${acc.code} ${acc.name}` : 'Retained earnings'}</td><td style={num}>{M(Math.round((carried + bs.earnings) * 100) / 100)}</td></tr>;
+          })()}
           <tr><td style={{ ...td, fontWeight: 600 }}>Total equity</td><td style={{ ...num, fontWeight: 600 }}>{M(bs.totalEquity)}</td></tr>
           <tr><td style={{ ...td, fontWeight: 700, borderTop: '2px solid #333' }}>Liabilities and equity</td><td style={{ ...num, fontWeight: 700, borderTop: '2px solid #333' }}>{M(bs.totalLiabilities + bs.totalEquity)}</td></tr>
         </tbody></table>
@@ -139,7 +146,7 @@ function Reports({ data, input, entries, reload }: { data: FinanceData; input: L
       <tr><td style={{ ...td, width: 70, color: '#666' }}>{box}</td><td style={{ ...td, fontWeight: bold ? 700 : 400 }}>{label}</td><td style={{ ...num, fontWeight: bold ? 700 : 400 }}>{M(v)}</td></tr>
     );
     body = (
-      <Sheet id="rep-gst" title="GST return (F5)" subtitle={period} company={company}>
+      <Sheet id="rep-gst" title="GST return (F5)" subtitle={period} company={company} currency={cur}>
         {!data.settings.gstRegistered && <Alert type="info" showIcon style={{ marginBottom: 8 }} title="GST is switched off in GST & settings, so new documents don't charge GST." />}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>
           {row('Box 1', 'Total value of standard-rated supplies', g.box1_standard)}
@@ -163,7 +170,7 @@ function Reports({ data, input, entries, reload }: { data: FinanceData; input: L
       : [];
     body = (
       <>
-      <Sheet id={`rep-${report}`} title={report === 'ar' ? 'Customers owe us (aged)' : 'We owe'} subtitle={asAt} company={company}>
+      <Sheet id={`rep-${report}`} title={report === 'ar' ? 'Customers owe us (aged)' : 'We owe'} subtitle={asAt} company={company} currency={cur}>
         {report === 'ap' && <div style={{ fontWeight: 700, margin: '4px 0' }}>Suppliers and expenses</div>}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th style={th}>{report === 'ar' ? 'Customer' : 'Supplier'}</th>{heads.map(h => <th key={h} style={{ ...th, textAlign: 'right' }}>{h}</th>)}<th style={{ ...th, textAlign: 'right' }}>Total</th></tr></thead>
@@ -197,7 +204,7 @@ function Reports({ data, input, entries, reload }: { data: FinanceData; input: L
     const b = balances(input.accounts, entries, undefined, to).filter(x => x.debit || x.credit);
     const dr = b.reduce((s, x) => s + Math.max(0, x.debit - x.credit), 0), cr = b.reduce((s, x) => s + Math.max(0, x.credit - x.debit), 0);
     body = (
-      <Sheet id="rep-tb" title="Trial balance" subtitle={asAt} company={company}>
+      <Sheet id="rep-tb" title="Trial balance" subtitle={asAt} company={company} currency={cur}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th style={th}>Account</th><th style={{ ...th, textAlign: 'right' }}>Debit</th><th style={{ ...th, textAlign: 'right' }}>Credit</th></tr></thead>
           <tbody>
