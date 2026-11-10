@@ -5,6 +5,9 @@ import { companyRegLabel, nationalIdLabel, taxRegLabel } from './countries';
 const isSG = (country?: string | null) => (country || 'SG').toUpperCase() === 'SG';
 /** Singapore-only payslip fields (CPF, SDL, self-help groups). */
 const SG_ONLY_FIELDS = new Set(['cpf_employee', 'cpf_employer', 'cpf_total', 'sdl', 'shg_name', 'shg_amount']);
+/** Hong Kong-only payslip fields (MPF). */
+const HK_ONLY_FIELDS = new Set(['mpf_employee', 'mpf_employer', 'mpf_total']);
+const isHK = (country?: string | null) => (country || '').toUpperCase() === 'HK';
 
 export type DocKind = 'payslip' | 'invoice';
 
@@ -46,6 +49,9 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
     { name: 'cpf_employee', label: 'Employee CPF' },
     { name: 'cpf_employer', label: 'Employer CPF' },
     { name: 'cpf_total', label: 'Total CPF contribution (employee + employer)' },
+    { name: 'mpf_employer', label: 'Employer MPF' },
+    { name: 'mpf_employee', label: 'Employee MPF' },
+    { name: 'mpf_total', label: 'Total MPF contribution (employee + employer)' },
     { name: 'sdl', label: 'SDL (Skills Development Levy, paid by the company)' },
     { name: 'shg_name', label: 'Self-help group name (CDAC / SINDA / MBMF / ECF)' },
     { name: 'shg_amount', label: 'Self-help group amount' },
@@ -127,7 +133,7 @@ export const DOC_LISTS: Record<DocKind, ListDef[]> = {
 /** The fields offered for this company's country: CPF, SDL and self-help groups only in Singapore. */
 export function docFields(kind: DocKind, country?: string | null): FieldDef[] {
   return DOC_FIELDS[kind]
-    .filter(f => isSG(country) || !SG_ONLY_FIELDS.has(f.name))
+    .filter(f => (isSG(country) || !SG_ONLY_FIELDS.has(f.name)) && (isHK(country) || !HK_ONLY_FIELDS.has(f.name)))
     .map(f => f.name === 'company_reg_no' ? { ...f, label: companyRegLabel(country) }
       : f.name === 'employee_id_no' ? { ...f, label: `${nationalIdLabel(country)} (full)` }
       : f.name === 'employee_id_no_masked' ? { ...f, label: `${nationalIdLabel(country)} (masked)` } : f);
@@ -314,8 +320,15 @@ export const STARTER_LAYOUTS: Record<DocKind, (country?: string | null, branding
       { repeat: 'auto', cells: [[0, { v: '{{deductions.name}}', cs: 2 }], [2, { v: '{{deductions.amount}}', al: 'right' }]] },
       row('Net Pay', '{{net_pay}}', { bt: true, b: true }, { c: accent }),
       { h: 10 },
-      { cells: [[0, { v: 'Employer contributions', cs: 3, fs: 12, ...muted }]] },
-      { repeat: 'auto', cells: [[0, { v: '{{employer.name}}', cs: 2, fs: 12, ...muted }], [2, { v: '{{employer.amount}}', al: 'right', fs: 12, ...muted }]] },
+      ...(isHK(country) ? [
+        { cells: [[0, { v: 'Statutory contributions', cs: 3, c: '#888888' }]] },
+        row('Employer MPF', '{{mpf_employer}}'),
+        row('Employee MPF', '{{mpf_employee}}'),
+        row('Total MPF contribution', '{{mpf_total}}', { bt: true, b: true }),
+      ] as RowSpec : [
+        { cells: [[0, { v: 'Employer contributions', cs: 3, fs: 12, ...muted }]] },
+        { repeat: 'auto', cells: [[0, { v: '{{employer.name}}', cs: 2, fs: 12, ...muted }], [2, { v: '{{employer.amount}}', al: 'right', fs: 12, ...muted }]] },
+      ] as RowSpec),
       ...footerRows(branding, 'payslip', 3),
     ]);
   },
@@ -423,23 +436,27 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
   if (kind === 'payslip') {
     const id = sg ? 'S1234567A' : country === 'AE' ? '784-1990-1234567-1' : 'A1234567';
     const bank = sg ? 'DBS' : country === 'AE' ? 'Emirates NBD' : country === 'SA' ? 'Al Rajhi Bank' : 'HSBC';
-    const employer = sg ? [{ name: 'CPF (Employer)', amount: m(1360) }, { name: 'SDL', amount: m(11.25) }] : [{ name: 'End-of-service gratuity', amount: m(375) }];
+    const hk = country === 'HK';
+    const employer = sg ? [{ name: 'CPF (Employer)', amount: m(1360) }, { name: 'SDL', amount: m(11.25) }]
+      : hk ? [{ name: 'MPF (Employer)', amount: m(475) }] : [{ name: 'End-of-service gratuity', amount: m(375) }];
+    const ded = sg ? 1600 : hk ? 475 : 500;
     return {
       fields: {
         ...base, employee_name: 'Alice Tan', employee_code: 'EMP-001', employee_designation: 'Senior Designer', employee_department: 'Creative',
         employee_id_no: id, employee_id_no_masked: `•••••${id.slice(-4)}`, bank_name: bank, bank_account: '012-345678-9', bank_account_masked: '•••••••78-9',
-        period: 'August 2026', pay_date: '2026-08-31', gross_pay: m(9500), total_deductions: m(sg ? 1600 : 500),
-        net_pay: m(sg ? 7900 : 9000), total_employer: m(sg ? 1371.25 : 375), paid_on_behalf: '',
+        period: 'August 2026', pay_date: '2026-08-31', gross_pay: m(9500), total_deductions: m(ded),
+        net_pay: m(9500 - ded), total_employer: m(sg ? 1371.25 : hk ? 475 : 375), paid_on_behalf: '',
         ...(sg ? { cpf_employee: m(1600), cpf_employer: m(1360), cpf_total: m(2960), sdl: m(11.25), shg_name: '', shg_amount: '' } : {}),
+        ...(hk ? { mpf_employee: m(475), mpf_employer: m(475), mpf_total: m(950) } : {}),
       },
       lists: {
         earnings: [{ name: 'Basic Salary', amount: m(9000) }, { name: 'Transport Allowance', amount: m(500) }],
-        deductions: [sg ? { name: 'CPF (Employee)', amount: m(1600) } : { name: 'Salary advance', amount: m(500) }],
+        deductions: [sg ? { name: 'CPF (Employee)', amount: m(1600) } : hk ? { name: 'MPF (Employee)', amount: m(475) } : { name: 'Salary advance', amount: m(500) }],
         employer,
         statutory: sg ? [
           { name: 'CPF', employee: m(1600), employer: m(1360), total: m(2960) },
           { name: 'SDL', employee: m(0), employer: m(11.25), total: m(11.25) },
-        ] : [],
+        ] : hk ? [{ name: 'MPF', employee: m(475), employer: m(475), total: m(950) }] : [],
       },
     };
   }

@@ -59,6 +59,7 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
     const onBehalf = stat.filter(s => s.absorbedByEmployer && s.employeeTotal > 0);
     const scheme = (code: string) => stat.find(s => String(s.schemeCode).toUpperCase() === code);
     const cpf = scheme('CPF');
+    const mpf = scheme('MPF');
     const shg = stat.find(s => ['CDAC', 'SINDA', 'MBMF', 'ECF'].includes(String(s.schemeCode).toUpperCase()) && s.employeeTotal > 0);
     const n = (x: any) => Number(x) || 0;
     const fields: FieldValues = {
@@ -81,6 +82,9 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
       cpf_employee: M(n(cpf?.employeeTotal)),
       cpf_employer: M(n(cpf?.employerTotal)),
       cpf_total: M(n(cpf?.employeeTotal) + n(cpf?.employerTotal)),
+      mpf_employee: M(n(mpf?.employeeTotal)),
+      mpf_employer: M(n(mpf?.employerTotal)),
+      mpf_total: M(n(mpf?.employeeTotal) + n(mpf?.employerTotal)),
       sdl: M(n(scheme('SDL')?.employerTotal)),
       shg_name: shg ? (shg.schemeName || shg.schemeCode) : '',
       shg_amount: shg ? M(n(shg.employeeTotal)) : '',

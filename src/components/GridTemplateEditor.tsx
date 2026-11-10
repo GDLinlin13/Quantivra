@@ -48,6 +48,7 @@ function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
 }) {
   const lists = docLists(kind, country);
   const sg = (country || 'SG').toUpperCase() === 'SG';
+  const hk = (country || '').toUpperCase() === 'HK';
   const cellStyleTd: React.CSSProperties = { padding: '3px 8px', borderBottom: '1px solid rgba(255,255,255,0.06)', verticalAlign: 'top' };
   const code: React.CSSProperties = { fontFamily: 'monospace', fontSize: 12, color: '#91caff', cursor: 'pointer', whiteSpace: 'nowrap' };
   return (
@@ -76,6 +77,10 @@ function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
                  <code style={code} onClick={() => onInsert('earnings.name')} title="Click to put it in the selected cell">{'{{earnings.name}}'}</code> and <code style={code} onClick={() => onInsert('earnings.amount')} title="Click to put it in the selected cell">{'{{earnings.amount}}'}</code>. That row turns yellow ↻ and, when
                 printed, is copied once per item.
               </p>
+              {hk && <p style={{ margin: '0 0 8px' }}>
+                <b>MPF section:</b> put <code style={code} onClick={() => onInsert('mpf_employer')} title="Click to put it in the selected cell">{'{{mpf_employer}}'}</code>, <code style={code} onClick={() => onInsert('mpf_employee')} title="Click to put it in the selected cell">{'{{mpf_employee}}'}</code> and <code style={code} onClick={() => onInsert('mpf_total')} title="Click to put it in the selected cell">{'{{mpf_total}}'}</code> in
+                ordinary (non-repeating) rows.
+              </p>}
               <p style={{ margin: '0 0 8px' }}>
                 <b>Side by side:</b> one repeating row can hold two lists — earnings on the left, deductions on the right. It is printed as many times as
                 the longer list needs; where one list has run out, its cells are left blank.
