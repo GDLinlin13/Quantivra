@@ -26,9 +26,11 @@ function guess(s: string, isHeader: boolean): PieceRole {
  * Teach Quantivra how a bank's PDF statement is laid out: click the column-heading row and/or a
  * transaction row, say what each piece is, and every row of the statement is read the same way.
  */
-export function TeachPdf({ rows, bankName, onClose, onDone }: {
+export function TeachPdf({ rows, bankName, onClose, onDone, onNothing }: {
   rows: PdfRow[]; bankName: string; onClose: () => void;
   onDone: (layout: PdfLayout, lines: PdfBankLine[]) => void;
+  /** the statement has no transactions this month: keep the file, nothing to import */
+  onNothing?: () => void;
 }) {
   const [picked, setPicked] = useState<number[]>([]);
   const [roles, setRoles] = useState<Record<string, PieceRole>>({});
@@ -47,7 +49,14 @@ export function TeachPdf({ rows, bankName, onClose, onDone }: {
   return (
     <Modal open width={980} onCancel={onClose} title={`Teach Quantivra how to read ${bankName} statements`}
       okText={`Use this — ${result.lines.length} transactions found`} okButtonProps={{ disabled: !hasDate || !hasMoney || !result.lines.length }}
-      onOk={() => onDone(layout, result.lines)}>
+      onOk={() => onDone(layout, result.lines)}
+      footer={(_, { OkBtn, CancelBtn }) => (
+        <Space>
+          {onNothing && <Button onClick={onNothing}>No transactions this month</Button>}
+          <CancelBtn />
+          <OkBtn />
+        </Space>
+      )}>
       <Alert type="info" showIcon style={{ marginBottom: 12 }}
         title="1. Click the row with the column headings (Date, Description, Withdrawal, Deposit, Balance…). You can also click a transaction row. 2. Check what each piece is. Quantivra remembers this for this bank account."
       />
