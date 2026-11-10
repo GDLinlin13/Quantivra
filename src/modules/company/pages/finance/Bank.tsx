@@ -7,6 +7,7 @@ import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteO
 import dayjs from 'dayjs';
 import { bankService, paymentService, marketRate, loadLedgerInput, accountService, pdfLayoutService, pictureStatementPref, companyFileService, type BankTxn, type Payment } from '../../../../services/finance';
 import { statementPeriod, statementMonthFromText } from '../../../../data/documents';
+import { rowsForCurrency, statementCurrencies } from '../../../../data/bankCurrency';
 import { planImport, nothingNew } from '../../../../data/bankImport';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
 import { balanceDue, inBase, docRate, isForeignDoc, schemeLabel, type Account, type FinDocument } from '../../../../data/finance';
@@ -166,7 +167,8 @@ export function Bank({ data }: { data: FinanceData }) {
     const hide = message.loading('Reading the picture… (the first time also downloads the reader)', 0);
     try {
       const { ocrToRows } = await import('../../../../data/bankOcr');
-      const rows = await ocrToRows(file);
+      // a statement covering several currencies: only this account's currency
+      const rows = rowsForCurrency(await ocrToRows(file), accCur);
       hide();
       if (!rows.length) { message.error('No text could be read from that picture'); return; }
       setPdfRows(rows);
@@ -184,8 +186,11 @@ export function Bank({ data }: { data: FinanceData }) {
     if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
       const hide = message.loading('Reading the PDF…', 0);
       try {
-        const rows = await pdfToRows(file);
+        const raw = await pdfToRows(file);
         hide();
+        // a statement covering several currencies (one account, HKD / USD / CNY parts): only this account's currency
+        const rows = raw.length ? rowsForCurrency(raw, accCur) : raw;
+        if (raw.length && !rows.length) { message.info(`No ${accCur} part in that statement`); return false; }
         if (!rows.length) {
           // a picture of a statement (scan, or "Print to PDF"): offer to read it with OCR
           if (readPictures) { readPicture(file); return false; }
@@ -205,7 +210,15 @@ export function Bank({ data }: { data: FinanceData }) {
         }
         setPdfRows(rows);
         const parsed = readRows(rows);
-        if (!parsed.lines.length) { setTeaching(true); return false; }
+        if (!parsed.lines.length) {
+          // a combined statement whose part for this currency has no transactions: just file it for its month
+          if (statementCurrencies(raw).length > 1) {
+            const m = statementMonthFromText(raw.slice(0, 40).map(r => r.map(p => p.s).join(' ')).join('\n'));
+            setNothingMonth(m ? dayjs(`${m}-01`) : dayjs().subtract(1, 'month').startOf('month'));
+            return false;
+          }
+          setTeaching(true); return false;
+        }
         r = { lines: parsed.lines };
       } catch (e: any) { hide(); r = { lines: [], error: `Couldn’t read the PDF: ${e.message}` }; }
     } else {
@@ -446,7 +459,7 @@ export function Bank({ data }: { data: FinanceData }) {
         onAdd={async l => { await bankService.add(companyId, accountId!, [l]); setAdding(false); load(); }} />}
       {bankModal}
       {nothingMonth && (
-        <Modal open title="No transactions this month" okText="Save statement" onCancel={() => setNothingMonth(null)}
+        <Modal open title={`No ${accCur} transactions this month`} okText="Save statement" onCancel={() => setNothingMonth(null)}
           onOk={async () => {
             try {
               if (stmtFile) await saveBankStatement(companyId, stmtFile, accountId!, nothingMonth.format('YYYY-MM'));
