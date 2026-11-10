@@ -1,3 +1,4 @@
+import { A4_MODAL } from '../../../../utils/renderPdf';
 import { useState, useEffect, useCallback } from 'react';
 import { Card, Button, Select, InputNumber, Table, Tag, message, Modal, Descriptions, Space, Popconfirm, Alert, Statistic, Row, Col, Switch, Tooltip, DatePicker } from 'antd';
 import { PlayCircleOutlined, FileTextOutlined, CheckCircleOutlined, DeleteOutlined, PrinterOutlined, InfoCircleOutlined, DownloadOutlined } from '@ant-design/icons';
@@ -195,7 +196,7 @@ export function PayrollTab({ companyId }: { companyId: number }) {
       )}
 
       {/* Payslip */}
-      <Modal open={!!slip} onCancel={() => setSlip(null)} width={640}
+      <Modal open={!!slip} onCancel={() => setSlip(null)} width={A4_MODAL}
         title={<Space><FileTextOutlined />Payslip</Space>}
         footer={<Space>
           <Button icon={<PrinterOutlined />} onClick={() => printPayslip(slip!)}>Print</Button>
