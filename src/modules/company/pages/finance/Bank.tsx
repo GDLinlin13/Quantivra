@@ -225,6 +225,10 @@ export function Bank({ data }: { data: FinanceData }) {
 
   // a matched line shows what it was for (click for the details and the invoices / bills it paid);
   // an unmatched one, the bank's own text
+  // a payment's number, and the bills / invoices it paid ("BILL-2025-0004"), for the undo / delete questions
+  const paidLabel = (pid: number) => look.payments.find(p => p.id === pid)?.number || 'the payment';
+  const paidDocsText = (pid: number) => look.allocations.filter(a => a.payment_id === pid)
+    .map(a => look.docs.find(d => d.id === a.document_id)?.number).filter(Boolean).join(', ');
   const describe = (t: BankTxn) => {
     const l = matchLabel(t, data, look);
     return l ? <a onClick={() => setDetails(t)} title={t.description || ''}>{l.title}{t.journal_id && withFiles.has(t.journal_id) && <PaperClipOutlined style={{ marginLeft: 6 }} />}</a> : t.description;
@@ -310,19 +314,38 @@ export function Bank({ data }: { data: FinanceData }) {
           {
             title: '', key: 'a', width: 210, render: (_, t) => closed ? null : t.status === ('expected' as any) ? (
               // recorded in Quantivra (e.g. a transfer from another bank): Match = it's on the statement
-              foreign ? <Button size="small" type="primary" icon={<LinkOutlined />} onClick={() => setFxMatch(t)}>Match</Button> : (
+              <Space size={4}>
+              {foreign ? <Button size="small" type="primary" icon={<LinkOutlined />} onClick={() => setFxMatch(t)}>Match</Button> : (
               <Popconfirm title="Is this on the bank statement?" okText="Yes, match"
                 onConfirm={async () => { try { await bankService.confirmRecorded(companyId, accountId!, t); message.success('Matched'); load(); } catch (e: any) { message.error(e.message); } }}>
                 <Button size="small" type="primary" icon={<LinkOutlined />}>Match</Button>
               </Popconfirm>
-              )
+              )}
+              {/* a payment recorded by mistake (e.g. against the wrong bill): delete it, the bill is unpaid again */}
+              {t.payment_id && (
+                <Popconfirm title={`Delete ${paidLabel(t.payment_id)}?`} okText="Delete" okButtonProps={{ danger: true }}
+                  description={paidDocsText(t.payment_id) ? `${paidDocsText(t.payment_id)} becomes unpaid again.` : undefined}
+                  onConfirm={async () => { try { await paymentService.remove(t.payment_id!); message.success('Payment deleted'); load(); data.reload(); } catch (e: any) { message.error(e.message); } }}>
+                  <Button size="small" danger icon={<DeleteOutlined />} title="Delete this payment" />
+                </Popconfirm>
+              )}
+              </Space>
             ) : (
               <Space size={4}>
                 {t.status === 'unmatched'
                   ? <Button size="small" type="primary" icon={<LinkOutlined />} onClick={() => setMatching(t)}>Match</Button>
                   : (
                     <Popconfirm title="Undo this match?"
-                      onConfirm={async () => { try { await bankService.unmatch(t, allTxns); load(); data.reload(); } catch (e: any) { message.error(e.message); } }}>
+                      description={t.payment_id ? `${paidLabel(t.payment_id)} is removed${paidDocsText(t.payment_id) ? ` and ${paidDocsText(t.payment_id)} becomes unpaid again` : ''}.` : undefined}
+                      onConfirm={async () => {
+                        try {
+                          // the payment goes with the match, so the bill / invoice is open again for the right one
+                          const pid = t.payment_id;
+                          await bankService.unmatch(t, allTxns);
+                          if (pid) await paymentService.remove(pid);
+                          load(); data.reload();
+                        } catch (e: any) { message.error(e.message); }
+                      }}>
                       <Button size="small" icon={<DisconnectOutlined />}>Undo</Button>
                     </Popconfirm>
                   )}
