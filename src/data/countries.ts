@@ -1265,7 +1265,7 @@ export const COUNTRY_PACKS: Record<string, CountryPackConfig> = {
  */
 export function nationalIdLabel(country?: string | null): string {
   const c = (country || 'SG').toUpperCase();
-  const OWN: Record<string, string> = { SG: 'NRIC / FIN', SA: 'National ID / Iqama', AE: 'Emirates ID' };
+  const OWN: Record<string, string> = { SG: 'NRIC / FIN', SA: 'National ID / Iqama', AE: 'Emirates ID', HK: 'HKID' };
   if (OWN[c]) return OWN[c];
   const fmt = COUNTRY_PACKS[c]?.localisation?.national_id_format || '';
   return fmt.match(/\(([^)]+)\)\s*$/)?.[1] || 'National ID';

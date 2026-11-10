@@ -1,0 +1,7 @@
+[
+  { "name": "MPF contribution remittance statement", "agency": "MPF trustee", "frequency": "Monthly", "deadline": "By the 10th of the following month (contribution day)" },
+  { "name": "IR56B Employer's Return of Remuneration and Pensions", "agency": "Inland Revenue Department", "frequency": "Annually", "deadline": "Within 1 month of the BIR56A issue date (early May)" },
+  { "name": "IR56E Notification of a new employee", "agency": "Inland Revenue Department", "frequency": "Event", "deadline": "Within 3 months of the start date" },
+  { "name": "IR56F Notification of an employee leaving", "agency": "Inland Revenue Department", "frequency": "Event", "deadline": "At least 1 month before the employee leaves" },
+  { "name": "IR56G Notification of an employee leaving Hong Kong", "agency": "Inland Revenue Department", "frequency": "Event", "deadline": "At least 1 month before the employee leaves Hong Kong" }
+]

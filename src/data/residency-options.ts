@@ -15,6 +15,11 @@ const OPTIONS: Record<string, ResidencyOption[]> = {
     { label: 'GCC National', value: 'GCC_NATIONAL' },
     { label: 'Expatriate (residence visa)', value: 'EXPAT' },
   ],
+  HK: [
+    { label: 'Hong Kong Permanent Resident', value: 'HK_PR' },
+    { label: 'Non-permanent resident / work visa', value: 'HK_NON_PR' },
+    { label: 'Exempt from MPF (overseas scheme, or here 13 months or less)', value: 'MPF_EXEMPT' },
+  ],
   SA: [
     { label: 'Saudi National', value: 'SAUDI_NATIONAL' },
     { label: 'GCC National', value: 'GCC_NATIONAL' },

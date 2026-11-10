@@ -1,0 +1,10 @@
+{
+  "brackets": [
+    { "min": 0, "max": null, "rate": 0, "fixed": 0 }
+  ],
+  "residentRules": "No tax is taken off monthly pay in Hong Kong. Salaries tax is assessed once a year by the Inland Revenue Department on the employee's return: progressive rates of 2%, 6%, 10%, 14% and 17% on net chargeable income in HK$50,000 bands, or the standard rate (15% on the first HK$5,000,000, 16% above) if that is lower. The employer reports pay on form IR56B each year.",
+  "nonResidentRate": 0,
+  "filingFrequency": "Annually",
+  "formTypes": ["IR56B", "IR56E", "IR56F", "IR56G", "BIR56A"],
+  "withholding": "none"
+}

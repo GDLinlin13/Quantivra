@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Leave Approval",
+    "entityType": "leave",
+    "steps": [
+      { "stepOrder": 1, "assigneeRole": "Manager", "action": "approve" },
+      { "stepOrder": 2, "assigneeRole": "HR", "action": "approve" }
+    ]
+  },
+  {
+    "name": "Claim Approval",
+    "entityType": "claims",
+    "steps": [
+      { "stepOrder": 1, "assigneeRole": "Manager", "action": "approve" },
+      { "stepOrder": 2, "assigneeRole": "Finance", "action": "approve" }
+    ]
+  },
+  {
+    "name": "Purchase Order",
+    "entityType": "purchase_order",
+    "steps": [
+      { "stepOrder": 1, "assigneeRole": "Manager", "action": "approve" },
+      { "stepOrder": 2, "assigneeRole": "Finance", "action": "approve" }
+    ]
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "fiscalYearStart": "04-01",
+  "defaultTaxCode": "NT",
+  "invoiceNumberFormat": "INV-{YYYY}-{0000}",
+  "paymentTerms": "Net 30",
+  "taxCodes": [
+    { "code": "NT", "name": "No sales tax (Hong Kong has no GST / VAT)", "rate": 0, "isDefault": true }
+  ],
+  "supportedBanks": ["HSBC", "Hang Seng Bank", "Bank of China (Hong Kong)", "Standard Chartered", "Bank of East Asia", "DBS Hong Kong", "Citibank"],
+  "paymentMethods": ["Autopay", "FPS", "Bank Transfer", "Cheque"]
+}

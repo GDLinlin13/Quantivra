@@ -151,6 +151,12 @@ export interface StatutorySchemeEligibilityDef {
   minimumSalary?: number;
   maximumSalary?: number;
   excludedCategories?: string[];
+  /**
+   * New employees pay nothing until this many days after joining (the employer still pays), e.g. Hong Kong MPF:
+   * the first 30 days and the incomplete pay period after them, so the employee's share starts with the first
+   * pay period that begins on or after the 30th day.
+   */
+  employeeExemptFirstDays?: number;
   notes?: string;
 }
 

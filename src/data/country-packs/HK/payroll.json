@@ -1,0 +1,8 @@
+{
+  "frequencies": ["Monthly"],
+  "minimumWage": 42.1,
+  "payrollCutoff": "Last day of month",
+  "payrollLockDate": "7th of next month",
+  "thirteenthMonth": "Not mandatory (common by contract: double pay)",
+  "bankFileFormat": "Bank autopay file (FPS / autopay)"
+}
