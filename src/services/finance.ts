@@ -630,7 +630,11 @@ export const bankService = {
    * in by hand) are added, then the keyed-in lines they replace (`replaced`) are removed.
    */
   async importInOrder(companyId: number, accountId: number, rows: Partial<BankTxn>[], replaced: number[]) {
-    if (rows.length) must(await supabase.from('fin_bank_transactions').insert(rows.map(r => ({ ...r, company_id: companyId, account_id: accountId }))));
+    // lines saved together must all name the same columns: one left out would be stored as empty, not its default
+    if (rows.length) must(await supabase.from('fin_bank_transactions').insert(rows.map(r => ({
+      payment_id: null, journal_id: null, base_amount: null, journal_existing: false,
+      ...r, company_id: companyId, account_id: accountId,
+    }))));
     if (replaced.length) must(await supabase.from('fin_bank_transactions').delete().in('id', replaced));
   },
   /** Something already recorded for this bank (a transfer, a payment) is on the statement: add the line, already matched. */
