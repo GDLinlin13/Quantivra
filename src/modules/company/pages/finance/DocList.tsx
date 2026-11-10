@@ -5,7 +5,7 @@ import { PlusOutlined, PrinterOutlined, DownloadOutlined, DollarOutlined, Search
 import dayjs from 'dayjs';
 import { docService, paymentService } from '../../../../services/finance';
 import {
-  balanceDue, isOverdue, today, DOC_LABEL, STATUS_LABEL, STATUS_COLOR, PAYMENT_METHODS,
+  balanceDue, inBase, docRate, isForeignDoc, isOverdue, today, DOC_LABEL, STATUS_LABEL, STATUS_COLOR, PAYMENT_METHODS,
   type DocType, type FinDocument, type Contact, type ContactPerson, type FinanceSettings, type Account,
 } from '../../../../data/finance';
 import { money } from '../../../../data/documentLayouts';
@@ -51,8 +51,9 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
     return d.status === filter;
   });
   const live = mine.filter(d => !['void', 'draft'].includes(d.status));
-  const outstanding = live.reduce((s, d) => s + balanceDue(d), 0);
-  const overdue = live.filter(d => isOverdue(d)).reduce((s, d) => s + balanceDue(d), 0);
+  // in the company's currency (documents in other currencies at their rate)
+  const outstanding = live.reduce((s, d) => s + inBase(d, balanceDue(d)), 0);
+  const overdue = live.filter(d => isOverdue(d)).reduce((s, d) => s + inBase(d, balanceDue(d)), 0);
 
   const filters = payable
     ? [{ value: 'all', label: 'All' }, { value: 'draft', label: 'Draft' }, { value: 'unpaid', label: 'Unpaid' }, { value: 'overdue', label: 'Overdue' }, { value: 'paid', label: 'Paid' }, { value: 'void', label: 'Void' }]
@@ -203,32 +204,57 @@ export function PaymentModal({ data, doc, onClose, onDone }: { data: FinanceData
   const [saving, setSaving] = useState(false);
   const due = balanceDue(doc);
   const inbound = doc.doc_type === 'invoice';
-  const cashAccounts = data.accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash'));
+  // a document in another currency is paid into / from a bank in that currency or in the company's own
+  const foreign = isForeignDoc(doc, data.currency);
+  const cashAccounts = data.accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash')
+    && (!foreign || !a.currency || a.currency === data.currency || a.currency === doc.currency));
+  const accountId = Form.useWatch('account_id', form);
+  const amount = Form.useWatch('amount', form);
+  const rateNow = Form.useWatch('rate', form);
+  const acc = cashAccounts.find(a => a.id === accountId);
+  const intoSame = foreign && acc?.currency === doc.currency;      // the money stays in the document's currency
   const submit = async () => {
     const v = await form.validateFields();
     if (v.amount > due + 0.005) { message.error(`That's more than the ${money(due, doc.currency)} still owed`); return; }
     setSaving(true);
     try {
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      const money_ = !foreign ? { amount: v.amount }
+        : intoSame ? { amount: r2(v.amount * Number(v.rate)), currency: doc.currency, foreign_amount: v.amount }
+          : { amount: Number(v.base) };
       await paymentService.record(data.companyId, {
-        direction: inbound ? 'in' : 'out', amount: v.amount, contact_id: doc.contact_id, payment_date: v.date.format('YYYY-MM-DD'),
-        method: v.method, reference: v.reference, account_id: v.account_id,
+        direction: inbound ? 'in' : 'out', contact_id: doc.contact_id, payment_date: v.date.format('YYYY-MM-DD'),
+        method: v.method, reference: v.reference, account_id: v.account_id, ...money_,
       }, [{ document_id: doc.id, amount: v.amount }]);
       message.success(inbound ? 'Payment received recorded' : 'Payment recorded');
       onDone();
     } catch (e: any) { message.error(e.message); }
     setSaving(false);
   };
+  const defaultAcc = (foreign && cashAccounts.find(a => a.currency === doc.currency)) || cashAccounts.find(a => a.subtype === 'bank');
   return (
     <Modal open onCancel={onClose} onOk={submit} confirmLoading={saving} okText="Record payment"
       title={`${inbound ? 'Receive payment for' : 'Pay'} ${doc.number}`}>
       <Text type="secondary">Still owed: <b>{money(due, doc.currency)}</b></Text>
       <Form form={form} layout="vertical" style={{ marginTop: 12 }}
-        initialValues={{ amount: due, date: dayjs(), method: 'Bank transfer', account_id: cashAccounts.find(a => a.subtype === 'bank')?.id }}>
+        initialValues={{ amount: due, date: dayjs(), method: 'Bank transfer', account_id: defaultAcc?.id, rate: docRate(doc), base: inBase(doc, due) }}
+        onValuesChange={ch => { if ('amount' in ch && foreign) form.setFieldsValue({ base: inBase(doc, Number(ch.amount) || 0) }); }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="amount" label="Amount" rules={[{ required: true }]}><AmountInput min={0.01} precision={2} style={{ width: '100%' }} prefix={doc.currency} /></Form.Item>
           <Form.Item name="date" label="Date" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} allowClear={false} /></Form.Item>
           <Form.Item name="method" label="How"><Select options={PAYMENT_METHODS.map(m => ({ value: m, label: m }))} /></Form.Item>
-          <Form.Item name="account_id" label={inbound ? 'Into' : 'From'}><Select allowClear options={cashAccounts.map(a => ({ value: a.id, label: a.name }))} /></Form.Item>
+          <Form.Item name="account_id" label={inbound ? 'Into' : 'From'}><Select allowClear options={cashAccounts.map(a => ({ value: a.id, label: a.currency && a.currency !== data.currency ? `${a.name} (${a.currency})` : a.name }))} /></Form.Item>
+          {foreign && intoSame && (
+            <Form.Item name="rate" label={`Rate on the day (1 ${doc.currency} = ? ${data.currency})`} rules={[{ required: true }]} style={{ gridColumn: '1 / -1' }}
+              extra={amount && rateNow ? `= ${money(Math.round((Number(amount) || 0) * (Number(rateNow) || 0) * 100) / 100, data.currency)}` : undefined}>
+              <AmountInput min={0.000001} precision={6} style={{ width: '100%' }} suffix={data.currency} />
+            </Form.Item>
+          )}
+          {foreign && !intoSame && (
+            <Form.Item name="base" label={`${inbound ? 'Received' : 'Paid'} in ${data.currency}`} rules={[{ required: true }]} style={{ gridColumn: '1 / -1' }}>
+              <AmountInput min={0.01} precision={2} style={{ width: '100%' }} prefix={data.currency} />
+            </Form.Item>
+          )}
           <Form.Item name="reference" label="Reference" style={{ gridColumn: '1 / -1' }}><Input placeholder="e.g. bank transaction ID, cheque no." /></Form.Item>
         </div>
       </Form>

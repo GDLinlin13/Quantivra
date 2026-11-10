@@ -7,6 +7,8 @@ export interface CatalogItem {
   track_stock: boolean; opening_qty: number; reorder_level: number | null; category: string | null; archived: boolean;
   /** sold, bought or both (migration 030) */
   used_for?: 'sales' | 'purchases' | 'both';
+  /** the currency of the item's prices; empty = the company's currency (migration 036) */
+  currency?: string | null;
 }
 /** A special selling price of one item for one customer (migration 027). */
 export interface CustomerPrice { id?: number; item_id: number; contact_id: number; price: number }

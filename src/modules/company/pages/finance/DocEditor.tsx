@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Table, Divider, Typography, message, Switch, Popconfirm, Alert, Tag, Segmented, Upload } from 'antd';
 import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { docService, paymentService, catalogService, attachmentService, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
+import { docService, paymentService, catalogService, attachmentService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
 import { companyFileService } from '../../../../services/finance';
 import { FileViewer } from '../../../../components/FileViewer';
 import {
@@ -77,15 +77,53 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
   // special prices for particular customers (Catalog → item → Customer prices)
   const [custPrices, setCustPrices] = useState<CustomerPrice[]>([]);
   useEffect(() => { if (sales) catalogService.prices(companyId).then(setCustPrices).catch(() => null); }, [companyId, sales]);
+  // Currencies: the company's own and those of its bank accounts. A document in another currency needs the
+  // exchange rate it is booked at (1 USD = x HKD), starting at the latest rate used.
+  const currencies = [...new Set([currency, ...accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash') && a.currency).map(a => a.currency!), ...(doc.currency ? [doc.currency] : [])])];
+  const docCur = doc.currency || currency;
+  const foreign = docCur !== currency;
+  const [rates, setRates] = useState<Record<string, number | null>>({});
+  const rateFor = async (cur: string) => {
+    if (cur === currency) return null;
+    if (rates[cur] !== undefined) return rates[cur];
+    const r = await latestRate(companyId, cur).catch(() => null);
+    setRates(x => ({ ...x, [cur]: r }));
+    return r;
+  };
+  const switchCurrency = async (cur: string, quiet = false) => {
+    if (cur === docCur) return;
+    const r = await rateFor(cur);
+    // prices already on the lines move to the new currency through the company currency (when both rates are known)
+    const fromRate = foreign ? Number(doc.fx_rate) || null : 1;
+    const toRate = cur === currency ? 1 : r;
+    if (fromRate && toRate) setLines(ls => ls.map(l => (Number(l.unit_price) ? { ...l, unit_price: Math.round(Number(l.unit_price) * fromRate / toRate * 100) / 100 } : l)));
+    set({ currency: cur, fx_rate: cur === currency ? null : r });
+    if (!quiet && cur !== currency && !r) message.info(`Enter the exchange rate: 1 ${cur} = ? ${currency}`);
+  };
+  /** an item's price in this document's currency */
+  const inDocCurrency = (price: number, itemCur: string | null | undefined) => {
+    const from = itemCur || currency;
+    if (from === docCur || !price) return price;
+    const fromRate = from === currency ? 1 : rates[from];
+    const toRate = docCur === currency ? 1 : Number(doc.fx_rate) || null;
+    return fromRate && toRate ? Math.round(price * fromRate / toRate * 100) / 100 : price;
+  };
+
   // sales documents offer what we sell, purchases what we buy (plus anything already on the lines)
   const catalog = items.filter(it => lines.some(l => l.item_id === it.id)
     || (!it.archived && (it.used_for || 'both') !== (sales ? 'purchases' : 'sales')));
   const pickItem = (i: number, id: number | null) => {
     const it = items.find(x => x.id === id);
     if (!it) { setLine(i, { item_id: null }); return; }
+    const price = sales ? priceFor(it, doc.contact_id, custPrices) : Number(it.purchase_price) || 0;
+    // an item priced in another currency: a new document with nothing priced yet takes the item's currency
+    const empty = !lines.some((l, j) => j !== i && Number(l.unit_price));
+    if (it.currency && it.currency !== docCur && empty && !Number(doc.amount_paid) && currencies.includes(it.currency)) {
+      switchCurrency(it.currency, true).then(() => setLine(i, { unit_price: price }));
+    } else if (it.currency && it.currency !== currency) rateFor(it.currency);
     setLine(i, {
       item_id: it.id, description: it.description || '', // the name prints first; Description is anything extra
-      unit_price: sales ? priceFor(it, doc.contact_id, custPrices) : Number(it.purchase_price) || 0,
+      unit_price: it.currency && it.currency !== docCur && !(empty && currencies.includes(it.currency)) ? inDocCurrency(price, it.currency) : price,
       tax_rate: settings.gstRegistered ? (it.tax_rate == null ? gstRate : Number(it.tax_rate)) : 0,
       account_id: (sales ? it.income_account_id : it.expense_account_id) || null,
     });
@@ -116,6 +154,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
   const save = async (status?: string) => {
     if (docType !== 'expense' && !doc.contact_id) { message.error(sales ? 'Choose a customer' : 'Choose a supplier'); return; }
     if (!lines.some(l => (l.description || '').trim() || l.item_id || Number(l.unit_price))) { message.error('Add at least one line'); return; }
+    if (foreign && !(Number(doc.fx_rate) > 0)) { message.error(`Enter the exchange rate: 1 ${docCur} = ? ${currency}`); return; }
     setSaving(true);
     try {
       const id = await docService.save(companyId, { ...doc, doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines);
@@ -124,9 +163,13 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
         const { doc: fresh } = await docService.get(id);
         const owed = Math.round(((Number(fresh.total) || 0) - (Number(fresh.amount_paid) || 0)) * 100) / 100;
         if (owed > 0) {
+          // in the company's currency; from a bank in the expense's own currency, that amount went out of it
+          const from = accounts.find(a => a.id === doc.paid_from_account_id);
+          const sameCur = foreign && from?.currency === docCur;
           await paymentService.record(companyId, {
-            direction: 'out', amount: owed, contact_id: fresh.contact_id, payment_date: fresh.issue_date,
+            direction: 'out', amount: foreign ? Math.round(owed * Number(doc.fx_rate) * 100) / 100 : owed, contact_id: fresh.contact_id, payment_date: fresh.issue_date,
             method: 'Paid on the spot', account_id: doc.paid_from_account_id,
+            ...(sameCur ? { currency: docCur, foreign_amount: owed } : {}),
           }, [{ document_id: id, amount: owed }]);
         }
       }
@@ -200,6 +243,19 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
             <Input value={doc.reference || ''} onChange={e => set({ reference: e.target.value })} />
           </Form.Item>
         </div>
+        {currencies.length > 1 && (
+          <Space wrap align="center" style={{ marginBottom: 12 }}>
+            <Text>Currency</Text>
+            <Select style={{ width: 110 }} value={docCur} disabled={Number(doc.amount_paid) > 0} onChange={v => switchCurrency(v)}
+              options={currencies.map(c => ({ value: c, label: c }))} />
+            {foreign && (
+              <AmountInput min={0} precision={6} style={{ width: 230 }} prefix={`1 ${docCur} =`} suffix={currency}
+                value={doc.fx_rate ?? undefined} disabled={Number(doc.amount_paid) > 0}
+                onChange={v => set({ fx_rate: v == null ? null : Number(v) })} />
+            )}
+            {foreign && Number(doc.fx_rate) > 0 && <Text type="secondary">= {money(Math.round(t.total * Number(doc.fx_rate) * 100) / 100, currency)}</Text>}
+          </Space>
+        )}
         {docId && doc.number && <Text type="secondary" style={{ display: 'block', marginTop: -8, marginBottom: 8 }}>Number {doc.number}</Text>}
       </Form>
 

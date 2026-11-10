@@ -283,6 +283,8 @@ export const docService = {
       notes: d.notes || null, terms: d.terms || null, source_id: d.source_id || null,
       paid_from_account_id: d.paid_from_account_id || null, employee_id: d.employee_id || null,
       payment_account_index: d.payment_account_index ?? null, updated_at: new Date().toISOString(),
+      // a document in another currency keeps its exchange rate (migration 036); left out otherwise
+      ...(d.fx_rate !== undefined ? { fx_rate: d.fx_rate || null } : {}),
     };
     let id = d.id;
     if (id) {
@@ -336,6 +338,24 @@ export const docService = {
     must(await supabase.from('fin_documents').update({ amount_paid, status }).eq('id', id));
   },
 };
+
+/**
+ * The latest exchange rate known for a currency (company currency per unit): from the last document in that
+ * currency, else from the last matched line of a bank account in that currency.
+ */
+export async function latestRate(companyId: number, currency: string): Promise<number | null> {
+  const d = await supabase.from('fin_documents').select('fx_rate, issue_date').eq('company_id', companyId).eq('currency', currency)
+    .not('fx_rate', 'is', null).order('issue_date', { ascending: false }).order('id', { ascending: false }).limit(1);
+  const fromDoc = !d.error && d.data?.[0] ? Number((d.data[0] as any).fx_rate) : null;
+  if (fromDoc) return fromDoc;
+  const acc = await supabase.from('fin_accounts').select('id').eq('company_id', companyId).eq('currency', currency);
+  const ids = (acc.data || []).map((a: any) => a.id);
+  if (!ids.length) return null;
+  const t = await supabase.from('fin_bank_transactions').select('amount, base_amount').in('account_id', ids)
+    .not('base_amount', 'is', null).order('txn_date', { ascending: false }).limit(1);
+  const x: any = t.data?.[0];
+  return x && Number(x.amount) ? Math.round(Math.abs(Number(x.base_amount) / Number(x.amount)) * 1e6) / 1e6 : null;
+}
 
 // ---- payments --------------------------------------------------------------------------
 
@@ -611,6 +631,8 @@ export const catalogService = {
       track_stock: i.kind === 'service' ? false : !!i.track_stock, opening_qty: Number(i.opening_qty) || 0,
       reorder_level: i.reorder_level == null || (i.reorder_level as any) === '' ? null : Number(i.reorder_level),
       category: i.category || null, archived: !!i.archived, used_for: i.used_for || 'both', updated_at: new Date().toISOString(),
+      // prices in another currency (migration 036); left out when the item has never had one
+      ...(i.currency !== undefined ? { currency: i.currency || null } : {}),
     };
     if (!row.name) throw new Error('Please enter a name');
     const fix = (e: any) => { if (e && /uq_catalog_items_code|duplicate/i.test(e.message)) throw new Error(`The code "${row.code}" is already used by another item`); return e; };
