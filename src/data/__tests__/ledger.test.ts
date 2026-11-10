@@ -194,3 +194,33 @@ describe('documents in another currency', () => {
     expect(gstReturn([taxed] as any, '2026-06-01', '2026-06-30').box6_output_tax).toBe(390);
   });
 });
+
+describe('a payment with a difference booked elsewhere', () => {
+  const bill = doc({ id: 21, doc_type: 'bill', number: 'B-1', status: 'paid', issue_date: '2025-08-28', lines: [line('Report', 1, 6500, 0, id('6800'))], total: 6500, amount_paid: 6500 });
+  const inv = doc({ id: 22, doc_type: 'invoice', number: 'I-1', status: 'paid', issue_date: '2025-08-28', lines: [line('Work', 1, 6500, 0)], total: 6500, amount_paid: 6500 });
+  const bal = (es: any[], code: string) => balances(accounts, es).find(b => b.account.code === code)!.balance;
+  const ok = (es: any[]) => es.every(e => Math.round(e.lines.reduce((t: number, l: any) => t + l.debit - l.credit, 0) * 100) === 0);
+  const run = (docs: any[], payments: any[], allocations: any[]) => buildLedger({ accounts, docs, payments, allocations, payroll: [], journals: [] } as any);
+
+  it('money out: the bill plus bank charges', () => {
+    const es = run([bill], [{ id: 1, direction: 'out', number: 'P', contact_id: 2, payment_date: '2025-09-08', amount: 6835, account_id: id('1000'), charges: 335, charges_account_id: id('6900') }], [{ payment_id: 1, document_id: 21, amount: 6500 }]);
+    expect(ok(es)).toBe(true);
+    expect(bal(es, '2000')).toBe(0);
+    expect(bal(es, '6900')).toBe(335);
+    expect(bal(es, '1000')).toBe(-6835);
+  });
+
+  it('money out: the bill plus a prepayment', () => {
+    const es = run([bill], [{ id: 1, direction: 'out', number: 'P', contact_id: 2, payment_date: '2025-09-08', amount: 6835, account_id: id('1000'), charges: 335, charges_account_id: id('1200') }], [{ payment_id: 1, document_id: 21, amount: 6500 }]);
+    expect(bal(es, '1200')).toBe(335);
+    expect(bal(es, '2000')).toBe(0);
+  });
+
+  it('money in: the invoice less what the bank kept', () => {
+    const es = run([inv], [{ id: 1, direction: 'in', number: 'R', contact_id: 1, payment_date: '2025-09-08', amount: 6165, account_id: id('1000'), charges: 335, charges_account_id: id('6900') }], [{ payment_id: 1, document_id: 22, amount: 6500 }]);
+    expect(ok(es)).toBe(true);
+    expect(bal(es, '1100')).toBe(0);
+    expect(bal(es, '6900')).toBe(335);
+    expect(bal(es, '1000')).toBe(6165);
+  });
+});

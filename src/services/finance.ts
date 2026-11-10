@@ -379,6 +379,8 @@ export interface Payment {
   payment_date: string; amount: number; method: string | null; reference: string | null; account_id: number | null; notes: string | null;
   /** set when the money went through a bank account in another currency */
   currency?: string | null; foreign_amount?: number | null;
+  /** a difference booked to another account: bank charges, a prepayment… (migration 037) */
+  charges?: number | null; charges_account_id?: number | null;
 }
 export interface Allocation { id?: number; payment_id?: number; document_id: number; amount: number }
 
@@ -405,11 +407,29 @@ export const paymentService = {
       payment_date: p.payment_date || new Date().toISOString().slice(0, 10), amount: Math.round(p.amount * 100) / 100,
       method: p.method || null, reference: p.reference || null, account_id: p.account_id || null, notes: p.notes || null,
       ...(p.currency ? { currency: p.currency, foreign_amount: p.foreign_amount ?? null } : {}),
+      // a difference booked to another account (bank charges, a prepayment…; migration 037)
+      ...(Number(p.charges) > 0 ? { charges: Math.round(Number(p.charges) * 100) / 100, charges_account_id: p.charges_account_id || null } : {}),
     }).select('id').single()).id;
     const rows = allocations.filter(a => a.amount > 0).map(a => ({ company_id: companyId, payment_id: id, document_id: a.document_id, amount: Math.round(a.amount * 100) / 100 }));
     if (rows.length) must(await supabase.from('fin_payment_allocations').insert(rows));
     for (const a of rows) await docService.refreshPaid(a.document_id);
     return id;
+  },
+  /**
+   * Book the part of a payment that wasn't for its documents to an account (bank charges, a prepayment…).
+   * Money in that fell short of an invoice: that invoice is also counted as paid by that much.
+   */
+  async bookDifference(paymentId: number, amount: number, accountId: number, shortDocId?: number | null) {
+    const p = must(await supabase.from('fin_payments').select('charges').eq('id', paymentId).single());
+    const v = Math.round(amount * 100) / 100;
+    if (!(v > 0)) throw new Error('Nothing to book');
+    const r = await supabase.from('fin_payments').update({ charges: Math.round(((Number(p.charges) || 0) + v) * 100) / 100, charges_account_id: accountId }).eq('id', paymentId);
+    if (r.error) throw new Error(/charges/i.test(r.error.message) ? 'This needs database update 037 — ask your administrator to run it in Supabase.' : r.error.message);
+    if (shortDocId) {
+      const a = must(await supabase.from('fin_payment_allocations').select('id, amount').eq('payment_id', paymentId).eq('document_id', shortDocId).single());
+      must(await supabase.from('fin_payment_allocations').update({ amount: Math.round((Number(a.amount) + v) * 100) / 100 }).eq('id', a.id));
+      await docService.refreshPaid(shortDocId);
+    }
   },
   async remove(id: number) {
     const allocs = must(await supabase.from('fin_payment_allocations').select('document_id').eq('payment_id', id)) || [];
