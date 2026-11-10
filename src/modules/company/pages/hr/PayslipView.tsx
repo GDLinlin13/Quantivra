@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import dayjs from 'dayjs';
-import { componentLabel, maskId, type PayrollRunRow, type PayslipRow } from '../../../../services/payroll';
+import { componentLabel, maskId, payslipBankAccounts, type PayrollRunRow, type PayslipRow } from '../../../../services/payroll';
 import type { Branding } from '../../../../services/branding';
 import { DocumentShell } from '../../../../components/DocumentShell';
 import { GridDocument, CellValue } from '../../../../components/GridDocument';
@@ -20,9 +20,11 @@ export const PRINT_CSS = `@page{size:A4;margin:12mm}*{-webkit-print-color-adjust
  * One payslip, in the company's chosen template. Pass `employee` when you already have the
  * employee record (bulk printing); otherwise it is looked up (pay-access users only).
  */
-export function PayslipView({ slip, company, branding, period, employee, domId = 'payslip-print' }: {
+export function PayslipView({ slip, company, branding, period, employee, domId = 'payslip-print', refreshKey = 0 }: {
   slip: PayslipRow; company: any; branding: Branding | null; period?: PayrollRunRow;
   employee?: Employee | null; domId?: string;
+  /** bump to read the payslip's bank account again (after it was set by hand) */
+  refreshKey?: number;
 }) {
   const cur = company?.currency || 'SGD';
   const stat = (slip.statutory_json || []) as any[];
@@ -30,7 +32,7 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
   const M = (n: number) => fmtMoney(n, cur, t?.amountFormat);
   const res = slip.result_json || {};
   const bankMasked: string | null = res.bankMasked || null;
-  const bankName: string | null = res.bankName || null;
+  const savedBankName: string | null = res.bankName || null;
   const layout = t?.layout;
   const useLayout = !!layout?.enabled;
   // The employee's current record (pay-access users only). Full bank / ID numbers are only kept
@@ -48,10 +50,18 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
       .catch(() => {});
     return () => { live = false; };
   }, [company?.id, slip.employee_id, employee]);
-  // the full number only when the employee still has the account this payslip was paid to (a newer account
-  // never shows on an older payslip — that one shows the masked number it was saved with)
+  // the account this payslip was paid to (kept with the run, database update 038); before that, the employee's
+  // account only while it is still the one shown on the payslip — a newer account never shows on an older payslip
+  const [paidTo, setPaidTo] = useState<{ bank_account: string | null; bank_name: string | null } | null>(null);
+  useEffect(() => {
+    let live = true;
+    setPaidTo(null);
+    payslipBankAccounts(slip.run_id).then(m => { if (live) setPaidTo(m.get(Number(slip.employee_id)) || null); }).catch(() => null);
+    return () => { live = false; };
+  }, [slip.run_id, slip.employee_id, refreshKey]);
   const sameAccount = !!emp?.bank_account && (!bankMasked || maskId(emp.bank_account) === bankMasked);
-  const bankFull = sameAccount ? emp!.bank_account! : null;
+  const bankFull = paidTo?.bank_account || (sameAccount ? emp!.bank_account! : null);
+  const bankName: string | null = paidTo?.bank_name || savedBankName;
   const designation: string = res.designation ?? emp?.job_title ?? '';
   const department: string = res.department ?? emp?.department_name ?? '';
   const idMasked: string = res.idMasked ?? maskId(emp?.national_id) ?? '';

@@ -1,9 +1,9 @@
 import { A4_MODAL } from '../../../../utils/renderPdf';
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Button, Select, InputNumber, Table, Tag, message, Modal, Descriptions, Space, Popconfirm, Alert, Statistic, Row, Col, Switch, Tooltip, DatePicker } from 'antd';
-import { PlayCircleOutlined, FileTextOutlined, CheckCircleOutlined, DeleteOutlined, PrinterOutlined, InfoCircleOutlined, DownloadOutlined } from '@ant-design/icons';
+import { Card, Button, Select, InputNumber, Input, Table, Tag, message, Modal, Descriptions, Space, Popconfirm, Alert, Statistic, Row, Col, Switch, Tooltip, DatePicker } from 'antd';
+import { PlayCircleOutlined, FileTextOutlined, CheckCircleOutlined, DeleteOutlined, PrinterOutlined, InfoCircleOutlined, DownloadOutlined, EditOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { payrollService, statutorySettingsService, componentLabel, ABSORBABLE_SCHEMES, type PayrollRunRow, type PayslipRow } from '../../../../services/payroll';
+import { payrollService, statutorySettingsService, componentLabel, payslipBankAccounts, setPayslipBank, ABSORBABLE_SCHEMES, type PayrollRunRow, type PayslipRow } from '../../../../services/payroll';
 import { brandingService, type Branding } from '../../../../services/branding';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { PayItemsCard } from './PayItemsCard';
@@ -14,6 +14,40 @@ import { supabase } from '../../../../utils/supabase';
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => ({ label: dayjs().month(i).format('MMMM'), value: i + 1 }));
 const money = (n: number, c = 'SGD') => `${c} ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** The bank account this payslip was paid to; older payslips (before it was kept) can have it filled in. */
+function PaidTo({ slip, onSaved }: { slip: PayslipRow; onSaved: () => void }) {
+  const [kept, setKept] = useState<{ bank_account: string | null; bank_name: string | null } | null | undefined>(undefined);
+  const [editing, setEditing] = useState(false);
+  const [acct, setAcct] = useState('');
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const load = () => payslipBankAccounts(slip.run_id).then(m => setKept(m.get(Number(slip.employee_id)) || null)).catch(() => setKept(null));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setEditing(false); load(); }, [slip.id]);
+  if (kept === undefined) return null;
+  const savedName = (slip as any).result_json?.bankName || '';
+  const masked = (slip as any).result_json?.bankMasked || '';
+  return (
+    <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ color: 'rgba(240,237,230,0.6)' }}>Paid to:</span>
+      {!editing ? (<>
+        <span>{[kept?.bank_name || savedName, kept?.bank_account || masked || '—'].filter(Boolean).join(' ')}</span>
+        <Button size="small" icon={<EditOutlined />} onClick={() => { setAcct(kept?.bank_account || ''); setName(kept?.bank_name || savedName); setEditing(true); }} />
+      </>) : (<>
+        <Input style={{ width: 180 }} placeholder="Bank" value={name} onChange={e => setName(e.target.value)} />
+        <Input style={{ width: 220 }} placeholder={masked || 'Account number'} value={acct} onChange={e => setAcct(e.target.value)} />
+        <Button size="small" type="primary" loading={saving} disabled={!acct.trim()} onClick={async () => {
+          setSaving(true);
+          try { await setPayslipBank(slip.run_id, Number(slip.employee_id), acct, name || null); await load(); setEditing(false); onSaved(); message.success('Saved'); }
+          catch (e: any) { message.error(e.message); }
+          setSaving(false);
+        }}>Save</Button>
+        <Button size="small" onClick={() => setEditing(false)}>Cancel</Button>
+      </>)}
+    </div>
+  );
+}
 
 export function PayrollTab({ companyId }: { companyId: number }) {
   const { user } = useAuth();
@@ -28,6 +62,7 @@ export function PayrollTab({ companyId }: { companyId: number }) {
   const [running, setRunning] = useState(false);
   const [openRun, setOpenRun] = useState<{ run: PayrollRunRow; payslips: PayslipRow[] } | null>(null);
   const [slip, setSlip] = useState<PayslipRow | null>(null);
+  const [bankKey, setBankKey] = useState(0);
   const [absorb, setAbsorb] = useState<Record<string, boolean>>({});
   const [branding, setBranding] = useState<Branding | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -202,7 +237,8 @@ export function PayrollTab({ companyId }: { companyId: number }) {
           <Button icon={<PrinterOutlined />} onClick={() => printPayslip(slip!)}>Print</Button>
           <Button type="primary" icon={<DownloadOutlined />} loading={downloading} onClick={() => downloadOne(slip!)}>Download PDF</Button>
         </Space>}>
-        {slip && <PayslipView slip={slip} company={company} branding={branding} period={openRun?.run} />}
+        {slip && <PaidTo slip={slip} onSaved={() => setBankKey(k => k + 1)} />}
+        {slip && <PayslipView slip={slip} company={company} branding={branding} period={openRun?.run} refreshKey={bankKey} />}
       </Modal>
     </div>
   );
