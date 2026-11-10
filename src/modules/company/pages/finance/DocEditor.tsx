@@ -173,7 +173,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
     }
     setSaving(true);
     try {
-      const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines);
+      const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines, { keepNumber: typedNumber });
       // An expense paid on the spot (from a bank / cash account) is recorded as paid straight away.
       if (docType === 'expense' && doc.paid_from_account_id && (status === 'approved' || doc.status === 'approved')) {
         const { doc: fresh } = await docService.get(id);
