@@ -1,0 +1,16 @@
+{
+  "name": "Hong Kong",
+  "code": "HK",
+  "currency": "HKD",
+  "currencySymbol": "HK$",
+  "phoneCode": "+852",
+  "timezone": "Asia/Hong_Kong",
+  "primaryLanguage": "Chinese",
+  "secondaryLanguage": "English",
+  "dateFormat": "DD/MM/YYYY",
+  "timeFormat": "24h",
+  "weekStartsOn": "Monday",
+  "financialYear": "04-01",
+  "taxYear": "04-01",
+  "defaultPayrollFrequency": "Monthly"
+}

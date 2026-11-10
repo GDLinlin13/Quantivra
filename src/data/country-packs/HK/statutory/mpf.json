@@ -1,0 +1,89 @@
+{
+  "general": {
+    "code": "MPF",
+    "name": "Mandatory Provident Fund (MPF)",
+    "description": "Mandatory contributions under the MPF Schemes Ordinance: employee and employer each pay 5% of relevant income. Below the minimum relevant income (HK$7,100 a month) only the employer pays; above the maximum (HK$30,000 a month) each pays a fixed HK$1,500.",
+    "agency": "MPFA",
+    "type": "pension",
+    "version": "2026.1",
+    "effectiveDate": "2014-06-01",
+    "status": "published"
+  },
+  "eligibility": {
+    "citizenship": ["HK_PR", "HK_NON_PR"],
+    "visaTypes": [],
+    "employmentTypes": [],
+    "minimumAge": 18,
+    "maximumAge": 64,
+    "excludedCategories": [],
+    "employeeExemptFirstDays": 30,
+    "notes": "Employees aged 18 to 64 employed for 60 days or more (casual workers in construction and catering from day one). Exempt: people covered by an overseas retirement scheme, or in Hong Kong to work for 13 months or less (choose 'Exempt from MPF'). New employees do not pay their share for the first 30 days and the incomplete pay period after that; the employer pays from the first day."
+  },
+  "employeeCategories": [
+    { "code": "MPF_MEMBER", "name": "MPF scheme member" }
+  ],
+  "rateTables": [
+    { "employeeCategory": "MPF_MEMBER", "wageMax": 7099.99, "employeeRate": 0, "employerRate": 5, "effectiveDate": "2014-11-01" },
+    { "employeeCategory": "MPF_MEMBER", "wageMin": 7100, "wageMax": 30000, "employeeRate": 5, "employerRate": 5, "effectiveDate": "2014-11-01" },
+    { "employeeCategory": "MPF_MEMBER", "wageMin": 30000.01, "employeeRate": 5, "employerRate": 5, "fixedEmployeeAmount": 1500, "fixedEmployerAmount": 1500, "effectiveDate": "2014-06-01" }
+  ],
+  "thresholds": [],
+  "caps": [],
+  "salaryComponents": [
+    { "componentCode": "BASIC", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "OVERTIME", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_TRANSPORT", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_HOUSING", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_MEAL", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_SHIFT", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_NIGHT", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ALLOWANCE_ATTENDANCE", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "ANNUAL_LEAVE_PAY", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "SICK_LEAVE_PAY", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "MATERNITY_LEAVE_PAY", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "PATERNITY_LEAVE_PAY", "classification": "ordinary_wage", "included": true },
+    { "componentCode": "BONUS", "classification": "additional_wage", "included": true },
+    { "componentCode": "COMMISSION", "classification": "additional_wage", "included": true },
+    { "componentCode": "AWS", "classification": "additional_wage", "included": true },
+    { "componentCode": "BACKPAY", "classification": "additional_wage", "included": true },
+    { "componentCode": "LEAVE_ENCASHMENT", "classification": "additional_wage", "included": true },
+    { "componentCode": "SEVERANCE", "classification": "excluded", "included": false },
+    { "componentCode": "RETRENCHMENT", "classification": "excluded", "included": false },
+    { "componentCode": "DIRECTOR_FEE", "classification": "excluded", "included": false },
+    { "componentCode": "SALARY_IN_KIND", "classification": "excluded", "included": false }
+  ],
+  "calculationRules": [
+    {
+      "code": "MPF_BANDS",
+      "name": "Relevant income bands",
+      "priority": 1,
+      "action": "RI < 7100: EE 0, ER 5% · 7100-30000: EE 5%, ER 5% · RI > 30000: EE 1500, ER 1500",
+      "parameters": { "minimumRelevantIncome": 7100, "maximumRelevantIncome": 30000 },
+      "description": "Monthly relevant income: all wages, salary, leave pay, fees, commission, bonus, gratuity, perquisite and allowance (housing allowance included), but not severance or long service payments. Bonuses count in the month they are paid, within the HK$30,000 maximum."
+    }
+  ],
+  "rounding": {
+    "employee": { "method": "round", "decimals": 2 },
+    "employer": { "method": "round", "decimals": 2 }
+  },
+  "reporting": {
+    "agency": "MPF trustee",
+    "submissionFrequency": "Monthly",
+    "portal": "eMPF Platform",
+    "fileFormat": "Remittance statement",
+    "dueDate": "By the 10th of the following month",
+    "forms": [
+      { "name": "MPF remittance statement", "frequency": "Monthly", "deadline": "10th of the following month" }
+    ]
+  },
+  "validations": [
+    {
+      "code": "MPF_AGE",
+      "name": "Age 18 to 64",
+      "type": "range",
+      "expression": "Age >= 18 AND Age <= 64",
+      "errorMessage": "MPF applies to employees aged 18 to 64",
+      "severity": "warning"
+    }
+  ]
+}

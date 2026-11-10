@@ -1,0 +1,15 @@
+[
+  { "name": "The first day of January", "date": "2026-01-01", "type": "fixed", "recurring": true },
+  { "name": "Lunar New Year's Day and the following two days", "type": "calculated", "recurring": true, "calculationRule": "1st-3rd day of the first lunar month (2026: 17-19 February)" },
+  { "name": "Good Friday, the day following Good Friday and Easter Monday", "type": "calculated", "recurring": true, "calculationRule": "Easter dates (2026: 3, 4 and 6 April)" },
+  { "name": "Ching Ming Festival", "type": "calculated", "recurring": true, "calculationRule": "Solar term, about 4-5 April (2026: falls on Sunday 5 April, so Tuesday 7 April)" },
+  { "name": "Labour Day", "date": "2026-05-01", "type": "fixed", "recurring": true },
+  { "name": "The Birthday of the Buddha", "type": "calculated", "recurring": true, "calculationRule": "8th day of the fourth lunar month (2026: Sunday 24 May, so Monday 25 May)" },
+  { "name": "Tuen Ng Festival", "type": "calculated", "recurring": true, "calculationRule": "5th day of the fifth lunar month (2026: 19 June)" },
+  { "name": "Hong Kong Special Administrative Region Establishment Day", "date": "2026-07-01", "type": "fixed", "recurring": true },
+  { "name": "The day following the Chinese Mid-Autumn Festival", "type": "calculated", "recurring": true, "calculationRule": "16th day of the eighth lunar month (2026: 26 September)" },
+  { "name": "National Day", "date": "2026-10-01", "type": "fixed", "recurring": true },
+  { "name": "Chung Yeung Festival", "type": "calculated", "recurring": true, "calculationRule": "9th day of the ninth lunar month (2026: Sunday 18 October, so Monday 19 October)" },
+  { "name": "Christmas Day", "date": "2026-12-25", "type": "fixed", "recurring": true },
+  { "name": "The first weekday after Christmas Day", "date": "2026-12-26", "type": "fixed", "recurring": true }
+]

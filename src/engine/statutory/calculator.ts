@@ -143,6 +143,22 @@ export function calculateStatutoryContribution(
     dependsOn: [`${general.code}_BASE`],
   });
 
+  // 5b. New employees exempt from their share for a first stretch of employment (employer still pays)
+  const exemptDays = scheme.eligibility.employeeExemptFirstDays;
+  if (exemptDays && employee.dateOfJoining && employeeAmount > 0) {
+    const startsPaying = dayjs(employee.dateOfJoining).add(exemptDays, 'day');
+    if (dayjs(period.startDate).isBefore(startsPaying, 'day')) {
+      allSteps.push({
+        id: `${general.code}_NEW_EXEMPT`,
+        stage: 'calculation',
+        label: 'New Employee Exemption',
+        value: 0,
+        explanation: `Joined ${employee.dateOfJoining}: no employee share for pay periods starting before ${startsPaying.format('YYYY-MM-DD')} (first ${exemptDays} days and the incomplete period after them)`,
+      });
+      employeeAmount = 0;
+    }
+  }
+
   // 6. Apply thresholds
   const thresholdResult = applyThresholds(scheme, employeeAmount, employerAmount, employerRate);
   allSteps.push(...thresholdResult.steps);

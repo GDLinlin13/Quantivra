@@ -1,0 +1,102 @@
+{
+  "statuses": [
+    {
+      "code": "FULL_TIME",
+      "name": "Full-Time",
+      "enabled": true
+    },
+    {
+      "code": "PART_TIME",
+      "name": "Part-Time",
+      "enabled": true
+    },
+    {
+      "code": "FIXED_TERM",
+      "name": "Fixed-Term Contract",
+      "enabled": true
+    },
+    {
+      "code": "CASUAL",
+      "name": "Casual",
+      "enabled": true
+    }
+  ],
+  "immigrationStatuses": [
+    {
+      "code": "HK_PR",
+      "name": "Hong Kong Permanent Resident"
+    },
+    {
+      "code": "HK_NON_PR",
+      "name": "Non-permanent resident / work visa"
+    },
+    {
+      "code": "MPF_EXEMPT",
+      "name": "Exempt from MPF (overseas scheme, or in Hong Kong for 13 months or less)"
+    }
+  ],
+  "rules": [
+    {
+      "key": "minimum_wage_hourly",
+      "value": "42.1",
+      "editableByCompany": false,
+      "referenceOnly": true,
+      "description": "Statutory Minimum Wage HK$42.1 per hour from 1 May 2025"
+    },
+    {
+      "key": "continuous_contract",
+      "value": "468 rule: 68 hours in 4 weeks (from 18 Jan 2026; before that the 418 rule)",
+      "editableByCompany": false,
+      "referenceOnly": true,
+      "description": "Employees under a continuous contract get rest days, holiday pay, paid annual leave, sickness allowance, severance and long service payment"
+    },
+    {
+      "key": "rest_day",
+      "value": "1 per 7 days",
+      "editableByCompany": false,
+      "referenceOnly": false,
+      "description": "At least one rest day in every period of 7 days"
+    },
+    {
+      "key": "default_probation_months",
+      "value": "3",
+      "editableByCompany": true,
+      "referenceOnly": false,
+      "description": "Probation is by contract; commonly 1-3 months"
+    },
+    {
+      "key": "annual_leave",
+      "value": "7-14 days",
+      "editableByCompany": true,
+      "referenceOnly": false,
+      "description": "Paid annual leave from 7 days (after 12 months) rising to 14 days with service"
+    },
+    {
+      "key": "overtime",
+      "value": "By contract",
+      "editableByCompany": true,
+      "referenceOnly": true,
+      "description": "No statutory overtime rate in Hong Kong; overtime pay follows the employment contract"
+    }
+  ],
+  "noticePeriods": [
+    {
+      "minServiceMonths": 0,
+      "maxServiceMonths": 1,
+      "noticeDays": 0,
+      "description": "First month of probation: no notice needed"
+    },
+    {
+      "minServiceMonths": 1,
+      "maxServiceMonths": 3,
+      "noticeDays": 7,
+      "description": "Rest of probation: at least 7 days (or as agreed)"
+    },
+    {
+      "minServiceMonths": 3,
+      "maxServiceMonths": null,
+      "noticeDays": 30,
+      "description": "After probation: as agreed in the contract, at least 7 days; 1 month is common"
+    }
+  ]
+}

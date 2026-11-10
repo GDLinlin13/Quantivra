@@ -11,6 +11,7 @@ const COUNTRY_PACK_LOADERS: Record<string, () => Promise<{ default: CountryPackD
   SG: () => import('../data/country-packs/SG/index'),
   AE: () => import('../data/country-packs/AE/index'),
   SA: () => import('../data/country-packs/SA/index'),
+  HK: () => import('../data/country-packs/HK/index'),
 };
 
 export const SUPPORTED_PACK_CODES = Object.keys(COUNTRY_PACK_LOADERS);
@@ -238,8 +239,15 @@ export function componentLabel(code: string): string {
     AWS: 'Annual Wage Supplement', DEDUCTION_CPF: 'CPF (Employee)', DEDUCTION_PAYE: 'Income Tax',
     DEDUCTION_SDL: 'SDL', DEDUCTION_SHG: 'Self-Help Group', CPF_EMPLOYER: 'CPF (Employer)',
   };
-  return map[code] || PAY_ITEM_BY_CODE[code]?.label || code.replace(/^DEDUCTION_/, '').replace(/_/g, ' ');
+  if (map[code] || PAY_ITEM_BY_CODE[code]) return map[code] || PAY_ITEM_BY_CODE[code].label;
+  // the employer's share of a scheme: COST_MPF_EMPLOYER → "MPF (Employer)"
+  const er = code.match(/^COST_(.+)_EMPLOYER$/);
+  if (er) return er[1] === 'EOSB' ? 'End-of-service gratuity' : `${er[1].replace(/_/g, ' ')} (Employer)`;
+  if (EMPLOYEE_SHARE.has(code)) return `${code.slice(10)} (Employee)`;
+  return code.replace(/^DEDUCTION_/, '').replace(/_/g, ' ');
 }
+/** Schemes with an employee and an employer share, so the employee's line says whose it is. */
+const EMPLOYEE_SHARE = new Set(['DEDUCTION_MPF', 'DEDUCTION_GPSSA', 'DEDUCTION_GOSI']);
 
 /** Overtime, allowances, bonuses, reimbursements and deductions for payroll (pay-access users only). */
 export const payItemService = {
