@@ -67,3 +67,13 @@ describe('file order', () => {
     expect(f.find(x => x.title === 'CPF')!.files.map(x => x.name)).toEqual(['202605 ($11,348.50).pdf', '202606 ($11,348.50).pdf', '202607 ($11,722).pdf', '202608 ($12,278).pdf', 'Note 2.pdf', 'Note 10.pdf']);
   });
 });
+
+describe('statement month from its text', () => {
+  it('reads the common date styles', async () => {
+    const { statementMonthFromText } = await import('../documents');
+    expect(statementMonthFromText('結單日期 Statement Date:  31 Jul 2025')).toBe('2025-07');
+    expect(statementMonthFromText('Period 2025-08-01 to 2025-08-31')).toBe('2025-08');
+    expect(statementMonthFromText('As at 30/09/2025')).toBe('2025-09');
+    expect(statementMonthFromText('no dates here')).toBeNull();
+  });
+});

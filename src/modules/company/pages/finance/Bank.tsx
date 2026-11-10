@@ -6,7 +6,7 @@ import {
 import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined, EditOutlined, PaperClipOutlined, StopOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { bankService, paymentService, marketRate, loadLedgerInput, accountService, pdfLayoutService, pictureStatementPref, companyFileService, type BankTxn, type Payment } from '../../../../services/finance';
-import { statementPeriod } from '../../../../data/documents';
+import { statementPeriod, statementMonthFromText } from '../../../../data/documents';
 import { planImport, nothingNew } from '../../../../data/bankImport';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
 import { balanceDue, inBase, docRate, isForeignDoc, schemeLabel, type Account, type FinDocument } from '../../../../data/finance';
@@ -57,6 +57,8 @@ export function Bank({ data }: { data: FinanceData }) {
   const [bankEdit, setBankEdit] = useState<Partial<Account> | null>(null);
   const [pdfRows, setPdfRows] = useState<PdfRow[] | null>(null);
   const [teaching, setTeaching] = useState(false);
+  // a statement with no transactions: the month it is saved under
+  const [nothingMonth, setNothingMonth] = useState<dayjs.Dayjs | null>(null);
   const [layouts, setLayouts] = useState<Record<string, PdfLayout>>({});
   useEffect(() => { pdfLayoutService.get(companyId).then(setLayouts).catch(() => setLayouts({})); }, [companyId]);
   const [readPictures, setReadPictures] = useState(false);
@@ -443,8 +445,29 @@ export function Bank({ data }: { data: FinanceData }) {
       {adding && <AddLine onClose={() => setAdding(false)} currency={accCur}
         onAdd={async l => { await bankService.add(companyId, accountId!, [l]); setAdding(false); load(); }} />}
       {bankModal}
+      {nothingMonth && (
+        <Modal open title="No transactions this month" okText="Save statement" onCancel={() => setNothingMonth(null)}
+          onOk={async () => {
+            try {
+              if (stmtFile) await saveBankStatement(companyId, stmtFile, accountId!, nothingMonth.format('YYYY-MM'));
+              message.success(`Saved as the ${nothingMonth.format('MMMM YYYY')} statement — no transactions`);
+              setNothingMonth(null);
+            } catch (e: any) { message.error(e.message); }
+          }}>
+          <Space>
+            <Text>Save this statement in Documents as</Text>
+            <DatePicker picker="month" format="MMMM YYYY" allowClear={false} value={nothingMonth} onChange={d => d && setNothingMonth(d)} />
+          </Space>
+        </Modal>
+      )}
       {teaching && pdfRows && (
         <TeachPdf rows={pdfRows} bankName={account?.name || 'this bank'} onClose={() => setTeaching(false)}
+          onNothing={() => {
+            // a statement with no transactions: keep it in Documents for its month, nothing to import
+            const m = statementMonthFromText(pdfRows.slice(0, 40).map(r => r.map(p => p.s).join(' ')).join('\n'));
+            setTeaching(false);
+            setNothingMonth(m ? dayjs(`${m}-01`) : dayjs().subtract(1, 'month').startOf('month'));
+          }}
           onDone={async (layout, lines) => {
             try { await pdfLayoutService.save(companyId, accountId!, layout); setLayouts(l => ({ ...l, [String(accountId)]: layout })); } catch (e: any) { message.error(e.message); }
             setTeaching(false);

@@ -170,6 +170,17 @@ export function buildFolders(input: DocumentsInput, opts: { payslips?: boolean; 
 }
 
 /** The month a bank statement covers: the month most of its lines fall in. */
+/** The month a statement is for, from its own text (e.g. "Statement Date: 31 Jul 2025" → 2025-07); null if none. */
+export function statementMonthFromText(text: string): string | null {
+  const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  const named = text.match(/\b(\d{1,2})[\s\-/.]+([A-Za-z]{3,9})[\s\-/.,]+(20\d{2})\b/);
+  if (named) { const m = MONTHS.indexOf(named[2].slice(0, 3).toLowerCase()); if (m >= 0) return `${named[3]}-${String(m + 1).padStart(2, '0')}`; }
+  const iso = text.match(/\b(20\d{2})-(\d{2})-\d{2}\b/);
+  if (iso) return `${iso[1]}-${iso[2]}`;
+  const dmy = text.match(/\b\d{1,2}\/(\d{1,2})\/(20\d{2})\b/);
+  return dmy ? `${dmy[2]}-${dmy[1].padStart(2, '0')}` : null;
+}
+
 export function statementPeriod(dates: string[]): string | null {
   const count = new Map<string, number>();
   for (const d of dates) { const m = d.slice(0, 7); count.set(m, (count.get(m) || 0) + 1); }
