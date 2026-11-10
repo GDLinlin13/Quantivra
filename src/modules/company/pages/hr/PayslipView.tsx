@@ -48,7 +48,10 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
       .catch(() => {});
     return () => { live = false; };
   }, [company?.id, slip.employee_id, employee]);
-  const bankFull = emp?.bank_account || null;
+  // the full number only when the employee still has the account this payslip was paid to (a newer account
+  // never shows on an older payslip — that one shows the masked number it was saved with)
+  const sameAccount = !!emp?.bank_account && (!bankMasked || maskId(emp.bank_account) === bankMasked);
+  const bankFull = sameAccount ? emp!.bank_account! : null;
   const designation: string = res.designation ?? emp?.job_title ?? '';
   const department: string = res.department ?? emp?.department_name ?? '';
   const idMasked: string = res.idMasked ?? maskId(emp?.national_id) ?? '';
