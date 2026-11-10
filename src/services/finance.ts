@@ -92,11 +92,26 @@ async function readyToUpload(original: File): Promise<File> {
   let file = await shrinkFile(original);
   // a PDF over the limit is redrawn smaller (pages as pictures)
   if (file.size > max && (file.type === 'application/pdf' || /\.pdf$/i.test(file.name))) {
-    const hide = message.loading(`${original.name} is over ${ATTACH_MAX_MB} MB — making it smaller…`, 0);
-    try { file = (await shrinkPdf(file, max)) || file; } catch { /* left as it is */ } finally { hide(); }
+    const key = `shrink-${original.name}`;
+    const show = (text: string) => message.open({ key, type: 'loading', content: text, duration: 0 });
+    show(`${original.name} is over ${ATTACH_MAX_MB} MB — making it smaller…`);
+    try {
+      file = (await shrinkPdf(file, max, (p, n) => show(`Making ${original.name} smaller… page ${p} of ${n}`))) || file;
+    } catch (e: any) {
+      message.destroy(key);
+      throw new Error(`${original.name} could not be made smaller (${e?.message || 'unknown error'}). Split it into parts and upload them separately.`);
+    }
+    message.destroy(key);
   }
   if (file.size > max) throw new Error(`${original.name} is bigger than ${ATTACH_MAX_MB} MB, even made smaller. Split it into parts (e.g. by month) and upload them separately.`);
   return file;
+}
+/** Big files take a while to send: say so until they're stored. */
+async function sending<T>(file: File, run: () => Promise<T>): Promise<T> {
+  if (file.size < 5 * 1024 * 1024) return run();
+  const key = `upload-${file.name}`;
+  message.open({ key, type: 'loading', content: `Uploading ${file.name} (${(file.size / 1048576).toFixed(1)} MB)…`, duration: 0 });
+  try { return await run(); } finally { message.destroy(key); }
 }
 const uploadError = (file: File, msg: string) =>
   /exceed|too large|maximum allowed size|payload/i.test(msg) ? `${file.name} is too big for the current limit (10 MB). Files up to 50 MB need database update 035 — ask your administrator to run it in Supabase.`
@@ -112,7 +127,7 @@ export const attachmentService = {
     const file = await readyToUpload(original);
     const safe = file.name.replace(/[^\w.\- ]+/g, '_').slice(-80);
     const path = `${companyId}/${documentId}/${Date.now()}-${safe}`;
-    const up = await supabase.storage.from(ATTACH_BUCKET).upload(path, file, { contentType: contentTypeOf(file), upsert: false });
+    const up = await sending(file, () => supabase.storage.from(ATTACH_BUCKET).upload(path, file, { contentType: contentTypeOf(file), upsert: false }));
     if (up.error) throw new Error(/bucket|not found/i.test(up.error.message) ? 'Attachments need database update 028 — ask your administrator to run it in Supabase.' : uploadError(file, up.error.message));
     const r = await supabase.from('fin_attachments').insert({ company_id: companyId, document_id: documentId, path, file_name: file.name, content_type: contentTypeOf(file), size_bytes: file.size });
     if (r.error) { await supabase.storage.from(ATTACH_BUCKET).remove([path]); throw new Error(r.error.message); }
@@ -154,7 +169,7 @@ export const companyFileService = {
     const file = await readyToUpload(original);
     const safe = file.name.replace(/[^\w.\- ]+/g, '_').slice(-80);
     const path = `${companyId}/files/${Date.now()}-${safe}`;
-    const up = await supabase.storage.from(ATTACH_BUCKET).upload(path, file, { contentType: contentTypeOf(file), upsert: false });
+    const up = await sending(file, () => supabase.storage.from(ATTACH_BUCKET).upload(path, file, { contentType: contentTypeOf(file), upsert: false }));
     if (up.error) throw new Error(uploadError(file, up.error.message));
     const r = await supabase.from('company_files').insert({
       company_id: companyId, folder: meta.folder, account_id: meta.account_id ?? null, period: meta.period ?? null,
