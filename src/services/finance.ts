@@ -1,5 +1,6 @@
 import type { CatalogItem, StockAdjustment, CustomerPrice } from '../data/catalog';
-import { shrinkFile } from '../utils/shrinkFile';
+import { message } from 'antd';
+import { shrinkFile, shrinkPdf } from '../utils/shrinkFile';
 import { supabase } from '../utils/supabase';
 import {
   docTotals, statusAfterPayment, bankCodePlan, chartUpgrade, defaultAccountsFor, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
@@ -87,8 +88,14 @@ export const ATTACH_MAX_MB = 50;
 
 /** Shrink pictures, then check the size; storage's own limit is 50 MB from database update 035 (10 MB before). */
 async function readyToUpload(original: File): Promise<File> {
-  const file = await shrinkFile(original);
-  if (file.size > ATTACH_MAX_MB * 1024 * 1024) throw new Error(`${original.name} is bigger than ${ATTACH_MAX_MB} MB`);
+  const max = ATTACH_MAX_MB * 1024 * 1024;
+  let file = await shrinkFile(original);
+  // a PDF over the limit is redrawn smaller (pages as pictures)
+  if (file.size > max && (file.type === 'application/pdf' || /\.pdf$/i.test(file.name))) {
+    const hide = message.loading(`${original.name} is over ${ATTACH_MAX_MB} MB — making it smaller…`, 0);
+    try { file = (await shrinkPdf(file, max)) || file; } catch { /* left as it is */ } finally { hide(); }
+  }
+  if (file.size > max) throw new Error(`${original.name} is bigger than ${ATTACH_MAX_MB} MB, even made smaller. Split it into parts (e.g. by month) and upload them separately.`);
   return file;
 }
 const uploadError = (file: File, msg: string) =>
