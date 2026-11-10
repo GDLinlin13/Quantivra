@@ -20,6 +20,8 @@ export function documentData(doc: FinDocument, lines: DocLine[], contact: Contac
   const termsDays = doc.due_date ? Math.round((Date.parse(doc.due_date) - Date.parse(doc.issue_date)) / 86400000) : null;
   const fields: FieldValues = {
     ...companyFields(company, branding, inv?.footerNote),
+    // {{currency}} is the document's own currency (a USD invoice says USD, not the company's HKD)
+    currency: doc.currency || company?.currency || 'SGD',
     document_title: DOC_LABEL[doc.doc_type].toUpperCase(),
     invoice_no: doc.number, invoice_date: doc.issue_date, due_date: doc.due_date || '',
     payment_terms: termsDays != null ? (termsDays === 0 ? 'Due on receipt' : `${termsDays} days`) : '',
