@@ -231,9 +231,11 @@ export const accountService = {
     // some account names follow the country (CPF in Singapore, EPF in Malaysia, GST / VAT…)
     const country = (co.data as any)?.country || 'SG';
     if (!rows.length) {
-      must(await supabase.from('fin_accounts').upsert(
-        defaultAccountsFor(country).map(a => ({ ...a, company_id: companyId })), { onConflict: 'company_id,code', ignoreDuplicates: true }));
-      rows = must(await supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code')) || [];
+      try {
+        must(await supabase.from('fin_accounts').upsert(
+          defaultAccountsFor(country).map(a => ({ ...a, company_id: companyId })), { onConflict: 'company_id,code', ignoreDuplicates: true }));
+        rows = must(await supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code')) || [];
+      } catch { /* view only: the chart is set up by someone who can edit Finance */ }
     }
     const up = chartUpgrade(rows, country);
     if (up.add.length || up.rename.length) {

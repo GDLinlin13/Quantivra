@@ -4,11 +4,13 @@ import { SaveOutlined } from '@ant-design/icons';
 import { financeSettingsService } from '../../../../services/finance';
 import type { FinanceSettings } from '../../../../data/finance';
 import { taxRegLabel } from '../../../../data/countries';
+import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 
 const { Text } = Typography;
 
 /** GST and defaults for quotations and invoices. */
 export function FinanceSettingsTab({ companyId, country, settings, onSaved }: { companyId: number; country?: string | null; settings: FinanceSettings; onSaved: () => void }) {
+  const access = useCompanyAccess();
   const [s, setS] = useState<FinanceSettings>(settings);
   const [saving, setSaving] = useState(false);
   useEffect(() => setS(settings), [settings]);
@@ -39,7 +41,7 @@ export function FinanceSettingsTab({ companyId, country, settings, onSaved }: { 
         <Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
           Payment terms, bank details and the look of invoices are in Company Profile → Invoice Template. Invoice and quotation numbers follow Settings → Document numbers.
         </Text>
-        <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>Save</Button>
+        {access.canWrite('finance') && <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>Save</Button>}
       </Form>
     </Card>
   );

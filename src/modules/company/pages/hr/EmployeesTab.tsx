@@ -15,7 +15,8 @@ const EMP_TYPES = ['full_time', 'part_time', 'contract', 'intern', 'casual', 'di
 const nice = (v: string) => { const t = (v || '').replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1); };
 
 export function EmployeesTab({ companyId }: { companyId: number }) {
-  const { canViewPay } = useCompanyAccess();
+  const { canViewPay, canWrite: canWriteIn, canRemove: canRemoveIn } = useCompanyAccess();
+  const canWrite = canWriteIn('employees'), canRemove = canRemoveIn('employees');
   const [rows, setRows] = useState<Employee[]>([]);
   const [depts, setDepts] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -104,12 +105,12 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
     { title: 'Type', dataIndex: 'employment_type', key: 'type', render: (v: string) => <Tag>{nice(v)}</Tag> },
     { title: 'Status', dataIndex: 'status', key: 'status', render: (v: string) => <Tag color={v === 'active' ? 'green' : v === 'on_leave' ? 'gold' : 'red'}>{nice(v)}</Tag> },
     {
-      title: '', key: 'act', render: (_: any, r: Employee) => (
+      title: '', key: 'act', render: (_: any, r: Employee) => canWrite && (
         <Space>
           <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-          <Popconfirm title="Delete this employee? Their leave records go too." onConfirm={async () => { await hrService.deleteEmployee(r.id); message.success('Deleted'); load(); }}>
+          {canRemove && <Popconfirm title="Delete this employee? Their leave records go too." onConfirm={async () => { await hrService.deleteEmployee(r.id); message.success('Deleted'); load(); }}>
             <Button size="small" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+          </Popconfirm>}
         </Space>
       ),
     },
@@ -117,7 +118,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+      {canWrite && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Space>
           <Button icon={<PlusOutlined />} onClick={async () => {
             const name = prompt('New department name');
@@ -126,7 +127,7 @@ export function EmployeesTab({ companyId }: { companyId: number }) {
         </Space>
         <Button type="primary" icon={<PlusOutlined />} onClick={openNew}
           style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>Add Employee</Button>
-      </div>
+      </div>}
 
       <Table dataSource={rows} columns={columns} loading={loading} rowKey="id" size="small"
         pagination={false} style={{ background: 'transparent' }}

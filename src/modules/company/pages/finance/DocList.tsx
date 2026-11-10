@@ -12,6 +12,7 @@ import { money } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
 import { lineText, type CatalogItem } from '../../../../data/catalog';
 import { DocEditor } from './DocEditor';
+import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { DocumentView } from './DocumentView';
 import { PRINT_CSS } from '../hr/PayslipView';
 import { elementsToPdf, downloadBlob, formatDocFileName } from '../../../../utils/payslipFiles';
@@ -31,6 +32,8 @@ export interface FinanceData {
 /** A list of documents of one kind (invoices, quotations, bills…) with everything you do to them. */
 export function DocList({ data, docType }: { data: FinanceData; docType: DocType }) {
   const { companyId, currency, contacts, people, accounts, settings, branding, company, docs, reload } = data;
+  const access = useCompanyAccess();
+  const canWrite = access.canWrite('finance'), canRemove = access.canRemove('finance');
   const sales = docType === 'quote' || docType === 'invoice' || docType === 'credit_note';
   const payable = docType === 'invoice' || docType === 'bill' || docType === 'expense';
   const [filter, setFilter] = useState<string>('all');
@@ -93,7 +96,7 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
           <Segmented value={filter} onChange={v => setFilter(String(v))} options={filters} />
           <Input allowClear prefix={<SearchOutlined />} placeholder="Search number, name, reference" style={{ width: 260 }} value={search} onChange={e => setSearch(e.target.value)} />
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ id: null })}>New {DOC_LABEL[docType].toLowerCase()}</Button>
+        {canWrite && <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ id: null })}>New {DOC_LABEL[docType].toLowerCase()}</Button>}
       </div>
 
       <Table rowKey="id" size="small" dataSource={shown} pagination={{ pageSize: 50, hideOnSinglePage: true }}
@@ -111,19 +114,18 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
             title: '', key: 'a', width: 200, render: (_, d) => (
               <Space size={4}>
                 <Button size="small" icon={<PrinterOutlined />} onClick={() => setViewing(d.id)} disabled={!sales} title={sales ? 'View / print / download' : undefined} />
-                {payable && d.status !== 'void' && d.status !== 'draft' && balanceDue(d) > 0 && (
+                {canWrite && payable && d.status !== 'void' && d.status !== 'draft' && balanceDue(d) > 0 && (
                   <Button size="small" icon={<DollarOutlined />} onClick={() => setPaying(d)}>{sales ? 'Receive' : 'Pay'}</Button>
                 )}
-                {docType === 'quote' && !['declined', 'void'].includes(d.status) && (
+                {canWrite && docType === 'quote' && !['declined', 'void'].includes(d.status) && (
                   <Button size="small" icon={<FileDoneOutlined />} onClick={() => toInvoice(d)}>Invoice</Button>
                 )}
-                <Dropdown trigger={['click']} menu={{
+                {canWrite && <Dropdown trigger={['click']} menu={{
                   items: [
                     { key: 'copy', icon: <CopyOutlined />, label: 'Copy as new draft' },
                     ...(docType === 'quote' ? [{ key: 'accepted', label: 'Mark accepted' }, { key: 'declined', label: 'Mark declined' }] : []),
                     ...(d.status === 'draft' ? [{ key: sales ? 'sent' : 'approved', label: sales ? 'Mark as sent' : 'Approve' }] : []),
-                    { type: 'divider' as const },
-                    { key: 'delete', danger: true, label: 'Delete' },
+                    ...(canRemove ? [{ type: 'divider' as const }, { key: 'delete', danger: true, label: 'Delete' }] : []),
                   ],
                   onClick: async ({ key }) => {
                     try {
@@ -138,7 +140,7 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
                   },
                 }}>
                   <Button size="small" icon={<MoreOutlined />} />
-                </Dropdown>
+                </Dropdown>}
               </Space>
             ),
           },

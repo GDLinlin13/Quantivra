@@ -4,11 +4,13 @@ import { DeleteOutlined } from '@ant-design/icons';
 import { paymentService, type Payment } from '../../../../services/finance';
 import { money } from '../../../../data/documentLayouts';
 import type { FinanceData } from './DocList';
+import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 
 const { Text } = Typography;
 
 /** Money received (in) or paid out (out), and which documents each payment settled. */
 export function PaymentsList({ data, direction }: { data: FinanceData; direction: 'in' | 'out' }) {
+  const access = useCompanyAccess();
   const { companyId, contacts, accounts, docs, reload } = data;
   const [rows, setRows] = useState<Payment[]>([]);
   const [allocs, setAllocs] = useState<{ payment_id: number; document_id: number; amount: number }[]>([]);
@@ -60,7 +62,7 @@ export function PaymentsList({ data, direction }: { data: FinanceData; direction
           },
           { title: 'Reference', dataIndex: 'reference', render: (v: string | null) => v || '—' },
           {
-            title: '', key: 'x', width: 50, render: (_, p) => (
+            title: '', key: 'x', width: 50, render: (_, p) => access.canRemove('finance') && (
               <Popconfirm title="Delete this payment?" description="The invoice / bill goes back to unpaid for this amount."
                 onConfirm={async () => { try { await paymentService.remove(p.id); message.success('Deleted'); reload(); load(); } catch (e: any) { message.error(e.message); } }}>
                 <Button size="small" danger icon={<DeleteOutlined />} />

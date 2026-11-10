@@ -12,6 +12,7 @@ import { money } from '../../../../data/documentLayouts';
 import { PRINT_CSS } from '../hr/PayslipView';
 import type { FinanceData } from './DocList';
 import { AmountInput } from '../../../../components/AmountInput';
+import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -85,6 +86,8 @@ function Sheet({ id, title, subtitle, company, currency, children }: { id: strin
 // ---- reports ---------------------------------------------------------------------------------
 
 function Reports({ data, input, entries, reload }: { data: FinanceData; input: Loaded; entries: LedgerEntry[]; reload: () => void }) {
+  const access = useCompanyAccess();
+  const canWrite = access.canWrite('finance'), canRemove = access.canRemove('finance');
   const [paying, setPaying] = useState<{ account: Account; amount: number } | null>(null);
   const [report, setReport] = useState('pl');
   const [range, setRange] = useState<[Dayjs, Dayjs]>(PRESETS['This year']());
@@ -191,7 +194,7 @@ function Reports({ data, input, entries, reload }: { data: FinanceData; input: L
           </>
         )}
       </Sheet>
-      {other.filter(b => b.balance > 0).length > 0 && (
+      {canWrite && other.filter(b => b.balance > 0).length > 0 && (
         <Space wrap style={{ marginTop: 8 }}>
           {other.filter(b => b.balance > 0).map(b => (
             <Button key={b.account.id} onClick={() => setPaying({ account: b.account, amount: b.balance })}>Record payment: {b.account.name}</Button>
@@ -247,6 +250,8 @@ const SUBTYPE_OPTIONS = [
 ];
 
 function ChartOfAccounts({ data, accounts, entries, reload }: { data: FinanceData; accounts: Account[]; entries: LedgerEntry[]; reload: () => void }) {
+  const access = useCompanyAccess();
+  const canWrite = access.canWrite('finance'), canRemove = access.canRemove('finance');
   const [editing, setEditing] = useState<Partial<Account> | null>(null);
   const [history, setHistory] = useState<Account | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -256,7 +261,7 @@ function ChartOfAccounts({ data, accounts, entries, reload }: { data: FinanceDat
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
         <Space><Segmented value={showArchived ? 'all' : 'active'} onChange={v => setShowArchived(v === 'all')} options={[{ value: 'active', label: 'In use' }, { value: 'all', label: 'Include archived' }]} /></Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ type: 'expense' })}>Add account</Button>
+        {canWrite && <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ type: 'expense' })}>Add account</Button>}
       </div>
       <Table rowKey="id" size="small" dataSource={rows} pagination={false}
         columns={[
@@ -266,10 +271,10 @@ function ChartOfAccounts({ data, accounts, entries, reload }: { data: FinanceDat
           { title: '', key: 's', render: (_, a) => <Space size={4}>{a.subtype === 'bank' && <Tag color="blue">bank</Tag>}{a.subtype === 'cash' && <Tag color="blue">cash</Tag>}{a.is_system && <Tag>used automatically</Tag>}{a.archived && <Tag>archived</Tag>}</Space> },
           { title: 'Balance today', key: 'b', align: 'right' as const, render: (_, a) => money(bal.get(a.id) || 0, data.currency) },
           {
-            title: '', key: 'a', width: 90, render: (_, a) => (
+            title: '', key: 'a', width: 90, render: (_, a) => canWrite && (
               <Space>
                 <Button size="small" icon={<EditOutlined />} onClick={() => setEditing(a)} />
-                {!a.is_system && (
+                {canRemove && !a.is_system && (
                   <Popconfirm title={`Delete ${a.name}?`} description="Accounts that are used can't be deleted — archive them instead."
                     onConfirm={async () => { try { await accountService.remove(a.id); message.success('Deleted'); reload(); } catch (e: any) { message.error(e.message); } }}>
                     <Button size="small" danger icon={<DeleteOutlined />} />
@@ -361,13 +366,15 @@ function AccountHistory({ account, entries, currency, onClose }: { account: Acco
 // ---- manual journals ---------------------------------------------------------------------------
 
 function Journals({ data, accounts, journals, reload }: { data: FinanceData; accounts: Account[]; journals: JournalRow[]; reload: () => void }) {
+  const access = useCompanyAccess();
+  const canWrite = access.canWrite('finance'), canRemove = access.canRemove('finance');
   const [editing, setEditing] = useState<Partial<JournalRow> | null>(null);
   const name = (id: number) => { const a = accounts.find(x => x.id === id); return a ? `${a.code} ${a.name}` : '?'; };
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, gap: 12 }}>
         <Text type="secondary">For anything not covered by invoices, bills, expenses or payroll — e.g. loans, depreciation, year-end adjustments.</Text>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ journal_date: today(), lines: [] })}>New journal entry</Button>
+        {canWrite && <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ journal_date: today(), lines: [] })}>New journal entry</Button>}
       </div>
       <Table rowKey="id" size="small" dataSource={journals} pagination={{ pageSize: 50, hideOnSinglePage: true }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No journal entries" /> }}
@@ -377,12 +384,12 @@ function Journals({ data, accounts, journals, reload }: { data: FinanceData; acc
           { title: 'Memo', dataIndex: 'memo' },
           { title: 'Lines', key: 'l', render: (_, j) => j.lines.map(l => <div key={l.id} style={{ fontSize: 12 }}>{name(l.account_id)}: {l.debit ? `Dr ${money(l.debit, data.currency)}` : `Cr ${money(l.credit, data.currency)}`}</div>) },
           {
-            title: '', key: 'a', width: 90, render: (_, j) => (
+            title: '', key: 'a', width: 90, render: (_, j) => canWrite && (
               <Space>
                 <Button size="small" icon={<EditOutlined />} onClick={() => setEditing(j)} />
-                <Popconfirm title="Delete this journal entry?" onConfirm={async () => { await journalService.remove(j.id); message.success('Deleted'); reload(); }}>
+                {canRemove && <Popconfirm title="Delete this journal entry?" onConfirm={async () => { await journalService.remove(j.id); message.success('Deleted'); reload(); }}>
                   <Button size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
+                </Popconfirm>}
               </Space>
             ),
           },
