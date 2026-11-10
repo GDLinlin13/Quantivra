@@ -7,7 +7,7 @@ import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteO
 import dayjs from 'dayjs';
 import { bankService, paymentService, marketRate, loadLedgerInput, accountService, pdfLayoutService, pictureStatementPref, companyFileService, type BankTxn, type Payment } from '../../../../services/finance';
 import { statementPeriod, statementMonthFromText } from '../../../../data/documents';
-import { rowsForCurrency, statementCurrencies } from '../../../../data/bankCurrency';
+import { rowsForCurrency, statementCurrencies, rateFromText } from '../../../../data/bankCurrency';
 import { planImport, nothingNew } from '../../../../data/bankImport';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
 import { balanceDue, inBase, docRate, isForeignDoc, schemeLabel, type Account, type FinDocument } from '../../../../data/finance';
@@ -564,15 +564,17 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   const lineAmt = Math.abs(Number(txn.amount));                 // in the bank account's currency
   // the rate has its own box (so typing 1.29 isn't undone by rounding a small amount); starts at the last rate used
   const r2 = (n: number) => Math.round(n * 100) / 100;
-  const [rate, setRate] = useState<number | null>(foreign && lastRate ? lastRate : null);
-  const [base, setBase] = useState<number | null>(foreign && lastRate ? r2(lastRate * lineAmt) : null);  // the same in the company's currency
+  // the bank's own rate when the line states it ("1 HKD=0.129016 USD"), else the last rate used on this bank
+  const textRate = foreign ? rateFromText(txn.description, accCur, data.currency, lineAmt) : null;
+  const [rate, setRate] = useState<number | null>(textRate?.rate ?? (foreign && lastRate ? lastRate : null));
+  const [base, setBase] = useState<number | null>(textRate?.base ?? (foreign && lastRate ? r2(lastRate * lineAmt) : null));  // the same in the company's currency
   // no rate keyed: the last rate used on this bank is used (only the very first line needs one)
   const effBase = base ?? (foreign && lastRate ? r2(lastRate * lineAmt) : null);
-  const [editRate, setEditRate] = useState(!lastRate);
+  const [editRate, setEditRate] = useState(!lastRate && !textRate);
   // no rate used on this bank yet: the market rate on the line's date
   const [looking, setLooking] = useState(false);
   useEffect(() => {
-    if (!foreign || lastRate) return;
+    if (!foreign || lastRate || textRate) return;
     setLooking(true);
     marketRate(accCur, data.currency, txn.txn_date).then(r => {
       if (r) { setRate(x => x ?? r); setBase(x => x ?? r2(r * lineAmt)); }
@@ -593,6 +595,12 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
     && Math.abs(Number(p.amount) - amt) < 0.005 && near(p.payment_date) && (!p.account_id || p.account_id === txn.account_id));
   const journalHits = !ready ? [] : recorded.filter(r => r.journal_id && Math.sign(r.amount) === Math.sign(Number(txn.amount))
     && Math.abs(Math.abs(r.amount) - amt) < 0.005 && near(r.txn_date));
+  // a recorded transfer of nearly this amount (recorded at another rate than the bank used): match it and book the
+  // difference as an exchange gain / loss (lines in the company's currency only)
+  const fxAcc = data.accounts.find(a => a.subtype === 'fx_gain_loss' && !a.archived);
+  const nearHits = !ready || foreign || !fxAcc ? [] : recorded.filter(r => r.journal_id && Math.sign(r.amount) === Math.sign(Number(txn.amount))
+    && Math.abs(Math.abs(r.amount) - amt) >= 0.005 && Math.abs(Math.abs(r.amount) - amt) <= Math.abs(r.amount) * 0.05
+    && Math.abs(dayjs(r.txn_date).diff(dayjs(txn.txn_date), 'day')) <= 3);
   // a document in the bank's own currency is compared in that currency; anything else in the company's currency
   const inBankCur = (d: FinDocument) => isForeignDoc(d, data.currency) && d.currency === accCur;
   const sameAmount = (d: FinDocument) => inBankCur(d) ? Math.abs(balanceDue(d) - lineAmt) < 0.005 : Math.abs(inBase(d, balanceDue(d)) - amt) < 0.005;
@@ -675,7 +683,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
       title={<span>{inbound ? 'Money in' : 'Money out'} {money(lineAmt, accCur)} on {txn.txn_date}<div style={{ fontSize: 12, fontWeight: 400, color: '#999' }}>{txn.description}</div></span>}>
       {foreign && !editRate && (
         <div style={{ marginBottom: 12 }}>
-          <Text type="secondary">1 {accCur} = {lastRate} {data.currency}</Text>{' '}
+          <Text type="secondary">1 {accCur} = {rate ?? lastRate} {data.currency}{textRate ? ` = ${money(textRate.base, data.currency)} (the bank's rate)` : ''}</Text>{' '}
           <Button size="small" type="link" onClick={() => setEditRate(true)}>Change rate</Button>
         </div>
       )}
@@ -694,7 +702,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
           {ready && !lastRate && rate != null && <div style={{ marginTop: 6 }}><Text type="secondary">Market rate on {txn.txn_date}; change it if your bank used another.</Text></div>}
         </div>
       )}
-      <Tabs defaultActiveKey={suggestions.length || journalHits.length ? 'existing' : payrollHit ? 'payroll' : openDocs.length ? 'doc' : 'account'} items={[
+      <Tabs defaultActiveKey={suggestions.length || journalHits.length || nearHits.length ? 'existing' : payrollHit ? 'payroll' : openDocs.length ? 'doc' : 'account'} items={[
         {
           key: 'doc', label: inbound ? 'Payment for an invoice' : 'Payment of a bill / expense',
           children: (
@@ -728,8 +736,19 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
           ),
         },
         {
-          key: 'existing', label: `Already recorded (${suggestions.length + journalHits.length})`,
-          children: suggestions.length + journalHits.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing of this amount recorded within two weeks" /> : (<>
+          key: 'existing', label: `Already recorded (${suggestions.length + journalHits.length + nearHits.length})`,
+          children: suggestions.length + journalHits.length + nearHits.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing of this amount recorded within two weeks" /> : (<>
+            {nearHits.length > 0 && (
+              <Table rowKey="id" size="small" pagination={false} dataSource={nearHits} style={{ marginBottom: 12 }}
+                columns={[
+                  { title: 'Date', dataIndex: 'txn_date' },
+                  { title: 'Recorded as', key: 'd', render: (_, r) => r.description },
+                  { title: 'Recorded', key: 'a', align: 'right' as const, render: (_, r) => money(Math.abs(r.amount), data.currency) },
+                  { title: 'Difference', key: 'g', align: 'right' as const, render: (_, r) => <Text type="secondary">{money(r2(amt - Math.abs(r.amount)), data.currency)} → {fxAcc!.code} {fxAcc!.name}</Text> },
+                  { title: '', key: 'x', render: (_, r) => <Button size="small" type="primary" loading={busy}
+                    onClick={() => run(() => bankService.matchJournalAdjusted(data.companyId, txn.id, r.journal_id!, txn.account_id, Number(txn.amount), fxAcc!.id))}>Match</Button> },
+                ]} />
+            )}
             {journalHits.length > 0 && (
               <Table rowKey="id" size="small" pagination={false} dataSource={journalHits} style={{ marginBottom: suggestions.length ? 12 : 0 }}
                 columns={[

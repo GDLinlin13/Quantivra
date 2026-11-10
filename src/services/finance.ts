@@ -653,6 +653,24 @@ export const bankService = {
     const r = await supabase.from('fin_bank_transactions').update({ journal_id: journalId, payment_id: null, status: 'matched', journal_existing: true, ...(baseAmount != null ? { base_amount: baseAmount } : {}) }).eq('id', txnId);
     if (r.error) throw new Error(/journal_existing/i.test(r.error.message) ? 'This needs database update 031 — ask your administrator to run it in Supabase.' : r.error.message);
   },
+  /**
+   * Match a statement line to a recorded transfer whose amount for this bank differs a little (e.g. recorded at a
+   * market rate, the bank converted at its own): this bank's side becomes the statement's amount and the difference
+   * goes to the exchange gain / loss account.
+   */
+  async matchJournalAdjusted(companyId: number, txnId: number, journalId: number, accountId: number, signedAmount: number, fxAccountId: number) {
+    const j = must(await supabase.from('fin_journals').select('id, journal_date, memo').eq('id', journalId).single());
+    const ls: any[] = must(await supabase.from('fin_journal_lines').select('*').eq('journal_id', journalId)) || [];
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const lines = ls.map(l => (l.account_id === accountId
+      ? { ...l, debit: signedAmount > 0 ? r2(Math.abs(signedAmount)) : 0, credit: signedAmount < 0 ? r2(Math.abs(signedAmount)) : 0 }
+      : l)).filter(l => l.account_id !== fxAccountId);
+    // whatever no longer balances (credits over debits = a loss) goes to the exchange account
+    const gap = r2(lines.reduce((t, l) => t + Number(l.credit) - Number(l.debit), 0));
+    if (gap) lines.push({ account_id: fxAccountId, debit: gap > 0 ? gap : 0, credit: gap < 0 ? -gap : 0, description: gap > 0 ? 'Exchange loss' : 'Exchange gain' });
+    await journalService.save(companyId, j, lines.map(l => ({ account_id: l.account_id, debit: Number(l.debit) || 0, credit: Number(l.credit) || 0, description: l.description })));
+    await this.matchJournal(txnId, journalId);
+  },
   async matchPayment(txnId: number, paymentId: number, baseAmount?: number) {
     await this.update(txnId, { payment_id: paymentId, journal_id: null, status: 'matched', ...(baseAmount != null ? { base_amount: baseAmount } : {}) });
   },

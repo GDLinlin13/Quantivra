@@ -45,3 +45,14 @@ describe('consolidated statements', () => {
     expect(rowsForCurrency(one, 'SGD')).toHaveLength(1);
   });
 });
+
+describe('the rate a bank line states', () => {
+  it('reads either direction', async () => {
+    const { rateFromText } = await import('../bankCurrency');
+    expect(rateFromText('Foreign Exchange 外幣兌換 USD Exchange rate匯率: 1 HKD=0.129016 USD Transaction number', 'USD', 'HKD', 10000))
+      .toEqual({ rate: 7.750977, base: 77509.77 });
+    expect(rateFromText('FX 1 USD = 7.8 HKD', 'USD', 'HKD', 100)).toEqual({ rate: 7.8, base: 780 });
+    expect(rateFromText('TRANSFER 轉賬', 'USD', 'HKD', 100)).toBeNull();
+    expect(rateFromText('1 EUR=8.5 HKD', 'USD', 'HKD', 100)).toBeNull();
+  });
+});
