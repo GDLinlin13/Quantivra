@@ -662,9 +662,25 @@ export const bankService = {
     const v = r2(Math.abs(newBase));
     if (!(v > 0)) throw new Error('Enter an amount');
     if (txn.journal_id) {
-      // a booking another line made (e.g. the transfer recorded from the other bank) is changed from that line
-      if (txn.journal_existing) throw new Error('This was recorded from the other bank — change it there');
       const j = must(await supabase.from('fin_journals').select('id, journal_date, memo').eq('id', txn.journal_id).single());
+      if (txn.journal_existing) {
+        // recorded from the other bank (a transfer): only this bank's side changes; a difference booked when it was
+        // matched is worked out again (gone when the sides agree), any other difference is an exchange gain / loss
+        const ls: any[] = must(await supabase.from('fin_journal_lines').select('*').eq('journal_id', txn.journal_id)) || [];
+        const diffLine = ls.find(l => l.description === 'Difference on the statement');
+        const lines = ls.filter(l => l !== diffLine).map(l => ({ account_id: l.account_id, description: l.description,
+          debit: l.account_id === txn.account_id && Number(l.debit) ? v : Number(l.debit) || 0,
+          credit: l.account_id === txn.account_id && Number(l.credit) ? v : Number(l.credit) || 0 }));
+        const gap = r2(lines.reduce((t, l) => t + l.credit - l.debit, 0));
+        if (gap) {
+          const fx = diffLine?.account_id || (await supabase.from('fin_accounts').select('id').eq('company_id', companyId).eq('subtype', 'fx_gain_loss').maybeSingle()).data?.id;
+          if (!fx) throw new Error('The two banks would no longer agree — add a Foreign exchange gain / (loss) account first');
+          lines.push({ account_id: fx, debit: gap > 0 ? gap : 0, credit: gap < 0 ? -gap : 0, description: 'Difference on the statement' });
+        }
+        await journalService.save(companyId, j, lines);
+        await this.update(txn.id, { base_amount: Math.sign(Number(txn.amount)) * v });
+        return;
+      }
       const ls: any[] = must(await supabase.from('fin_journal_lines').select('*').eq('journal_id', txn.journal_id)) || [];
       const old = r2(ls.filter(l => l.account_id === txn.account_id).reduce((t, l) => t + Number(l.debit) + Number(l.credit), 0));
       if (!old) throw new Error('This line has no amount in the books to change');
@@ -713,6 +729,20 @@ export const bankService = {
       : [...parts.map(p => ({ account_id: p.account_id, debit: p.amount, credit: 0, description: memo })), { account_id: txn.account_id, debit: 0, credit: amt, description: memo }];
     const jid = await journalService.save(companyId, { journal_date: txn.txn_date, memo: memo || txn.description || 'Bank' }, lines);
     await this.update(txn.id, { journal_id: jid, payment_id: null, status: 'matched', ...(baseAmount != null ? { base_amount: Math.sign(Number(txn.amount)) * amt } : {}) });
+    return jid;
+  },
+  /** The bank lines matched to a booking (e.g. both sides of a transfer). */
+  async forJournal(journalId: number): Promise<BankTxn[]> {
+    return must(await supabase.from('fin_bank_transactions').select('*').eq('journal_id', journalId)) || [];
+  },
+  /**
+   * A transfer booked from one bank into a bank in another currency: what arrived there, in its currency. The
+   * line is added to that bank already matched (a statement imported later takes it over).
+   */
+  async recordArrival(companyId: number, j: { id: number; journal_date: string; memo: string | null }, bankAccountId: number, foreignAmount: number, signedBase: number) {
+    const amount = Math.sign(signedBase) * Math.round(Math.abs(foreignAmount) * 100) / 100;
+    if (!amount) throw new Error('Enter the amount');
+    await this.confirmRecorded(companyId, bankAccountId, { txn_date: j.journal_date, description: j.memo || 'Transfer', amount, journal_id: j.id, payment_id: null, base_amount: signedBase });
   },
   /**
    * Undo a match. A journal the match made is removed too — unless it was already recorded before

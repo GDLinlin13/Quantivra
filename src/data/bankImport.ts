@@ -19,7 +19,11 @@ export function planImport<L extends PlanLine>(lines: L[], existing: ExistingLin
   const usedE = new Set<number>(), usedR = new Set<number>();
   const byId = [...existing].sort((a, b) => a.id - b.id);
   return lines.map(line => {
-    const e = byId.find(x => !usedE.has(x.id) && x.txn_date === line.txn_date && sameMoney(x.amount, line.amount));
+    // a line keyed in for the same amount: the same day, else (one not from a statement) up to 3 days apart —
+    // e.g. the other side of a transfer entered on the day it was sent
+    const e = byId.find(x => !usedE.has(x.id) && x.txn_date === line.txn_date && sameMoney(x.amount, line.amount))
+      || byId.filter(x => !usedE.has(x.id) && x.source !== 'statement' && sameMoney(x.amount, line.amount) && daysApart(x.txn_date, line.txn_date) <= 3)
+        .sort((a, b) => daysApart(a.txn_date, line.txn_date) - daysApart(b.txn_date, line.txn_date))[0];
     if (e) { usedE.add(e.id); return { line, kind: 'keyed' as const, existing: e }; }
     const hits = recorded.filter(r => !usedR.has(r.id) && sameMoney(r.amount, line.amount) && daysApart(r.txn_date, line.txn_date) <= 3)
       .sort((a, b) => daysApart(a.txn_date, line.txn_date) - daysApart(b.txn_date, line.txn_date));

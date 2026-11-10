@@ -26,3 +26,15 @@ describe('importing a statement over lines keyed in by hand', () => {
     expect(nothingNew(planImport([{ txn_date: '2026-06-30', description: 'Fall Below Fees', amount: -35 }], existing))).toBe(false);
   });
 });
+
+describe('a line keyed in a day or two off', () => {
+  it('is taken over by the statement line of the same amount (not one from an earlier statement)', async () => {
+    const { planImport } = await import('../bankImport');
+    const existing = [
+      { id: 1, txn_date: '2026-01-08', amount: 12.8, description: 'Internal Transfer', status: 'matched', source: 'manual' },
+      { id: 2, txn_date: '2026-01-05', amount: 50, description: 'FEE', status: 'unmatched', source: 'statement' },
+    ];
+    const plan = planImport([{ txn_date: '2026-01-09', description: 'FX MARKET', amount: 12.8 }, { txn_date: '2026-01-07', description: 'FEE', amount: 50 }], existing);
+    expect(plan.map(p => p.kind)).toEqual(['keyed', 'new']);
+  });
+});

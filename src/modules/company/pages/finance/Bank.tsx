@@ -589,6 +589,9 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   const [docId, setDocId] = useState<number | null>(null);
   const [accountId, setAccountId] = useState<number | null>(null);
   const [memo, setMemo] = useState(txn.description || '');
+  // booking to another of our banks in a different currency (e.g. HKD → CCB USD): the amount it arrives as
+  const toForeign = data.accounts.find(a => a.id === accountId && (a.subtype === 'bank' || a.subtype === 'cash') && a.currency && a.currency !== data.currency && a.currency !== accCur);
+  const [arrives, setArrives] = useState<number | null>(null);
   const near = (d: string) => Math.abs(dayjs(d).diff(dayjs(txn.txn_date), 'day')) <= 14;
 
   const suggestions = !ready ? [] : payments.filter(p => p.direction === (inbound ? 'in' : 'out') && !usedPayments.has(p.id)
@@ -634,7 +637,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   // salaries / CPF of exactly this amount: open the Payroll tab first
   const payrollHit = !inbound && dues.some(d => Math.abs(d.netDue - lineAmt) < 0.005 || Math.abs(d.statDue - lineAmt) < 0.005);
 
-  const run = async (f: () => Promise<void>) => { setBusy(true); try { await f(); message.success('Matched'); onDone(); } catch (e: any) { message.error(e.message); } setBusy(false); };
+  const run = async (f: () => Promise<unknown>) => { setBusy(true); try { await f(); message.success('Matched'); onDone(); } catch (e: any) { message.error(e.message); } setBusy(false); };
   // the bank amount differs from the document (company currency): money out more than the bill, or money in less
   // than the invoice — say where the difference goes (bank charges, a prepayment…) or leave it with the contact
   const chosen = docId ? data.docs.find(x => x.id === docId) : undefined;
@@ -749,14 +752,19 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                   { title: 'Date', dataIndex: 'txn_date' },
                   { title: 'Recorded as', key: 'd', render: (_, r) => r.description },
                   { title: 'Recorded', key: 'a', align: 'right' as const, render: (_, r) => money(Math.abs(r.amount), data.currency) },
-                  { title: 'Difference', key: 'g', align: 'right' as const, render: (_, r) => money(r2(Math.abs(r.amount) - amt), data.currency) },
-                  { title: '', key: 'x', render: (_, r) => <Button size="small" type="primary" loading={busy} disabled={!nearTo}
-                    onClick={() => run(() => bankService.matchJournalWithDifference(data.companyId, txn.id, r.journal_id!, txn.account_id, Math.sign(Number(txn.amount)) * amt, nearTo!, signedBase))}>Match</Button> },
+                  // a bank in another currency: the transfer's own amount sets the rate (HKD 100 → USD 12.80 = 7.8125), no difference
+                  foreign
+                    ? { title: 'Rate', key: 'g', align: 'right' as const, render: (_, r) => `1 ${accCur} = ${Math.round(Math.abs(r.amount) / lineAmt * 1e6) / 1e6} ${data.currency}` }
+                    : { title: 'Difference', key: 'g', align: 'right' as const, render: (_, r) => money(r2(Math.abs(r.amount) - amt), data.currency) },
+                  { title: '', key: 'x', render: (_, r) => <Button size="small" type="primary" loading={busy} disabled={!foreign && !nearTo}
+                    onClick={() => run(() => foreign
+                      ? bankService.matchJournal(txn.id, r.journal_id!, Math.sign(Number(txn.amount)) * Math.abs(r.amount))
+                      : bankService.matchJournalWithDifference(data.companyId, txn.id, r.journal_id!, txn.account_id, Math.sign(Number(txn.amount)) * amt, nearTo!, signedBase))}>Match</Button> },
                 ]} />
-              <div style={{ margin: '8px 0 12px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {!foreign && <div style={{ margin: '8px 0 12px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <Text>Difference goes to</Text>
                 <Select style={{ minWidth: 260 }} showSearch optionFilterProp="label" value={nearTo} onChange={setNearTo} options={nearOptions} placeholder="Choose an account" />
-              </div>
+              </div>}
             </>)}
             {journalHits.length > 0 && (
               <Table rowKey="id" size="small" pagination={false} dataSource={journalHits} style={{ marginBottom: suggestions.length ? 12 : 0 }}
@@ -814,7 +822,19 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                 </Form.Item>
                 <Form.Item label="Details"><Input value={memo} onChange={e => setMemo(e.target.value)} /></Form.Item>
               </Form>
-              <Button type="primary" disabled={!accountId || !ready} loading={busy} onClick={() => run(() => bankService.categorise(data.companyId, txn, accountId!, memo, foreign ? amt : undefined))}>Book and match</Button>
+              {/* money moved to one of our banks in another currency: what arrived there */}
+              {toForeign && (
+                <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Text>Arrives in {toForeign.name} as</Text>
+                  <AmountInput min={0} precision={2} style={{ width: 200 }} prefix={toForeign.currency!} value={arrives ?? undefined} onChange={v => setArrives(v == null ? null : Number(v))} />
+                </div>
+              )}
+              <Button type="primary" disabled={!accountId || !ready} loading={busy} onClick={() => run(async () => {
+                const jid = await bankService.categorise(data.companyId, txn, accountId!, memo, foreign ? amt : undefined);
+                if (toForeign && arrives) {
+                  await bankService.recordArrival(data.companyId, { id: jid, journal_date: txn.txn_date, memo }, toForeign.id, arrives, -Math.sign(Number(txn.amount)) * amt);
+                }
+              })}>Book and match</Button>
             </div>
           ),
         },

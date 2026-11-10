@@ -65,6 +65,15 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged,
   const [gapTo, setGapTo] = useState<number | undefined>(bankCharges?.id);
   const [booking, setBooking] = useState(false);
   const [newBase, setNewBase] = useState<number | null>(null);
+  // the booking's other bank, when it is in another currency than the company's, and its line there (if any)
+  const otherForeign = journal ? data.accounts.find(a => a.id !== txn.account_id && journal.lines.some(l => l.account_id === a.id)
+    && (a.subtype === 'bank' || a.subtype === 'cash') && a.currency && a.currency !== data.currency) : undefined;
+  const [arrivedLine, setArrivedLine] = useState<BankTxn | null>(null);
+  const [arrives, setArrives] = useState<number | null>(null);
+  useEffect(() => {
+    if (journal && otherForeign) bankService.forJournal(journal.id).then(ls => setArrivedLine(ls.find(l => l.account_id === otherForeign.id) || null)).catch(() => null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [journal?.id, otherForeign?.id]);
   const gapOptions = [
     { label: 'Expenses', options: data.accounts.filter(a => !a.archived && a.type === 'expense').map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
     { label: 'Things you own (prepayments, deposits…)', options: data.accounts.filter(a => !a.archived && a.type === 'asset' && !['bank', 'cash', 'receivable'].includes(a.subtype || '')).map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
@@ -136,6 +145,26 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged,
               { title: 'Debit', key: 'dr', align: 'right' as const, render: (_, l) => (Number(l.debit) ? M(Number(l.debit)) : '') },
               { title: 'Credit', key: 'cr', align: 'right' as const, render: (_, l) => (Number(l.credit) ? M(Number(l.credit)) : '') },
             ]} />
+          {/* a transfer to one of our banks in another currency: what it arrived as there */}
+          {otherForeign && (
+            <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Text>Arrived in {otherForeign.name} as</Text>
+              {arrivedLine
+                ? <Text strong>{money(Math.abs(Number(arrivedLine.amount)), otherForeign.currency!)}</Text>
+                : readOnly ? <Text type="secondary">—</Text> : (<>
+                  <AmountInput min={0} precision={2} style={{ width: 200 }} prefix={otherForeign.currency!} value={arrives ?? undefined} onChange={v => setArrives(v == null ? null : Number(v))} />
+                  <Button size="small" type="primary" disabled={!arrives} loading={booking} onClick={async () => {
+                    setBooking(true);
+                    try {
+                      const l = journal.lines.find(x => x.account_id === otherForeign.id)!;
+                      await bankService.recordArrival(data.companyId, journal, otherForeign.id, arrives!, Number(l.debit) ? Number(l.debit) : -Number(l.credit));
+                      message.success(`Added to ${otherForeign.name}`); onChanged?.();
+                    } catch (e: any) { message.error(e.message); }
+                    setBooking(false);
+                  }}>Save</Button>
+                </>)}
+            </div>
+          )}
           <div style={{ marginTop: 16 }}>
             <Text strong>Supporting documents</Text>
             <Space orientation="vertical" size={4} style={{ display: 'flex', marginTop: 6 }}>
