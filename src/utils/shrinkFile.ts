@@ -28,3 +28,39 @@ export async function shrinkFile(file: File): Promise<File> {
     return file; // a picture the browser can't read is uploaded as it is
   }
 }
+
+/**
+ * A PDF too big to store (often a scan): every page is redrawn as a picture at print quality and put into a new,
+ * much smaller PDF. Pages look the same; text in it can no longer be selected. Tries finer, then coarser.
+ */
+export async function shrinkPdf(file: File, maxBytes: number, onPage?: (page: number, pages: number) => void): Promise<File | null> {
+  const pdfjs = await import('pdfjs-dist');
+  const worker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = worker;
+  const { jsPDF } = await import('jspdf');
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  try {
+    for (const [dpi, quality] of [[150, 0.75], [110, 0.6], [80, 0.5]] as const) {
+      let out: InstanceType<typeof jsPDF> | null = null;
+      for (let p = 1; p <= doc.numPages; p++) {
+        onPage?.(p, doc.numPages);
+        const page = await doc.getPage(p);
+        const size = page.getViewport({ scale: 1 }); // in points (1/72 inch)
+        const vp = page.getViewport({ scale: dpi / 72 });
+        const c = document.createElement('canvas'); c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+        const g = c.getContext('2d')!; g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+        await page.render({ canvas: c, canvasContext: g, viewport: vp } as any).promise;
+        const orientation = size.width > size.height ? 'landscape' : 'portrait';
+        if (!out) out = new jsPDF({ unit: 'pt', format: [size.width, size.height], orientation, compress: true });
+        else out.addPage([size.width, size.height], orientation);
+        out.addImage(c.toDataURL('image/jpeg', quality), 'JPEG', 0, 0, size.width, size.height, undefined, 'FAST');
+        c.width = c.height = 0; page.cleanup();
+      }
+      const blob = out!.output('blob');
+      if (blob.size <= maxBytes) return new File([blob], file.name, { type: 'application/pdf', lastModified: file.lastModified });
+    }
+    return null;
+  } finally {
+    await doc.loadingTask.destroy();
+  }
+}
