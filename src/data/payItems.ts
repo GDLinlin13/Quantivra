@@ -2,7 +2,8 @@
 // for overtime and unpaid leave.
 import { DAY_KEYS, type WorkPattern } from '../utils/workdays';
 
-export type PayItemKind = 'earning' | 'deduction';
+/** override: sets what was actually paid to a contribution scheme (e.g. no employer MPF in a probation month) */
+export type PayItemKind = 'earning' | 'deduction' | 'override';
 export type PayItemUnit = 'hours' | 'days';
 
 export interface PayItemType {
@@ -43,6 +44,8 @@ export const PAY_ITEM_TYPES: PayItemType[] = [
   { code: 'DEDUCTION_LOAN', label: 'Loan repayment', kind: 'deduction', canRecur: true, help: 'Taken off take-home pay. Does not change CPF.' },
   { code: 'DEDUCTION_ADVANCE', label: 'Salary advance', kind: 'deduction', canRecur: false, help: 'Recovering pay given in advance. Does not change CPF.' },
   { code: 'DEDUCTION_OTHER', label: 'Other deduction', kind: 'deduction', canRecur: true, help: 'Any other deduction. Use the note to say what it is.' },
+  { code: 'OVERRIDE_EMPLOYER', label: 'Employer contribution (amount set)', kind: 'override', canRecur: false, help: '' },
+  { code: 'OVERRIDE_EMPLOYEE', label: 'Employee contribution (amount set)', kind: 'override', canRecur: false, help: '' },
 ];
 
 export const PAY_ITEM_BY_CODE: Record<string, PayItemType> = Object.fromEntries(PAY_ITEM_TYPES.map(t => [t.code, t]));
@@ -125,9 +128,15 @@ export interface PayItemRow {
 export function toEngineItems(items: PayItemRow[]) {
   const salaryComponents: { componentCode: string; amount: number; label: string; classifyAs?: string; taxable?: boolean; prorate?: boolean }[] = [];
   const otherDeductions: { componentCode: string; amount: number; label: string }[] = [];
+  // what was actually paid to the main contribution scheme (CPF / MPF…), instead of the worked-out amount
+  let statutoryOverride: { employer?: number; employee?: number } | undefined;
   for (const it of items) {
     const t = PAY_ITEM_BY_CODE[it.item_code];
     const amount = round2(Number(it.amount) || 0);
+    if (t?.kind === 'override') {
+      statutoryOverride = { ...statutoryOverride, [t.code === 'OVERRIDE_EMPLOYER' ? 'employer' : 'employee']: Math.max(0, amount) };
+      continue;
+    }
     if (!t || amount <= 0) continue;
     const label = payItemLabel(it);
     if (t.kind === 'earning' || t.reducesPay) {
@@ -144,5 +153,5 @@ export function toEngineItems(items: PayItemRow[]) {
       otherDeductions.push({ componentCode: t.code, amount, label });
     }
   }
-  return { salaryComponents, otherDeductions };
+  return { salaryComponents, otherDeductions, statutoryOverride };
 }
