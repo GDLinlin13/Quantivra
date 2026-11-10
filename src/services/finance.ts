@@ -681,6 +681,24 @@ export const bankService = {
     }
     await this.update(txn.id, { base_amount: Math.sign(Number(txn.amount)) * v });
   },
+  /**
+   * Match a statement line to a recorded transfer of a slightly different amount (e.g. the bank took a fee): this
+   * bank's side of the booking becomes the statement's amount and the difference goes to `diffAccountId`
+   * (bank charges, exchange gain / loss…). Amounts in the company's currency.
+   */
+  async matchJournalWithDifference(companyId: number, txnId: number, journalId: number, bankAccountId: number, signedAmount: number, diffAccountId: number, baseAmount?: number) {
+    const j = must(await supabase.from('fin_journals').select('id, journal_date, memo').eq('id', journalId).single());
+    const ls: any[] = must(await supabase.from('fin_journal_lines').select('*').eq('journal_id', journalId)) || [];
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const lines = ls.map(l => (l.account_id === bankAccountId
+      ? { ...l, debit: signedAmount > 0 ? r2(Math.abs(signedAmount)) : 0, credit: signedAmount < 0 ? r2(Math.abs(signedAmount)) : 0 }
+      : l)).map(l => ({ account_id: l.account_id, debit: Number(l.debit) || 0, credit: Number(l.credit) || 0, description: l.description }));
+    // what no longer balances: more credits than debits = a cost (e.g. a fee), the other way = income
+    const gap = r2(lines.reduce((t, l) => t + l.credit - l.debit, 0));
+    if (gap) lines.push({ account_id: diffAccountId, debit: gap > 0 ? gap : 0, credit: gap < 0 ? -gap : 0, description: 'Difference on the statement' });
+    await journalService.save(companyId, j, lines);
+    await this.matchJournal(txnId, journalId, baseAmount);
+  },
   async matchPayment(txnId: number, paymentId: number, baseAmount?: number) {
     await this.update(txnId, { payment_id: paymentId, journal_id: null, status: 'matched', ...(baseAmount != null ? { base_amount: baseAmount } : {}) });
   },
