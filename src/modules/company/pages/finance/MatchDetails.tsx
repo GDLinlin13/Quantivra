@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Modal, Table, Typography, Space, Button, Tag, Empty, message, Descriptions, Upload, Popconfirm, Select } from 'antd';
 import { PaperClipOutlined, FilePdfOutlined, UploadOutlined, DeleteOutlined } from '@ant-design/icons';
-import { docService, paymentService, attachmentService, companyFileService, ATTACH_TYPES, type CompanyFile, type Attachment, type BankTxn, type JournalRow, type Payment, type Allocation } from '../../../../services/finance';
+import { docService, paymentService, bankService, attachmentService, companyFileService, ATTACH_TYPES, type CompanyFile, type Attachment, type BankTxn, type JournalRow, type Payment, type Allocation } from '../../../../services/finance';
 import { DOC_LABEL, isSalesDoc, balanceDue, isForeignDoc, type FinDocument } from '../../../../data/finance';
 import { lineText } from '../../../../data/catalog';
 import { money } from '../../../../data/documentLayouts';
 import { renderPdf } from '../../../../utils/renderPdf';
 import { FileViewer } from '../../../../components/FileViewer';
+import { AmountInput } from '../../../../components/AmountInput';
 import { DocumentView } from './DocumentView';
 import type { FinanceData } from './DocList';
 
@@ -63,6 +64,7 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged,
   const bankCharges = data.accounts.find(a => !a.archived && a.type === 'expense' && /bank charge/i.test(a.name));
   const [gapTo, setGapTo] = useState<number | undefined>(bankCharges?.id);
   const [booking, setBooking] = useState(false);
+  const [newBase, setNewBase] = useState<number | null>(null);
   const gapOptions = [
     { label: 'Expenses', options: data.accounts.filter(a => !a.archived && a.type === 'expense').map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
     { label: 'Things you own (prepayments, deposits…)', options: data.accounts.filter(a => !a.archived && a.type === 'asset' && !['bank', 'cash', 'receivable'].includes(a.subtype || '')).map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
@@ -100,6 +102,25 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged,
 
   return (
     <Modal open onCancel={onClose} footer={null} width={760} title={label?.title || 'Details'}>
+      {/* a bank in another currency: what this line is in the company's currency, and changing its rate */}
+      {accCur !== data.currency && txn.base_amount != null && (
+        <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Text>In {data.currency}:</Text>
+          <AmountInput min={0} precision={6} style={{ width: 190 }} prefix={`1 ${accCur} =`} suffix={data.currency} disabled={readOnly}
+            value={newBase != null ? Math.round(newBase / Math.abs(Number(txn.amount)) * 1e6) / 1e6 : Math.round(Math.abs(Number(txn.base_amount)) / Math.abs(Number(txn.amount)) * 1e6) / 1e6}
+            onChange={v => setNewBase(v == null ? null : Math.round(Number(v) * Math.abs(Number(txn.amount)) * 100) / 100)} />
+          <Text type="secondary">or</Text>
+          <AmountInput min={0} precision={2} style={{ width: 170 }} prefix={data.currency} disabled={readOnly}
+            value={newBase ?? Math.abs(Number(txn.base_amount))} onChange={v => setNewBase(v == null ? null : Number(v))} />
+          {!readOnly && newBase != null && Math.abs(newBase - Math.abs(Number(txn.base_amount))) > 0.004 && (
+            <Button size="small" type="primary" loading={booking} onClick={async () => {
+              setBooking(true);
+              try { await bankService.changeBaseAmount(data.companyId, txn, newBase); message.success('Rate changed'); onChanged?.(); } catch (e: any) { message.error(e.message); }
+              setBooking(false);
+            }}>Save rate</Button>
+          )}
+        </div>
+      )}
       <Descriptions size="small" column={2} style={{ marginBottom: 12 }} items={[
         { key: 'd', label: 'Date', children: txn.txn_date },
         { key: 'a', label: txn.amount > 0 ? 'Credit' : 'Debit', children: money(Math.abs(txn.amount), accCur) },

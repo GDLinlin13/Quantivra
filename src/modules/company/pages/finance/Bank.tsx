@@ -595,12 +595,6 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
     && Math.abs(Number(p.amount) - amt) < 0.005 && near(p.payment_date) && (!p.account_id || p.account_id === txn.account_id));
   const journalHits = !ready ? [] : recorded.filter(r => r.journal_id && Math.sign(r.amount) === Math.sign(Number(txn.amount))
     && Math.abs(Math.abs(r.amount) - amt) < 0.005 && near(r.txn_date));
-  // a recorded transfer of nearly this amount (recorded at another rate than the bank used): match it and book the
-  // difference as an exchange gain / loss (lines in the company's currency only)
-  const fxAcc = data.accounts.find(a => a.subtype === 'fx_gain_loss' && !a.archived);
-  const nearHits = !ready || foreign || !fxAcc ? [] : recorded.filter(r => r.journal_id && Math.sign(r.amount) === Math.sign(Number(txn.amount))
-    && Math.abs(Math.abs(r.amount) - amt) >= 0.005 && Math.abs(Math.abs(r.amount) - amt) <= Math.abs(r.amount) * 0.05
-    && Math.abs(dayjs(r.txn_date).diff(dayjs(txn.txn_date), 'day')) <= 3);
   // a document in the bank's own currency is compared in that currency; anything else in the company's currency
   const inBankCur = (d: FinDocument) => isForeignDoc(d, data.currency) && d.currency === accCur;
   const sameAmount = (d: FinDocument) => inBankCur(d) ? Math.abs(balanceDue(d) - lineAmt) < 0.005 : Math.abs(inBase(d, balanceDue(d)) - amt) < 0.005;
@@ -702,7 +696,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
           {ready && !lastRate && rate != null && <div style={{ marginTop: 6 }}><Text type="secondary">Market rate on {txn.txn_date}; change it if your bank used another.</Text></div>}
         </div>
       )}
-      <Tabs defaultActiveKey={suggestions.length || journalHits.length || nearHits.length ? 'existing' : payrollHit ? 'payroll' : openDocs.length ? 'doc' : 'account'} items={[
+      <Tabs defaultActiveKey={suggestions.length || journalHits.length ? 'existing' : payrollHit ? 'payroll' : openDocs.length ? 'doc' : 'account'} items={[
         {
           key: 'doc', label: inbound ? 'Payment for an invoice' : 'Payment of a bill / expense',
           children: (
@@ -736,19 +730,8 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
           ),
         },
         {
-          key: 'existing', label: `Already recorded (${suggestions.length + journalHits.length + nearHits.length})`,
-          children: suggestions.length + journalHits.length + nearHits.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing of this amount recorded within two weeks" /> : (<>
-            {nearHits.length > 0 && (
-              <Table rowKey="id" size="small" pagination={false} dataSource={nearHits} style={{ marginBottom: 12 }}
-                columns={[
-                  { title: 'Date', dataIndex: 'txn_date' },
-                  { title: 'Recorded as', key: 'd', render: (_, r) => r.description },
-                  { title: 'Recorded', key: 'a', align: 'right' as const, render: (_, r) => money(Math.abs(r.amount), data.currency) },
-                  { title: 'Difference', key: 'g', align: 'right' as const, render: (_, r) => <Text type="secondary">{money(r2(amt - Math.abs(r.amount)), data.currency)} → {fxAcc!.code} {fxAcc!.name}</Text> },
-                  { title: '', key: 'x', render: (_, r) => <Button size="small" type="primary" loading={busy}
-                    onClick={() => run(() => bankService.matchJournalAdjusted(data.companyId, txn.id, r.journal_id!, txn.account_id, Number(txn.amount), fxAcc!.id))}>Match</Button> },
-                ]} />
-            )}
+          key: 'existing', label: `Already recorded (${suggestions.length + journalHits.length})`,
+          children: suggestions.length + journalHits.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing of this amount recorded within two weeks" /> : (<>
             {journalHits.length > 0 && (
               <Table rowKey="id" size="small" pagination={false} dataSource={journalHits} style={{ marginBottom: suggestions.length ? 12 : 0 }}
                 columns={[

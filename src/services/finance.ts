@@ -654,22 +654,32 @@ export const bankService = {
     if (r.error) throw new Error(/journal_existing/i.test(r.error.message) ? 'This needs database update 031 — ask your administrator to run it in Supabase.' : r.error.message);
   },
   /**
-   * Match a statement line to a recorded transfer whose amount for this bank differs a little (e.g. recorded at a
-   * market rate, the bank converted at its own): this bank's side becomes the statement's amount and the difference
-   * goes to the exchange gain / loss account.
+   * A matched line in a bank in another currency: change what it is in the company's currency (the rate). The line's
+   * own amount stays; what it was matched to follows — a transfer / booking at the new amount, a payment's value.
    */
-  async matchJournalAdjusted(companyId: number, txnId: number, journalId: number, accountId: number, signedAmount: number, fxAccountId: number) {
-    const j = must(await supabase.from('fin_journals').select('id, journal_date, memo').eq('id', journalId).single());
-    const ls: any[] = must(await supabase.from('fin_journal_lines').select('*').eq('journal_id', journalId)) || [];
+  async changeBaseAmount(companyId: number, txn: BankTxn, newBase: number) {
     const r2 = (n: number) => Math.round(n * 100) / 100;
-    const lines = ls.map(l => (l.account_id === accountId
-      ? { ...l, debit: signedAmount > 0 ? r2(Math.abs(signedAmount)) : 0, credit: signedAmount < 0 ? r2(Math.abs(signedAmount)) : 0 }
-      : l)).filter(l => l.account_id !== fxAccountId);
-    // whatever no longer balances (credits over debits = a loss) goes to the exchange account
-    const gap = r2(lines.reduce((t, l) => t + Number(l.credit) - Number(l.debit), 0));
-    if (gap) lines.push({ account_id: fxAccountId, debit: gap > 0 ? gap : 0, credit: gap < 0 ? -gap : 0, description: gap > 0 ? 'Exchange loss' : 'Exchange gain' });
-    await journalService.save(companyId, j, lines.map(l => ({ account_id: l.account_id, debit: Number(l.debit) || 0, credit: Number(l.credit) || 0, description: l.description })));
-    await this.matchJournal(txnId, journalId);
+    const v = r2(Math.abs(newBase));
+    if (!(v > 0)) throw new Error('Enter an amount');
+    if (txn.journal_id) {
+      // a booking another line made (e.g. the transfer recorded from the other bank) is changed from that line
+      if (txn.journal_existing) throw new Error('This was recorded from the other bank — change it there');
+      const j = must(await supabase.from('fin_journals').select('id, journal_date, memo').eq('id', txn.journal_id).single());
+      const ls: any[] = must(await supabase.from('fin_journal_lines').select('*').eq('journal_id', txn.journal_id)) || [];
+      const old = r2(ls.filter(l => l.account_id === txn.account_id).reduce((t, l) => t + Number(l.debit) + Number(l.credit), 0));
+      if (!old) throw new Error('This line has no amount in the books to change');
+      // every line scales by the same factor (a transfer: both banks; a split booking: each part), cents kept exact
+      const parts = ls.map(l => r2((Number(l.debit) + Number(l.credit)) * v / old));
+      const lines = ls.map((l, i) => ({ account_id: l.account_id, description: l.description,
+        debit: Number(l.debit) ? parts[i] : 0, credit: Number(l.credit) ? parts[i] : 0 }));
+      // the two sides must still balance (rounding goes on the biggest line)
+      const gap = r2(lines.reduce((t, l) => t + l.debit - l.credit, 0));
+      if (gap) { const k = lines.reduce((m, l, i) => (l.debit + l.credit > lines[m].debit + lines[m].credit ? i : m), 0); if (lines[k].debit) lines[k].debit = r2(lines[k].debit - gap); else lines[k].credit = r2(lines[k].credit + gap); }
+      await journalService.save(companyId, j, lines);
+    } else if (txn.payment_id) {
+      must(await supabase.from('fin_payments').update({ amount: v }).eq('id', txn.payment_id));
+    }
+    await this.update(txn.id, { base_amount: Math.sign(Number(txn.amount)) * v });
   },
   async matchPayment(txnId: number, paymentId: number, baseAmount?: number) {
     await this.update(txnId, { payment_id: paymentId, journal_id: null, status: 'matched', ...(baseAmount != null ? { base_amount: baseAmount } : {}) });
