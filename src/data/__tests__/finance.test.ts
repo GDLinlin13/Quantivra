@@ -86,3 +86,12 @@ describe('dividend accounts', () => {
     expect(chartUpgrade(defaultAccountsFor('SG').map((a, i) => ({ ...a, id: i + 1 })), 'SG').add).toEqual([]);
   });
 });
+
+describe('contact currencies', () => {
+  it('reads one or several, first is the default', async () => {
+    const { contactCurrencies } = await import('../finance');
+    expect(contactCurrencies({ currency: 'USD,eur' })).toEqual(['USD', 'EUR']);
+    expect(contactCurrencies({ currency: 'MYR' })).toEqual(['MYR']);
+    expect(contactCurrencies({ currency: null })).toEqual([]);
+  });
+});

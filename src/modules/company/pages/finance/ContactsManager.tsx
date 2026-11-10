@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Drawer, Form, Input, InputNumber, Checkbox, Space, Tag, message, Popconfirm, Switch, Typography, Divider, Empty } from 'antd';
+import { Table, Button, Drawer, Form, Input, InputNumber, Checkbox, Space, Tag, message, Popconfirm, Switch, Typography, Divider, Empty, Select } from 'antd';
+import { currencyOptions } from '../../../../utils/currencies';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { contactService, docService } from '../../../../services/finance';
-import { balanceDue, inBase, isSalesDoc, type Contact, type ContactPerson, type FinDocument } from '../../../../data/finance';
+import { balanceDue, inBase, isSalesDoc, contactCurrencies, type Contact, type ContactPerson, type FinDocument } from '../../../../data/finance';
 import { money } from '../../../../data/documentLayouts';
 
 const { Text } = Typography;
@@ -110,7 +111,7 @@ function ContactDrawer({ companyId, contact, word, currency, docs, onClose, onSa
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    form.setFieldsValue({ is_customer: true, ...contact });
+    form.setFieldsValue({ is_customer: true, ...contact, currency: contactCurrencies(contact) });
     if (contact.id) contactService.people(contact.id).then(setPeople).catch(() => setPeople([]));
     else setPeople([{ name: '', is_primary: true }]);
   }, [contact, form]);
@@ -121,7 +122,7 @@ function ContactDrawer({ companyId, contact, word, currency, docs, onClose, onSa
     if (!v.is_customer && !v.is_supplier) { message.error('Tick customer, supplier or both'); return; }
     setSaving(true);
     try {
-      await contactService.save(companyId, { ...contact, ...v }, people);
+      await contactService.save(companyId, { ...contact, ...v, currency: (v.currency || []).join(',') || null }, people);
       message.success('Saved');
       onSaved();
     } catch (e: any) { message.error(e.message); }
@@ -141,6 +142,9 @@ function ContactDrawer({ companyId, contact, word, currency, docs, onClose, onSa
           <Form.Item name="phone" label="Phone"><Input /></Form.Item>
           <Form.Item name="website" label="Website"><Input /></Form.Item>
           <Form.Item name="payment_terms_days" label="Payment terms (days)"><InputNumber min={0} style={{ width: '100%' }} placeholder="Company default" /></Form.Item>
+          <Form.Item name="currency" label="Currencies they bill / pay in">
+            <Select mode="multiple" showSearch allowClear optionFilterProp="label" placeholder={currency} options={currencyOptions()} />
+          </Form.Item>
           <Form.Item name="address" label="Address" style={{ gridColumn: '1 / -1' }}><Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
           <Form.Item name="notes" label="Notes" style={{ gridColumn: '1 / -1' }}><Input.TextArea autoSize={{ minRows: 2, maxRows: 6 }} /></Form.Item>
         </div>

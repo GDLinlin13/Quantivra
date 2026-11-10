@@ -17,6 +17,10 @@ export interface Contact {
   reg_no?: string | null; tax_no?: string | null; email?: string | null; phone?: string | null; website?: string | null;
   address?: string | null; currency?: string | null; payment_terms_days?: number | null; notes?: string | null; archived?: boolean;
 }
+/** The currencies a customer / supplier bills or pays in (stored as "USD,EUR"); the first is the default. */
+export const contactCurrencies = (c?: { currency?: string | null } | null): string[] =>
+  (c?.currency || '').split(/[\s,]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
+
 export interface ContactPerson {
   id?: number; company_id?: number; contact_id?: number; name: string; designation?: string | null;
   email?: string | null; phone?: string | null; is_primary?: boolean;

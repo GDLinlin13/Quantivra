@@ -6,7 +6,7 @@ import { docService, paymentService, catalogService, attachmentService, latestRa
 import { companyFileService } from '../../../../services/finance';
 import { FileViewer } from '../../../../components/FileViewer';
 import {
-  docTotals, addDays, today, DOC_LABEL, DOC_NUMBER_ENTITY, STATUS_LABEL, STATUS_COLOR,
+  docTotals, addDays, today, DOC_LABEL, DOC_NUMBER_ENTITY, contactCurrencies, STATUS_LABEL, STATUS_COLOR,
   type DocType, type FinDocument, type DocLine, type DocDiscount, type Contact, type ContactPerson, type FinanceSettings, type Account,
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
@@ -83,7 +83,9 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
   useEffect(() => { if (sales) catalogService.prices(companyId).then(setCustPrices).catch(() => null); }, [companyId, sales]);
   // Currencies: the company's own and those of its bank accounts. A document in another currency needs the
   // exchange rate it is booked at (1 USD = x HKD), starting at the latest rate used.
-  const currencies = [...new Set([currency, ...accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash') && a.currency).map(a => a.currency!), ...(doc.currency ? [doc.currency] : [])])];
+  // …plus the currency the customer / supplier bills or pays in (CRM), even without a bank account in it
+  const contactCurs = contactCurrencies(contacts.find(c => c.id === doc.contact_id));
+  const currencies = [...new Set([currency, ...accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash') && a.currency).map(a => a.currency!), ...contactCurs, ...(doc.currency ? [doc.currency] : [])])];
   const docCur = doc.currency || currency;
   const foreign = docCur !== currency;
   const [rates, setRates] = useState<Record<string, number | null>>({});
@@ -141,6 +143,9 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
     const patch: Partial<FinDocument> = { contact_id: id, contact_person_id: main?.id ?? null };
     if (c?.payment_terms_days != null && docType !== 'quote' && doc.issue_date) patch.due_date = addDays(doc.issue_date, c.payment_terms_days);
     set(patch);
+    // a new document takes the currency this customer / supplier works in (CRM), unless something is paid already
+    const first = contactCurrencies(c)[0];
+    if (!docId && first && first !== docCur && !Number(doc.amount_paid)) setTimeout(() => switchCurrency(first, true));
     // catalog lines still at the previous customer's price move to this customer's price
     if (sales) {
       let changed = 0;
