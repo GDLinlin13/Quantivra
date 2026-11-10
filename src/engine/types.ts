@@ -88,6 +88,8 @@ export interface EmployeePayrollInput {
   unpaidLeaveDays?: number;
   sickLeaveDays?: number;
   annualLeaveTaken?: number;
+  /** The amounts actually paid to the main contribution scheme (CPF, MPF, GPSSA, GOSI) this month, set by hand. */
+  statutoryOverride?: { employer?: number; employee?: number };
 }
 
 // === PAYROLL RUN INPUT ===

@@ -12,7 +12,8 @@ import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
 const money = (n: number, c: string) => `${c} ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const signed = (it: PayItemRow) => (PAY_ITEM_BY_CODE[it.item_code]?.kind === 'deduction' ? -1 : 1) * (Number(it.amount) || 0);
+// a contribution set by hand changes no pay item (it replaces the worked-out amount)
+const signed = (it: PayItemRow) => { const k = PAY_ITEM_BY_CODE[it.item_code]?.kind; return k === 'override' ? 0 : (k === 'deduction' ? -1 : 1) * (Number(it.amount) || 0); };
 
 type Draft = PayItemRow & { key: string; auto?: boolean };
 let seq = 0;
@@ -45,8 +46,8 @@ export function PayItemsCard({ companyId, year, month, currency }: { companyId: 
     : (
       <Space size={[4, 4]} wrap>
         {list.map(i => (
-          <Tag key={i.id} color={PAY_ITEM_BY_CODE[i.item_code]?.kind === 'deduction' ? 'red' : 'green'} style={{ margin: 0 }}>
-            {payItemLabel(i)} {PAY_ITEM_BY_CODE[i.item_code]?.kind === 'deduction' ? '−' : '+'}{money(i.amount, '').trim()}
+          <Tag key={i.id} color={PAY_ITEM_BY_CODE[i.item_code]?.kind === 'deduction' ? 'red' : PAY_ITEM_BY_CODE[i.item_code]?.kind === 'override' ? 'blue' : 'green'} style={{ margin: 0 }}>
+            {payItemLabel(i)} {PAY_ITEM_BY_CODE[i.item_code]?.kind === 'deduction' ? '−' : PAY_ITEM_BY_CODE[i.item_code]?.kind === 'override' ? '= ' : '+'}{money(i.amount, '').trim()}
           </Tag>
         ))}
       </Space>
@@ -147,8 +148,8 @@ function PayItemsDrawer({ companyId, employee, year, month, currency, items, onC
     setSaving(false);
   };
 
-  const typeOptions = (recurring: boolean) => ['earning', 'deduction'].map(kind => ({
-    label: kind === 'earning' ? 'Adds to pay' : 'Takes off pay',
+  const typeOptions = (recurring: boolean) => (['earning', 'deduction', 'override'] as const).filter(k => !recurring || k !== 'override').map(kind => ({
+    label: kind === 'earning' ? 'Adds to pay' : kind === 'deduction' ? 'Takes off pay' : 'Set a contribution by hand',
     options: PAY_ITEM_TYPES.filter(t => t.kind === kind && !t.variantOf && (!recurring || t.canRecur)).map(t => ({ value: t.code, label: t.label })),
   }));
 

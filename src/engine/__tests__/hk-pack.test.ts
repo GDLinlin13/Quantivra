@@ -71,3 +71,20 @@ describe('Hong Kong staff saved before Hong Kong had its own residency choices',
     expect(mpf(run(20000, { residency: payrollResidency('HK', 'FOREIGNER') }))!.employeeTotal).toBe(1000);
   });
 });
+
+describe('contributions set by hand', () => {
+  it('employer MPF set to 0 for a month (employee share unchanged)', async () => {
+    const { toEngineItems } = await import('../../data/payItems');
+    const extra = toEngineItems([{ item_code: 'OVERRIDE_EMPLOYER', amount: 0, recurring: false } as any]);
+    expect(extra.statutoryOverride).toEqual({ employer: 0 });
+    const r = calculatePayroll({
+      period, countryPack: hkPack,
+      employees: [{ employeeId: 'E1', name: 'T', dateOfBirth: '1990-01-01', dateOfJoining: '2022-01-01', employmentStatusCode: 'FULL_TIME',
+        immigrationStatusCode: 'HK_PR', salaryComponents: [{ componentCode: 'BASIC', amount: 20000 }], statutoryOverride: extra.statutoryOverride }],
+    }).employees[0];
+    expect(mpf(r)!.employerTotal).toBe(0);
+    expect(mpf(r)!.employeeTotal).toBe(1000);
+    expect(r.totalEmployerCosts).toBe(0);
+    expect(r.netPay).toBe(19000);
+  });
+});

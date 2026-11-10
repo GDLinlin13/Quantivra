@@ -39,6 +39,9 @@ function buildEngineInfo(countryPack: CountryPackDef): EngineVersionInfo {
   };
 }
 
+/** The main contribution scheme of each country (what a hand-set contribution applies to). */
+const MAIN_SCHEMES = ['CPF', 'MPF', 'GPSSA', 'GOSI'];
+
 export function calculatePayroll(input: PayrollRunInput): PayrollRunResult {
   const { period, countryPack, employees } = input;
   const absorbedSchemes = input.absorbedSchemes ?? [];
@@ -216,6 +219,23 @@ function runPipeline(ctx: PipelineContext): EmployeePayrollResult {
       additionalWages: ctx.additionalWages,
     });
     if (result) {
+      // the amounts actually paid this month, set by hand (main scheme only)
+      const ov = employee.statutoryOverride;
+      if (ov && MAIN_SCHEMES.includes(scheme.general.code)) {
+        const set = (list: { amount: number }[], v: number | undefined) => { if (v == null) return; if (list[0]) list[0].amount = v; list.slice(1).forEach(x => { x.amount = 0; }); };
+        set(result.employeeBreakdown as any, ov.employee);
+        set(result.employerBreakdown as any, ov.employer);
+        if (ov.employee != null) result.employeeTotal = ov.employee;
+        if (ov.employer != null) result.employerTotal = ov.employer;
+        result.total = result.employeeTotal + result.employerTotal;
+        step({
+          id: `${employee.employeeId}_OVERRIDE_${schemeCode}`,
+          stage: 'statutory',
+          label: `${schemeCode} set by hand`,
+          value: result.total,
+          explanation: `${scheme.general.code} set by hand:${ov.employee != null ? ` employee ${ov.employee}` : ''}${ov.employer != null ? ` employer ${ov.employer}` : ''}`,
+        });
+      }
       const absorbed = ctx.absorbedSchemes.includes(scheme.general.code);
       result.absorbedByEmployer = absorbed;
       statutoryResults.push(result);

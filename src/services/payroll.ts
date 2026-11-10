@@ -51,6 +51,7 @@ function toEngineInput(e: Employee, periodEnd: string, items: PayItemRow[] = [],
     ethnicity: (e as any).ethnicity || undefined,
     salaryComponents: [{ componentCode: 'BASIC', amount: Number(e.base_salary) || 0 }, ...extra.salaryComponents],
     otherDeductions: extra.otherDeductions,
+    ...(extra.statutoryOverride ? { statutoryOverride: extra.statutoryOverride } : {}),
   };
 }
 
