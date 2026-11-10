@@ -1,3 +1,4 @@
+import { A4_MODAL } from '../../../../utils/renderPdf';
 import { useState, useEffect } from 'react';
 import { Table, Button, Space, Tag, Input, Segmented, Modal, Form, InputNumber, DatePicker, Select, message, Statistic, Card, Typography, Empty, Dropdown } from 'antd';
 import { PlusOutlined, PrinterOutlined, DownloadOutlined, DollarOutlined, SearchOutlined, MoreOutlined, FileDoneOutlined, CopyOutlined } from '@ant-design/icons';
@@ -184,7 +185,7 @@ function ViewModal({ id, data, onClose }: { id: number; data: FinanceData; onClo
     setBusy(false);
   };
   return (
-    <Modal open onCancel={onClose} width={820} title={doc ? `${DOC_LABEL[doc.doc_type]} ${doc.number}` : 'Loading…'}
+    <Modal open onCancel={onClose} width={A4_MODAL} title={doc ? `${DOC_LABEL[doc.doc_type]} ${doc.number}` : 'Loading…'}
       footer={<Space><Button icon={<PrinterOutlined />} onClick={print} disabled={!loaded}>Print</Button>
         <Button type="primary" icon={<DownloadOutlined />} loading={busy} onClick={download} disabled={!loaded}>Download PDF</Button></Space>}>
       {loaded && doc && (
