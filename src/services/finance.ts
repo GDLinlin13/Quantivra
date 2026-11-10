@@ -368,20 +368,28 @@ export const docService = {
  * The latest exchange rate known for a currency (company currency per unit): from the last document in that
  * currency, else from the last matched line of a bank account in that currency.
  */
-/** Today's market rate (company currency per 1 unit), from a free public rate service; null if it can't be reached. */
-export async function marketRate(currency: string, base: string): Promise<number | null> {
-  try {
+/**
+ * The market rate (company currency per 1 unit) from free public rate services; null if they can't be reached.
+ * With a date: the European Central Bank's rate for that day (frankfurter.app); otherwise, or for currencies the
+ * ECB doesn't publish (e.g. AED), today's rate (open.er-api.com). Only the currency codes are sent.
+ */
+export async function marketRate(currency: string, base: string, date?: string | null): Promise<number | null> {
+  const get = async (url: string) => {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 6000);
-    const r = await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(currency)}`, { signal: ctl.signal });
-    clearTimeout(timer);
-    const j = await r.json();
-    const v = Number(j?.rates?.[base]);
-    return j?.result === 'success' && v > 0 ? Math.round(v * 1e6) / 1e6 : null;
-  } catch { return null; }
+    try { const r = await fetch(url, { signal: ctl.signal }); return r.ok ? await r.json() : null; } catch { return null; } finally { clearTimeout(timer); }
+  };
+  const ok = (v: unknown) => (Number(v) > 0 ? Math.round(Number(v) * 1e6) / 1e6 : null);
+  if (date) {
+    const j = await get(`https://api.frankfurter.app/${encodeURIComponent(date)}?from=${encodeURIComponent(currency)}&to=${encodeURIComponent(base)}`);
+    const v = ok(j?.rates?.[base]);
+    if (v) return v;
+  }
+  const j = await get(`https://open.er-api.com/v6/latest/${encodeURIComponent(currency)}`);
+  return j?.result === 'success' ? ok(j?.rates?.[base]) : null;
 }
 
-export async function latestRate(companyId: number, currency: string, base?: string): Promise<number | null> {
+export async function latestRate(companyId: number, currency: string, base?: string, date?: string | null): Promise<number | null> {
   const d = await supabase.from('fin_documents').select('fx_rate, issue_date').eq('company_id', companyId).eq('currency', currency)
     .not('fx_rate', 'is', null).order('issue_date', { ascending: false }).order('id', { ascending: false }).limit(1);
   const fromDoc = !d.error && d.data?.[0] ? Number((d.data[0] as any).fx_rate) : null;
@@ -395,7 +403,7 @@ export async function latestRate(companyId: number, currency: string, base?: str
     if (x && Number(x.amount)) return Math.round(Math.abs(Number(x.base_amount) / Number(x.amount)) * 1e6) / 1e6;
   }
   // nothing of our own yet: today's market rate
-  return base ? marketRate(currency, base) : null;
+  return base ? marketRate(currency, base, date) : null;
 }
 
 // ---- payments --------------------------------------------------------------------------

@@ -90,7 +90,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
   const rateFor = async (cur: string) => {
     if (cur === currency) return null;
     if (rates[cur] !== undefined) return rates[cur];
-    const r = await latestRate(companyId, cur, currency).catch(() => null);
+    const r = await latestRate(companyId, cur, currency, doc.issue_date).catch(() => null);
     setRates(x => ({ ...x, [cur]: r }));
     return r;
   };
@@ -162,7 +162,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
     // the books (in the company's currency) need a rate; none typed: the latest known, else today's market rate
     let fx = doc.fx_rate;
     if (foreign && !(Number(fx) > 0)) {
-      fx = await latestRate(companyId, docCur, currency).catch(() => null);
+      fx = await latestRate(companyId, docCur, currency, doc.issue_date).catch(() => null);
       if (!fx) { message.error(`Couldn't find a ${docCur} rate — enter it: 1 ${docCur} = ? ${currency}`); return; }
       set({ fx_rate: fx });
     }

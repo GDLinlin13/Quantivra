@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import { UploadOutlined, PlusOutlined, LinkOutlined, DisconnectOutlined, DeleteOutlined, EditOutlined, PaperClipOutlined, StopOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { bankService, paymentService, loadLedgerInput, accountService, pdfLayoutService, pictureStatementPref, companyFileService, type BankTxn, type Payment } from '../../../../services/finance';
+import { bankService, paymentService, marketRate, loadLedgerInput, accountService, pdfLayoutService, pictureStatementPref, companyFileService, type BankTxn, type Payment } from '../../../../services/finance';
 import { statementPeriod } from '../../../../data/documents';
 import { planImport, nothingNew } from '../../../../data/bankImport';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
@@ -508,6 +508,16 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   // no rate keyed: the last rate used on this bank is used (only the very first line needs one)
   const effBase = base ?? (foreign && lastRate ? r2(lastRate * lineAmt) : null);
   const [editRate, setEditRate] = useState(!lastRate);
+  // no rate used on this bank yet: the market rate on the line's date
+  const [looking, setLooking] = useState(false);
+  useEffect(() => {
+    if (!foreign || lastRate) return;
+    setLooking(true);
+    marketRate(accCur, data.currency, txn.txn_date).then(r => {
+      if (r) { setRate(x => x ?? r); setBase(x => x ?? r2(r * lineAmt)); }
+    }).finally(() => setLooking(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txn.id]);
   const amt = foreign ? (effBase ?? 0) : lineAmt;               // what goes into the books
   const ready = !foreign || (effBase != null && effBase > 0);
   const signedBase = foreign ? Math.sign(Number(txn.amount)) * amt : undefined;
@@ -549,8 +559,13 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   // the bank amount differs from the document (company currency): money out more than the bill, or money in less
   // than the invoice — say where the difference goes (bank charges, a prepayment…) or leave it with the contact
   const chosen = docId ? data.docs.find(x => x.id === docId) : undefined;
-  const diff = chosen && !isForeignDoc(chosen, data.currency)
-    ? Math.round((inbound ? balanceDue(chosen) - amt : amt - balanceDue(chosen)) * 100) / 100 : 0;
+  // in the document's currency when it is the bank's (USD invoice, USD bank), else in the company's currency
+  const diffInDocCur = !!chosen && inBankCur(chosen);
+  const diff = !chosen ? 0
+    : diffInDocCur ? Math.round((inbound ? balanceDue(chosen) - lineAmt : lineAmt - balanceDue(chosen)) * 100) / 100
+      : !isForeignDoc(chosen, data.currency) ? Math.round((inbound ? balanceDue(chosen) - amt : amt - balanceDue(chosen)) * 100) / 100 : 0;
+  // what the difference is in the company's currency (charges are booked in it), at this line's rate
+  const diffBase = diffInDocCur ? Math.round(diff * (lineAmt ? amt / lineAmt : 0) * 100) / 100 : diff;
   const bankCharges = data.accounts.find(a => !a.archived && a.type === 'expense' && /bank charge/i.test(a.name));
   const [diffTo, setDiffTo] = useState<number | 'keep' | null>(null);
   const diffAccount = diffTo ?? (bankCharges?.id || 'keep');
@@ -576,7 +591,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
       direction: inbound ? 'in' : 'out', amount: amt, contact_id: d.contact_id, payment_date: txn.txn_date,
       method: 'Bank transfer', reference: txn.description || undefined, account_id: txn.account_id,
       ...(foreign ? { currency: accCur, foreign_amount: lineAmt } : {}),
-      ...(booked ? { charges: diff, charges_account_id: diffAccount as number } : {}),
+      ...(booked ? { charges: diffBase, charges_account_id: diffAccount as number } : {}),
     }, [{ document_id: d.id, amount: portion }]);
     await bankService.matchPayment(txn.id, pid, signedBase);
   });
@@ -600,7 +615,9 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
             <Text type="secondary">or</Text>
             <AmountInput min={0} precision={2} style={{ width: 170 }} prefix={data.currency} value={base ?? undefined} onChange={v => { const b = v == null ? null : Number(v); setBase(b); setRate(b && lineAmt ? fx(b / lineAmt) : null); }} />
           </Space>
-          {!ready && <div style={{ marginTop: 6 }}><Tag color="gold">Enter the exchange rate or the {data.currency} amount first</Tag></div>}
+          {looking && <div style={{ marginTop: 6 }}><Text type="secondary">Looking up the rate on {txn.txn_date}…</Text></div>}
+          {!ready && !looking && <div style={{ marginTop: 6 }}><Tag color="gold">Couldn't find the rate for {txn.txn_date} — enter the rate or the {data.currency} amount</Tag></div>}
+          {ready && !lastRate && rate != null && <div style={{ marginTop: 6 }}><Text type="secondary">Market rate on {txn.txn_date}; change it if your bank used another.</Text></div>}
         </div>
       )}
       <Tabs defaultActiveKey={suggestions.length || journalHits.length ? 'existing' : payrollHit ? 'payroll' : openDocs.length ? 'doc' : 'account'} items={[
@@ -619,7 +636,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
               )}
               {diff > 0.004 && (
                 <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Text>{inbound ? 'Short by' : 'Difference'} <b>{money(diff, data.currency)}</b>:</Text>
+                  <Text>{inbound ? 'Short by' : 'Difference'} <b>{money(diff, diffInDocCur ? accCur : data.currency)}</b>{diffInDocCur && diffBase > 0 ? ` (${money(diffBase, data.currency)})` : ''}:</Text>
                   <Select style={{ minWidth: 340 }} showSearch optionFilterProp="label" value={diffAccount} onChange={v => setDiffTo(v)} options={diffOptions} />
                 </div>
               )}
