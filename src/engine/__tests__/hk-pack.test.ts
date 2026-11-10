@@ -57,3 +57,17 @@ describe('Hong Kong country pack', () => {
     expect(mpf(run(20000, { dob: '1960-01-01' }))).toBeUndefined();
   });
 });
+
+describe('Hong Kong staff saved before Hong Kong had its own residency choices', () => {
+  it('count as MPF members unless marked exempt', async () => {
+    const { payrollResidency } = await import('../../data/residency-options');
+    expect(payrollResidency('HK', 'CITIZEN')).toBe('HK_PR');
+    expect(payrollResidency('HK', null)).toBe('HK_PR');
+    expect(payrollResidency('HK', 'SC')).toBe('HK_PR');
+    expect(payrollResidency('HK', 'FOREIGNER')).toBe('HK_NON_PR');
+    expect(payrollResidency('HK', 'EP')).toBe('HK_NON_PR');
+    expect(payrollResidency('HK', 'MPF_EXEMPT')).toBe('MPF_EXEMPT');
+    expect(payrollResidency('AE', 'EXPAT')).toBe('EXPAT');
+    expect(mpf(run(20000, { residency: payrollResidency('HK', 'FOREIGNER') }))!.employeeTotal).toBe(1000);
+  });
+});

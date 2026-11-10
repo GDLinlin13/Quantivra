@@ -4,6 +4,7 @@ import type { CountryPackDef } from '../data/country-packs/schema';
 import type { EmployeePayrollInput, PayrollPeriod, PayrollRunResult } from '../engine/types';
 import { hrService, type Employee } from './hr';
 import dayjs from 'dayjs';
+import { payrollResidency } from '../data/residency-options';
 import { toEngineItems, PAY_ITEM_BY_CODE, isOvertime, type PayItemRow } from '../data/payItems';
 
 /** Country packs authored for the payroll engine. */
@@ -31,16 +32,18 @@ const STATUS_MAP: Record<string, string> = {
   director: 'DIRECTOR',
 };
 
-function toEngineInput(e: Employee, periodEnd: string, items: PayItemRow[] = []): EmployeePayrollInput {
+function toEngineInput(e: Employee, periodEnd: string, items: PayItemRow[] = [], country = 'SG'): EmployeePayrollInput {
   // Fall back to a ~35-year-old if DOB missing, so the run still produces numbers.
   const dob = e.date_of_birth || dayjs(periodEnd).subtract(35, 'year').format('YYYY-MM-DD');
-  const residency = (e as any).residency_status || 'SC';
+  const hk = (country || 'SG').toUpperCase() === 'HK';
+  const residency = hk ? payrollResidency('HK', (e as any).residency_status) : ((e as any).residency_status || 'SC');
   const extra = toEngineItems(items);
   return {
     employeeId: String(e.id),
     name: e.full_name,
     dateOfBirth: dob,
-    dateOfJoining: e.join_date || dayjs(periodEnd).startOf('year').format('YYYY-MM-DD'),
+    // no join date: assume an earlier start (in Hong Kong a "new" joiner would wrongly skip their MPF share)
+    dateOfJoining: e.join_date || dayjs(periodEnd).subtract(hk ? 1 : 0, 'year').startOf('year').format('YYYY-MM-DD'),
     dateOfLeaving: e.exit_date || undefined,
     employmentStatusCode: STATUS_MAP[e.employment_type] || 'FULL_TIME',
     immigrationStatusCode: residency,
@@ -144,7 +147,7 @@ export const payrollService = {
 
     const result = calculatePayroll({
       period, countryPack: pack,
-      employees: employees.map(e => toEngineInput(e, period.endDate, itemsFor(e.id))),
+      employees: employees.map(e => toEngineInput(e, period.endDate, itemsFor(e.id), countryCode)),
       absorbedSchemes,
     });
 
