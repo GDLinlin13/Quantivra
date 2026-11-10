@@ -72,6 +72,8 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
   const AUTO = ['bank', 'cash', 'receivable', 'payroll', 'payroll_director', 'payroll_employer', 'payroll_employer_other', 'gratuity_expense'];
   const lineAccounts = accounts.filter(a => !a.archived && !AUTO.includes(a.subtype || '')
     && (sales ? a.type === 'income' : a.type === 'expense' || a.type === 'asset'));
+  const salesAcc = accounts.find(a => a.subtype === 'sales' && !a.archived);
+  const defaultIncomeLabel = salesAcc ? `${salesAcc.code} ${salesAcc.name}` : 'Sales';
   const accountOptions = sales
     ? lineAccounts.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))
     : [
@@ -290,9 +292,10 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
               options={catalog.map(it => ({ value: it.id, label: `${it.code ? `${it.code} · ` : ''}${it.name}` }))} />
           ) }] : []),
           { title: 'Description', render: (_, l, i) => <Input.TextArea style={{ minWidth: 280 }} autoSize={{ minRows: 1, maxRows: 6 }} value={l.description} onChange={e => setLine(i, { description: e.target.value })} /> },
-          ...(lineAccounts.length && !sales ? [{ title: 'Account', width: 180, render: (_: any, l: DocLine, i: number) => (
-            <Select style={{ width: '100%' }} showSearch optionFilterProp="label" value={l.account_id ?? undefined} onChange={v => setLine(i, { account_id: v })}
-              options={accountOptions as any} placeholder="General expenses" />
+          // which account each line goes to: income for invoices / credit notes (quotations aren't booked), costs for purchases
+          ...(lineAccounts.length && docType !== 'quote' ? [{ title: 'Account', width: 200, render: (_: any, l: DocLine, i: number) => (
+            <Select style={{ width: '100%' }} showSearch allowClear optionFilterProp="label" value={l.account_id ?? undefined} onChange={v => setLine(i, { account_id: v ?? null })}
+              options={accountOptions as any} placeholder={sales ? defaultIncomeLabel : 'General expenses'} />
           ) }] : []),
           { title: 'Qty', width: 80, render: (_, l, i) => <InputNumber style={{ width: '100%' }} value={l.quantity} onChange={v => setLine(i, { quantity: Number(v) || 0 })} /> },
           { title: 'Unit price', width: 120, render: (_, l, i) => <AmountInput style={{ width: '100%' }} precision={2} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} /> },
