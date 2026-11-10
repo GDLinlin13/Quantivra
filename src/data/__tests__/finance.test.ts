@@ -95,3 +95,23 @@ describe('contact currencies', () => {
     expect(contactCurrencies({ currency: null })).toEqual([]);
   });
 });
+
+describe('number year vs date', () => {
+  it('spots a counted number from another year', async () => {
+    const { numberYearDiffers } = await import('../finance');
+    expect(numberYearDiffers('BILL-2026-0001', '2025-09-15')).toBe(true);
+    expect(numberYearDiffers('BILL-2025-0001', '2025-09-15')).toBe(false);
+    expect(numberYearDiffers('ARG-0457', '2025-09-15')).toBe(false);
+    expect(numberYearDiffers('INV-12026', '2025-09-15')).toBe(false);
+  });
+});
+
+describe('numbers for another year', () => {
+  it('continue from the numbers already used in that year', async () => {
+    const { nextFreeNumber } = await import('../../utils/numbering');
+    const used = ['BILL-2025-0001', 'BILL-2025-0002', 'BILL-2026-0001', 'X'];
+    expect(nextFreeNumber('BILL-{YYYY}-{0000}', '2025-09-15', used)).toBe('BILL-2025-0003');
+    expect(nextFreeNumber('BILL-{YYYY}-{0000}', '2024-01-02', used)).toBe('BILL-2024-0001');
+    expect(nextFreeNumber('INV.{YY}{MM}-{000}', '2025-09-15', ['INV.2509-007'])).toBe('INV.2509-008');
+  });
+});

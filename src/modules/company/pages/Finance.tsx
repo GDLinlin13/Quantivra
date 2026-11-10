@@ -35,7 +35,10 @@ export function CompanyFinancePage() {
         hrService.listEmployees(companyId).then(l => l.map(e => ({ id: Number(e.id), full_name: e.full_name }))).catch(() => []),
         catalogService.list(companyId).catch(() => []),
       ]);
-      setData({ companyId, company, currency: company?.currency || 'SGD', branding, settings, contacts, people, accounts, docs, employees, items });
+      // bills numbered for another year than their date (e.g. dated 2025, numbered BILL-2026-…) are renumbered
+      const fixed = await docService.fixNumberYears(companyId, docs).catch(() => 0);
+      const docsNow = fixed ? await docService.list(companyId, ['quote', 'invoice', 'credit_note', 'bill', 'expense']) : docs;
+      setData({ companyId, company, currency: company?.currency || 'SGD', branding, settings, contacts, people, accounts, docs: docsNow, employees, items });
       setError(null);
     } catch (e: any) {
       setError(/does not exist|contacts|fin_/i.test(e.message) ? 'Finance needs database update 024 — ask your administrator to run it in Supabase.' : e.message);

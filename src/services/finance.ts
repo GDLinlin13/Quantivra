@@ -2,8 +2,14 @@ import type { CatalogItem, StockAdjustment, CustomerPrice } from '../data/catalo
 import { message } from 'antd';
 import { shrinkFile, shrinkPdf } from '../utils/shrinkFile';
 import { supabase } from '../utils/supabase';
+import { nextFreeNumber } from '../utils/numbering';
+
+/** The standard formats, as the database uses them when a company has none of its own. */
+const DEFAULT_DOC_FORMATS: Record<string, string> = {
+  invoice: 'INV-{YYYY}-{0000}', quotation: 'QUO-{YYYY}-{0000}', credit_note: 'CN-{YYYY}-{0000}', bill: 'BILL-{YYYY}-{0000}', claim: 'EXP-{YYYY}-{0000}',
+};
 import {
-  docTotals, statusAfterPayment, bankCodePlan, chartUpgrade, defaultAccountsFor, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
+  docTotals, statusAfterPayment, numberYearDiffers, isSalesDoc, bankCodePlan, chartUpgrade, defaultAccountsFor, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
   type Contact, type ContactPerson, type FinDocument, type DocLine, type DocType, type FinanceSettings, type Account,
 } from '../data/finance';
 import { splitByShare, payrollSplit } from '../data/ledger';
@@ -293,11 +299,48 @@ export const docService = {
       .eq('company_id', companyId).eq('category', 'company').eq('key', 'numbering_formats').maybeSingle();
     return new Set((Array.isArray(data?.value) ? data!.value as any[] : []).filter(r => r?.manual).map(r => String(r.entity)));
   },
+  /**
+   * Our own bills / expenses (and drafts) whose counted number shows another year than their date get a number
+   * for the right year. Invoices already sent are left alone. Returns how many were renumbered.
+   */
+  async fixNumberYears(companyId: number, docs: FinDocument[]): Promise<number> {
+    const typed = await this.typedNumbers(companyId).catch(() => new Set<string>());
+    const wrong = docs.filter(d => numberYearDiffers(d.number, d.issue_date) && !typed.has(DOC_NUMBER_ENTITY[d.doc_type])
+      && (!isSalesDoc(d.doc_type) || d.status === 'draft'))
+      .sort((a, b) => a.issue_date.localeCompare(b.issue_date) || a.id - b.id);   // numbered in date order
+    let fixed = 0;
+    for (const d of wrong) {
+      const number = await this.nextNumber(companyId, d.doc_type, d.issue_date);
+      if (numberYearDiffers(number, d.issue_date)) continue;     // the format carries no year: leave it
+      must(await supabase.from('fin_documents').update({ number }).eq('id', d.id));
+      fixed++;
+    }
+    return fixed;
+  },
+  /**
+   * The next number for a document dated `date`. Normally the running counter (Settings → Document numbers). A date
+   * in another year / month than the counter is on (a bill dated 2025 entered in 2026) takes the next free number of
+   * that period from the numbers already used, and leaves the counter where it is — so neither year starts over.
+   */
   async nextNumber(companyId: number, type: DocType, date?: string): Promise<string> {
-    return must(await supabase.rpc('fin_next_number', { p_company_id: companyId, p_entity: DOC_NUMBER_ENTITY[type], ...(date ? { p_date: date } : {}) }));
+    const entity = DOC_NUMBER_ENTITY[type];
+    if (date) {
+      const { data } = await supabase.from('company_settings').select('value')
+        .eq('company_id', companyId).eq('category', 'company').eq('key', 'numbering_formats').maybeSingle();
+      const item = (Array.isArray(data?.value) ? data!.value as any[] : []).find(r => r?.entity === entity);
+      const format: string = item?.format || DEFAULT_DOC_FORMATS[entity] || `${entity.slice(0, 3).toUpperCase()}-{YYYY}-{0000}`;
+      const reset = item?.reset || (/\{YY/.test(format) ? 'yearly' : 'never');
+      const period = reset === 'yearly' ? date.slice(0, 4) : reset === 'monthly' ? date.slice(0, 7) : '';
+      const used: string[] = (must(await supabase.from('fin_documents').select('number').eq('company_id', companyId).eq('doc_type', type)) || []).map((r: any) => r.number);
+      if (reset !== 'never' && item?.period && item.period !== period) return nextFreeNumber(format, date, used);
+      const n: string = must(await supabase.rpc('fin_next_number', { p_company_id: companyId, p_entity: entity, p_date: date }));
+      // a counter that was set back (or restarted) never hands out a number that is already used
+      return used.includes(n) ? nextFreeNumber(format, date, used) : n;
+    }
+    return must(await supabase.rpc('fin_next_number', { p_company_id: companyId, p_entity: entity }));
   },
   /** Create or update a document with its lines; totals are worked out here. Returns the id. */
-  async save(companyId: number, d: Partial<FinDocument> & { doc_type: DocType }, lines: DocLine[]): Promise<number> {
+  async save(companyId: number, d: Partial<FinDocument> & { doc_type: DocType }, lines: DocLine[], opts?: { keepNumber?: boolean }): Promise<number> {
     const t = docTotals(lines, d.discounts || [], !!d.tax_inclusive);
     const row: any = {
       company_id: companyId, doc_type: d.doc_type, status: d.status || 'draft',
@@ -314,6 +357,13 @@ export const docService = {
     let id = d.id;
     if (id) {
       row.number = d.number;
+      // the date moved to another year than the number shows (e.g. BILL-2026-0001 dated 2025): a new number for
+      // that year — for our own bills / expenses and drafts only (an invoice already sent keeps its number), never
+      // for a number typed in by hand
+      if (!opts?.keepNumber && numberYearDiffers(d.number, d.issue_date) && (!isSalesDoc(d.doc_type) || (d.status || 'draft') === 'draft')) {
+        const n = await this.nextNumber(companyId, d.doc_type, d.issue_date);
+        if (!numberYearDiffers(n, d.issue_date)) row.number = n;
+      }
       must(await supabase.from('fin_documents').update(row).eq('id', id));
     } else {
       row.number = d.number || await this.nextNumber(companyId, d.doc_type, d.issue_date);

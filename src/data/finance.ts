@@ -10,6 +10,11 @@ export const DOC_LABEL: Record<DocType, string> = {
 export const DOC_NUMBER_ENTITY: Record<DocType, string> = {
   quote: 'quotation', invoice: 'invoice', credit_note: 'credit_note', bill: 'bill', expense: 'claim',
 };
+/** A counted number showing another year than the document's date (BILL-2026-0001 dated 2025-09-15). */
+export function numberYearDiffers(number: string | null | undefined, date: string | null | undefined): boolean {
+  const y = (number || '').match(/(?<!\d)(20\d{2})(?!\d)/)?.[1];
+  return !!y && !!date && y !== date.slice(0, 4);
+}
 export const isSalesDoc = (t: DocType) => t === 'quote' || t === 'invoice' || t === 'credit_note';
 
 export interface Contact {
