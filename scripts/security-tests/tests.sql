@@ -378,6 +378,11 @@ BEGIN
   BEGIN INSERT INTO fin_documents (company_id, doc_type, number, contact_id) VALUES (2, 'invoice', 'X-3', v_a);
     RAISE EXCEPTION 'FAIL: invoice in B linked to a customer of A';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  -- a payment's bank charges can only go to an account of its own company
+  INSERT INTO fin_accounts (company_id, code, name, type) VALUES (1, '6900', 'Alpha bank charges', 'expense') RETURNING id INTO v_a;
+  BEGIN INSERT INTO fin_payments (company_id, direction, payment_date, amount, charges, charges_account_id) VALUES (2, 'out', current_date, 10, 1, v_a);
+    RAISE EXCEPTION 'FAIL: payment in B booked charges to an account of A';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 ROLLBACK;
 BEGIN; :as_a

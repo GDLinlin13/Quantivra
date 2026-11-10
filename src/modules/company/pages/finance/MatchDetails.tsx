@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Modal, Table, Typography, Space, Button, Tag, Empty, message, Descriptions, Upload, Popconfirm } from 'antd';
+import { Modal, Table, Typography, Space, Button, Tag, Empty, message, Descriptions, Upload, Popconfirm, Select } from 'antd';
 import { PaperClipOutlined, FilePdfOutlined, UploadOutlined, DeleteOutlined } from '@ant-design/icons';
-import { docService, attachmentService, companyFileService, ATTACH_TYPES, type CompanyFile, type Attachment, type BankTxn, type JournalRow, type Payment, type Allocation } from '../../../../services/finance';
-import { DOC_LABEL, isSalesDoc, type FinDocument } from '../../../../data/finance';
+import { docService, paymentService, attachmentService, companyFileService, ATTACH_TYPES, type CompanyFile, type Attachment, type BankTxn, type JournalRow, type Payment, type Allocation } from '../../../../services/finance';
+import { DOC_LABEL, isSalesDoc, balanceDue, isForeignDoc, type FinDocument } from '../../../../data/finance';
 import { lineText } from '../../../../data/catalog';
 import { money } from '../../../../data/documentLayouts';
 import { renderPdf } from '../../../../utils/renderPdf';
@@ -31,7 +31,8 @@ export function matchLabel(t: BankTxn, data: FinanceData, look: MatchLookup): { 
     if (!p) return { title: 'Payment', accounts: control };
     const docs = look.allocations.filter(a => a.payment_id === p.id).map(a => look.docs.find(d => d.id === a.document_id)?.number).filter(Boolean);
     const who = data.contacts.find(c => c.id === p.contact_id)?.name;
-    return { title: [p.number || 'Payment', who, docs.join(', ')].filter(Boolean).join(' · '), accounts: control };
+    const extra = Number(p.charges) > 0 ? short(acc(p.charges_account_id ?? undefined)?.name || '') : '';
+    return { title: [p.number || 'Payment', who, docs.join(', ')].filter(Boolean).join(' · '), accounts: [control, extra].filter(Boolean).join(', ') };
   }
   if (t.journal_id) {
     const j = look.journals.find(x => x.id === t.journal_id);
@@ -44,7 +45,7 @@ export function matchLabel(t: BankTxn, data: FinanceData, look: MatchLookup): { 
 }
 
 /** Click a matched bank line: what it was booked to, and the invoices / bills it paid with their files. */
-export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged }: { data: FinanceData; txn: BankTxn; look: MatchLookup; accCur: string; onClose: () => void; onFilesChanged?: () => void }) {
+export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged, onChanged }: { data: FinanceData; txn: BankTxn; look: MatchLookup; accCur: string; onClose: () => void; onFilesChanged?: () => void; onChanged?: () => void }) {
   const acc = (id: number) => data.accounts.find(a => a.id === id);
   const M = (n: number) => money(n, data.currency);
   const label = matchLabel(txn, data, look);
@@ -52,6 +53,27 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged 
   const journal = txn.journal_id ? look.journals.find(j => j.id === txn.journal_id) : undefined;
   const allocs = payment ? look.allocations.filter(a => a.payment_id === payment.id) : [];
   const paidDocs = allocs.map(a => ({ alloc: a, doc: look.docs.find(d => d.id === a.document_id) })).filter(x => x.doc) as { alloc: Allocation; doc: FinDocument }[];
+  // money out that was more than its bills, or money in that fell short of its invoice: where the difference goes
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const plain = paidDocs.every(x => !isForeignDoc(x.doc, data.currency));
+  const shortDoc = payment?.direction === 'in' && paidDocs.length === 1 && balanceDue(paidDocs[0].doc) > 0 ? paidDocs[0].doc : null;
+  const gap = !payment || !plain ? 0
+    : payment.direction === 'out' ? r2(Number(payment.amount) - (Number(payment.charges) || 0) - allocs.reduce((t, a) => t + Number(a.amount), 0))
+      : shortDoc ? r2(balanceDue(shortDoc)) : 0;
+  const bankCharges = data.accounts.find(a => !a.archived && a.type === 'expense' && /bank charge/i.test(a.name));
+  const [gapTo, setGapTo] = useState<number | undefined>(bankCharges?.id);
+  const [booking, setBooking] = useState(false);
+  const gapOptions = [
+    { label: 'Expenses', options: data.accounts.filter(a => !a.archived && a.type === 'expense').map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
+    { label: 'Things you own (prepayments, deposits…)', options: data.accounts.filter(a => !a.archived && a.type === 'asset' && !['bank', 'cash', 'receivable'].includes(a.subtype || '')).map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
+    { label: 'Owed', options: data.accounts.filter(a => !a.archived && a.type === 'liability' && a.subtype !== 'payable').map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
+  ];
+  const bookGap = async () => {
+    if (!payment || !gapTo) return;
+    setBooking(true);
+    try { await paymentService.bookDifference(payment.id, gap, gapTo, shortDoc?.id); message.success('Booked'); onChanged?.(); } catch (e: any) { message.error(e.message); }
+    setBooking(false);
+  };
   const [files, setFiles] = useState<Record<number, Attachment[]>>({});
   const [busy, setBusy] = useState<number | null>(null);
   // supporting documents of a journal entry (e.g. the share capital agreement)
@@ -150,6 +172,16 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged 
                   ),
                 },
               ]} />
+          )}
+          {Number(payment.charges) > 0 && (
+            <div style={{ marginTop: 8 }}><Text type="secondary">{payment.direction === 'out' ? 'Also paid' : 'Kept by the bank'}: {M(Number(payment.charges))} → {(() => { const a = data.accounts.find(x => x.id === payment.charges_account_id); return a ? `${a.code} ${a.name}` : '—'; })()}</Text></div>
+          )}
+          {gap > 0.004 && (
+            <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Text>{payment.direction === 'out' ? 'Not for the bills' : `Still owed on ${shortDoc?.number}`}: <b>{M(gap)}</b> — book it to</Text>
+              <Select style={{ minWidth: 280 }} showSearch optionFilterProp="label" value={gapTo} onChange={setGapTo} options={gapOptions} placeholder="Choose an account" />
+              <Button type="primary" disabled={!gapTo} loading={booking} onClick={bookGap}>Book</Button>
+            </div>
           )}
         </>
       )}

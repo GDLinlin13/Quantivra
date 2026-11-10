@@ -99,7 +99,9 @@ export interface LedgerInput {
   accounts: Account[];
   docs: (FinDocument & { lines: DocLine[] })[];
   /** amount: in the company's currency; currency / foreign_amount: when it went through a bank in another currency */
-  payments: { id: number; direction: 'in' | 'out'; number: string | null; contact_id: number | null; payment_date: string; amount: number; account_id: number | null; currency?: string | null; foreign_amount?: number | null }[];
+  payments: { id: number; direction: 'in' | 'out'; number: string | null; contact_id: number | null; payment_date: string; amount: number; account_id: number | null; currency?: string | null; foreign_amount?: number | null;
+    /** a difference booked elsewhere (bank charges, a prepayment…): money out paid the documents plus this; money in, the documents less this */
+    charges?: number | null; charges_account_id?: number | null }[];
   /** the company's own currency (documents in other currencies are booked at their rate) */
   currency?: string;
   allocations: { payment_id: number; document_id: number; amount: number }[];
@@ -211,11 +213,15 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
     const known = r2(parts.reduce((t, x) => t + (x.worth ?? 0), 0));
     const open = parts.filter(x => x.worth == null);
     if (open.length) {
-      const shares = spread(Math.max(0, r2(amt - known)), open.map(x => x.cleared));
+      const forDocs = inbound ? r2(amt + (Number(p.charges) || 0)) : r2(amt - (Number(p.charges) || 0));
+      const shares = spread(Math.max(0, r2(forDocs - known)), open.map(x => x.cleared));
       open.forEach((x, i) => { x.worth = shares[i]; });
     }
     const lines: LedgerLine[] = [];
-    let left = amt;
+    // the part of the money that wasn't for the documents (bank charges, a prepayment…), booked to its own account
+    const extra = r2(Number(p.charges) || 0);
+    const extraAcc = extra > 0 ? (p.charges_account_id || acc('general', 'expense')) : 0;
+    let left = inbound ? r2(amt + extra) : r2(amt - extra);
     for (const x of parts) {
       const worth = Math.min(left, x.worth!);
       if (worth <= 0 && x.cleared <= 0) continue;
@@ -227,6 +233,7 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
       if (diff) lines.push(diff > 0 ? { account_id: FX, debit: 0, credit: diff, description: 'Exchange gain' } : { account_id: FX, debit: -diff, credit: 0, description: 'Exchange loss' });
     }
     if (left > 0) lines.push(inbound ? { account_id: AR, debit: 0, credit: left, contact_id: p.contact_id } : { account_id: AP, debit: left, credit: 0, contact_id: p.contact_id });
+    if (extraAcc) lines.push({ account_id: extraAcc, debit: extra, credit: 0, description: inbound ? 'Kept by the bank' : 'Paid with this payment' });
     lines.push(inbound ? { account_id: cash, debit: amt, credit: 0 } : { account_id: cash, debit: 0, credit: amt });
     entries.push({ date: p.payment_date, source: inbound ? 'payment_in' : 'payment_out', source_id: p.id, ref: p.number || '', memo: '', lines });
   }

@@ -403,7 +403,8 @@ export function Bank({ data }: { data: FinanceData }) {
             showImport(lines);
           }} />
       )}
-      {details && <MatchDetails data={data} txn={details} look={look} accCur={accCur} onClose={() => setDetails(null)} onFilesChanged={loadWithFiles} />}
+      {details && <MatchDetails data={data} txn={details} look={look} accCur={accCur} onClose={() => setDetails(null)} onFilesChanged={loadWithFiles}
+        onChanged={() => { setDetails(null); load(); data.reload(); }} />}
       {matching && <MatchModal data={data} txn={matching} accCur={accCur} dues={dues} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
         recorded={expected} lastRate={lastRate}
         onClose={() => setMatching(null)} onDone={() => { setMatching(null); load(); data.reload(); }} />}
@@ -519,18 +520,37 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   const payrollHit = !inbound && dues.some(d => Math.abs(d.netDue - lineAmt) < 0.005 || Math.abs(d.statDue - lineAmt) < 0.005);
 
   const run = async (f: () => Promise<void>) => { setBusy(true); try { await f(); message.success('Matched'); onDone(); } catch (e: any) { message.error(e.message); } setBusy(false); };
+  // the bank amount differs from the document (company currency): money out more than the bill, or money in less
+  // than the invoice — say where the difference goes (bank charges, a prepayment…) or leave it with the contact
+  const chosen = docId ? data.docs.find(x => x.id === docId) : undefined;
+  const diff = chosen && !isForeignDoc(chosen, data.currency)
+    ? Math.round((inbound ? balanceDue(chosen) - amt : amt - balanceDue(chosen)) * 100) / 100 : 0;
+  const bankCharges = data.accounts.find(a => !a.archived && a.type === 'expense' && /bank charge/i.test(a.name));
+  const [diffTo, setDiffTo] = useState<number | 'keep' | null>(null);
+  const diffAccount = diffTo ?? (bankCharges?.id || 'keep');
+  const diffOptions = [
+    { value: 'keep', label: inbound ? 'Leave it owing on the invoice' : 'Leave it with the supplier (paid in advance to them)' } as any,
+    ...data.accounts.length ? [
+      { label: 'Expenses', options: bookable.filter(a => a.type === 'expense').map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
+      { label: 'Things you own (prepayments, deposits…)', options: bookable.filter(a => a.type === 'asset' && !['bank', 'cash', 'receivable'].includes(a.subtype || '')).map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
+      { label: 'Owed', options: bookable.filter(a => a.type === 'liability' && !['payable'].includes(a.subtype || '')).map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
+    ] : [],
+  ];
   const payDoc = () => run(async () => {
     const d = data.docs.find(x => x.id === docId)!;
     const due = balanceDue(d);
+    const booked = diff > 0 && diffAccount !== 'keep';
     // how much of the document this pays off, in the document's currency: in the bank's currency, what came in;
     // in another currency, at the document's rate (close to the whole balance counts as all of it — the rest is
     // an exchange difference)
     const worth = inBankCur(d) ? lineAmt : isForeignDoc(d, data.currency) ? amt / docRate(d) : amt;
-    const portion = isForeignDoc(d, data.currency) && !inBankCur(d) && worth >= due * 0.95 ? due : Math.min(Math.round(worth * 100) / 100, due);
+    const portion = booked ? due
+      : isForeignDoc(d, data.currency) && !inBankCur(d) && worth >= due * 0.95 ? due : Math.min(Math.round(worth * 100) / 100, due);
     const pid = await paymentService.record(data.companyId, {
       direction: inbound ? 'in' : 'out', amount: amt, contact_id: d.contact_id, payment_date: txn.txn_date,
       method: 'Bank transfer', reference: txn.description || undefined, account_id: txn.account_id,
       ...(foreign ? { currency: accCur, foreign_amount: lineAmt } : {}),
+      ...(booked ? { charges: diff, charges_account_id: diffAccount as number } : {}),
     }, [{ document_id: d.id, amount: portion }]);
     await bankService.matchPayment(txn.id, pid, signedBase);
   });
@@ -570,6 +590,12 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                     { title: inbound ? 'Customer' : 'Supplier', key: 'c', render: (_, d) => contact(d.contact_id) },
                     { title: 'Still owed', key: 'b', align: 'right' as const, render: (_, d) => <span style={{ fontWeight: sameAmount(d) ? 700 : 400 }}>{money(balanceDue(d), d.currency || data.currency)}{isForeignDoc(d, data.currency) && !inBankCur(d) && <Text type="secondary"> ≈ {money(inBase(d, balanceDue(d)), data.currency)}</Text>}</span> },
                   ]} />
+              )}
+              {diff > 0.004 && (
+                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Text>{inbound ? 'Short by' : 'Difference'} <b>{money(diff, data.currency)}</b>:</Text>
+                  <Select style={{ minWidth: 340 }} showSearch optionFilterProp="label" value={diffAccount} onChange={v => setDiffTo(v)} options={diffOptions} />
+                </div>
               )}
               <Button type="primary" disabled={!docId || !ready} loading={busy} onClick={payDoc} style={{ marginTop: 8 }}>Record payment and match</Button>
             </div>
