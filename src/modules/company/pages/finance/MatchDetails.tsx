@@ -85,6 +85,13 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged,
     try { await paymentService.bookDifference(payment.id, gap, gapTo, shortDoc?.id); message.success('Booked'); onChanged?.(); } catch (e: any) { message.error(e.message); }
     setBooking(false);
   };
+  // a bank in another currency: its amount in that currency next to the books' amount (e.g. HKD 100.00 · USD 12.80)
+  const inOwn = (accountId: number) => {
+    const a = acc(accountId);
+    if (!a?.currency || a.currency === data.currency) return null;
+    const own = accountId === txn.account_id ? Math.abs(Number(txn.amount)) : arrivedLine && accountId === arrivedLine.account_id ? Math.abs(Number(arrivedLine.amount)) : null;
+    return own != null ? <Text type="secondary"> · {money(own, a.currency)}</Text> : null;
+  };
   const [files, setFiles] = useState<Record<number, Attachment[]>>({});
   const [busy, setBusy] = useState<number | null>(null);
   // supporting documents of a journal entry (e.g. the share capital agreement)
@@ -142,8 +149,8 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged,
             columns={[
               { title: 'Account', key: 'a', render: (_, l) => { const a = acc(l.account_id); return a ? `${a.code} ${a.name}` : '—'; } },
               { title: 'Details', key: 'd', render: (_, l) => l.description || journal.memo || '' },
-              { title: 'Debit', key: 'dr', align: 'right' as const, render: (_, l) => (Number(l.debit) ? M(Number(l.debit)) : '') },
-              { title: 'Credit', key: 'cr', align: 'right' as const, render: (_, l) => (Number(l.credit) ? M(Number(l.credit)) : '') },
+              { title: 'Debit', key: 'dr', align: 'right' as const, render: (_, l) => (Number(l.debit) ? <>{M(Number(l.debit))}{inOwn(l.account_id)}</> : '') },
+              { title: 'Credit', key: 'cr', align: 'right' as const, render: (_, l) => (Number(l.credit) ? <>{M(Number(l.credit))}{inOwn(l.account_id)}</> : '') },
             ]} />
           {/* a transfer to one of our banks in another currency: what it arrived as there */}
           {otherForeign && (
