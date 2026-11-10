@@ -368,18 +368,34 @@ export const docService = {
  * The latest exchange rate known for a currency (company currency per unit): from the last document in that
  * currency, else from the last matched line of a bank account in that currency.
  */
-export async function latestRate(companyId: number, currency: string): Promise<number | null> {
+/** Today's market rate (company currency per 1 unit), from a free public rate service; null if it can't be reached. */
+export async function marketRate(currency: string, base: string): Promise<number | null> {
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 6000);
+    const r = await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(currency)}`, { signal: ctl.signal });
+    clearTimeout(timer);
+    const j = await r.json();
+    const v = Number(j?.rates?.[base]);
+    return j?.result === 'success' && v > 0 ? Math.round(v * 1e6) / 1e6 : null;
+  } catch { return null; }
+}
+
+export async function latestRate(companyId: number, currency: string, base?: string): Promise<number | null> {
   const d = await supabase.from('fin_documents').select('fx_rate, issue_date').eq('company_id', companyId).eq('currency', currency)
     .not('fx_rate', 'is', null).order('issue_date', { ascending: false }).order('id', { ascending: false }).limit(1);
   const fromDoc = !d.error && d.data?.[0] ? Number((d.data[0] as any).fx_rate) : null;
   if (fromDoc) return fromDoc;
   const acc = await supabase.from('fin_accounts').select('id').eq('company_id', companyId).eq('currency', currency);
   const ids = (acc.data || []).map((a: any) => a.id);
-  if (!ids.length) return null;
-  const t = await supabase.from('fin_bank_transactions').select('amount, base_amount').in('account_id', ids)
-    .not('base_amount', 'is', null).order('txn_date', { ascending: false }).limit(1);
-  const x: any = t.data?.[0];
-  return x && Number(x.amount) ? Math.round(Math.abs(Number(x.base_amount) / Number(x.amount)) * 1e6) / 1e6 : null;
+  if (ids.length) {
+    const t = await supabase.from('fin_bank_transactions').select('amount, base_amount').in('account_id', ids)
+      .not('base_amount', 'is', null).order('txn_date', { ascending: false }).limit(1);
+    const x: any = t.data?.[0];
+    if (x && Number(x.amount)) return Math.round(Math.abs(Number(x.base_amount) / Number(x.amount)) * 1e6) / 1e6;
+  }
+  // nothing of our own yet: today's market rate
+  return base ? marketRate(currency, base) : null;
 }
 
 // ---- payments --------------------------------------------------------------------------
