@@ -234,3 +234,23 @@ describe('closing a bank account', () => {
     expect(balances(other, es).find(b => b.account.code === '1001')!.balance).toBe(0);
   });
 });
+
+describe('a USD invoice paid short in the USD bank, the gap booked as bank charges', () => {
+  it('clears the invoice; bank, charges and exchange difference add up', () => {
+    const usdBank = accounts.length + 1;
+    const accs = [...accounts, { ...accounts.find(a => a.code === '1000')!, id: usdBank, code: '1001', name: 'USD bank', currency: 'USD', opening_balance: 0 }] as Account[];
+    const inv = doc({ id: 31, doc_type: 'invoice', number: 'K01', status: 'paid', issue_date: '2025-08-19', currency: 'USD', fx_rate: 7.8,
+      lines: [line('Royalty', 1, 50000, 0)], total: 50000, amount_paid: 50000 });
+    const rate = 7.85, got = 49949.67, gap = 50.33;
+    const es = buildLedger({ accounts: accs, docs: [inv], payroll: [], journals: [],
+      payments: [{ id: 1, direction: 'in', number: 'R', contact_id: 1, payment_date: '2025-08-22', amount: Math.round(got * rate * 100) / 100, account_id: usdBank,
+        currency: 'USD', foreign_amount: got, charges: Math.round(gap * rate * 100) / 100, charges_account_id: id('6900') }],
+      allocations: [{ payment_id: 1, document_id: 31, amount: 50000 }] } as any);
+    const bal = (code: string) => balances(accs, es).find(b => b.account.code === code)!.balance;
+    expect(es.every(e => Math.round(e.lines.reduce((t, l) => t + l.debit - l.credit, 0) * 100) === 0)).toBe(true);
+    expect(bal('1100')).toBe(0);                                  // invoice fully cleared
+    expect(bal('1001')).toBe(Math.round(got * rate * 100) / 100); // what arrived
+    expect(bal('6900')).toBe(Math.round(gap * rate * 100) / 100); // bank charges
+    expect(bal('4900')).toBe(Math.round(50000 * (rate - 7.8) * 100) / 100); // exchange gain on the whole invoice
+  });
+});
