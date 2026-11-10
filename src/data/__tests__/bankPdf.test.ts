@@ -98,3 +98,24 @@ describe('closing balance line', () => {
     expect(r.lines.map(l => l.amount)).toEqual([-55000]);
   });
 });
+
+describe('descriptions stop at the bank notices', () => {
+  it('the notice after the last line is not part of it', () => {
+    const r = parseStatementText([
+      ['31', 'Dec', '2025', 'Opening', 'balance', '1,000.00'],
+      ['02', 'Jan', '2026', 'SERVICE', 'FEE', '存入服務收費', '1.94', '998.06'],
+      ['Important', 'Notice', '重要事項'],
+      ['the', 'Bank', 'using', 'the', 'information', 'provided', 'in', 'a'],
+      ['suspicious', 'message.'],
+    ]);
+    expect(r.lines.map(l => l.description)).toEqual(['SERVICE FEE 存入服務收費']);
+  });
+  it('a real second line still carries on', () => {
+    const r = parseStatementText([
+      ['31', 'Dec', '2025', 'Opening', 'balance', '1,000.00'],
+      ['05', 'Jan', '2026', 'REF', 'NO.123', 'UDCP:', 'FT', '100.00', '900.00'],
+      ['FR-200859279', 'TO-200859521'],
+    ]);
+    expect(r.lines[0].description).toBe('REF NO.123 UDCP: FT FR-200859279 TO-200859521');
+  });
+});

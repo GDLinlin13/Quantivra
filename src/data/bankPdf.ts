@@ -34,6 +34,16 @@ function leadingDate(words: string[], year: string | null): { date: string; used
  * Turn the text lines of a statement into transactions.
  * `lines` = each line's words in reading order.
  */
+/**
+ * Whether a line without a date carries on the description above it. Not the bank's notices, footers and page
+ * marks (e.g. "Important Notice 重要事項…" at the end of a statement), and no more than a couple of short lines.
+ */
+const FOOTER = /important notice|重要事項|notice|statement date|結單日期|page\s*\d|p\.\s*\d+\s*of|bank limited|www\.|https?:|\.com\b|\.group\b|\btel\b|^t\s*:|\+\d{3}\s?\d{4}|please|reminder|unauthori[sz]ed|查詢|請|本行/i;
+function carriesOn(last: { description: string }, text: string): boolean {
+  if (FOOTER.test(text)) return false;
+  return last.description.length + text.length <= 140;
+}
+
 export function parseStatementText(lines: string[][]): { lines: PdfBankLine[]; unsure: number } {
   const all = lines.map(w => w.join(' ')).join('\n');
   const year = (all.match(/\b(20\d{2})\b/) || [])[1] || null;
@@ -52,7 +62,9 @@ export function parseStatementText(lines: string[][]): { lines: PdfBankLine[]; u
     const d = leadingDate(words, year);
     if (!d) {
       // a description carried over to the next line
-      if (last && !amounts.length && text.length < 80 && !/total|page \d|balance/i.test(text)) last.description = `${last.description} ${text}`.trim().slice(0, 300);
+      // the bank's notices / footer: nothing after them belongs to the line above
+      if (FOOTER.test(text)) { last = null; continue; }
+      if (last && !amounts.length && text.length < 80 && !/total|page \d|balance/i.test(text) && carriesOn(last, text)) last.description = `${last.description} ${text}`.trim().slice(0, 300);
       continue;
     }
     if (!amounts.length) { last = null; continue; }
@@ -165,7 +177,8 @@ export function parseWithLayout(rows: PdfRow[], layout: PdfLayout): { lines: Pdf
     }
     if (!d) {
       const extra = (parts.description || []).join(' ').trim();
-      if (last && extra && outAmt == null && inAmt == null && amt == null && !/total|page \d/i.test(text)) last.description = `${last.description} ${extra}`.trim().slice(0, 300);
+      if (FOOTER.test(text)) { last = null; continue; }
+      if (last && extra && outAmt == null && inAmt == null && amt == null && !/total|page \d/i.test(text) && carriesOn(last, text)) last.description = `${last.description} ${extra}`.trim().slice(0, 300);
       continue;
     }
     let amount = 0, sure = true;
