@@ -97,8 +97,8 @@ function ItemsTab({ companyId, items, stock, accounts, settings, currency, reloa
           { title: 'Type', key: 'k', width: 100, render: (_, i) => <Tag color={i.kind === 'product' ? 'blue' : 'purple'}>{i.kind === 'product' ? 'Product' : 'Service'}</Tag> },
           { title: 'Used for', key: 'u', width: 110, render: (_, i) => ({ sales: 'Sales', purchases: 'Purchases', both: 'Both' } as Record<string, string>)[i.used_for || 'both'] },
           { title: 'Category', dataIndex: 'category', render: (v: string | null) => v || '—' },
-          { title: 'Selling price', key: 's', align: 'right' as const, render: (_, i) => i.used_for === 'purchases' ? '—' : `${M(i.sale_price)}${i.unit ? ` / ${i.unit}` : ''}` },
-          { title: 'Cost', key: 'c', align: 'right' as const, render: (_, i) => (Number(i.purchase_price) ? M(i.purchase_price) : '—') },
+          { title: 'Selling price', key: 's', align: 'right' as const, render: (_, i) => i.used_for === 'purchases' ? '—' : `${money(i.sale_price, i.currency || currency)}${i.unit ? ` / ${i.unit}` : ''}` },
+          { title: 'Cost', key: 'c', align: 'right' as const, render: (_, i) => (Number(i.purchase_price) ? money(i.purchase_price, i.currency || currency) : '—') },
           {
             title: 'In stock', key: 'st', align: 'right' as const, render: (_, i) => {
               if (!i.track_stock) return <Text type="secondary">—</Text>;
@@ -138,6 +138,9 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
   // sold, bought, or both: only the matching prices and accounts are asked for
   const usedFor = Form.useWatch('used_for', form) ?? item.used_for ?? 'both';
   const sells = usedFor !== 'purchases', buys = usedFor !== 'sales';
+  // prices in the company's currency or one it has a bank account in
+  const currencies = [...new Set([currency, ...accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash') && a.currency).map(a => a.currency!), ...(item.currency ? [item.currency] : [])])];
+  const priceCur = Form.useWatch('currency', form) || item.currency || currency;
   // special prices for particular customers
   const [customers, setCustomers] = useState<Contact[]>([]);
   const [custPrices, setCustPrices] = useState<{ contact_id: number | null; price: number | null }[]>([]);
@@ -151,7 +154,8 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
     const v = await form.validateFields();
     setSaving(true);
     try {
-      const id = await catalogService.save(companyId, { ...item, ...v, tax_rate: v.tax_rate === 'default' ? null : v.tax_rate });
+      const id = await catalogService.save(companyId, { ...item, ...v, tax_rate: v.tax_rate === 'default' ? null : v.tax_rate,
+        ...(currencies.length > 1 ? { currency: v.currency && v.currency !== currency ? v.currency : null } : {}) });
       await catalogService.setPrices(companyId, id, custPrices.filter(p => p.contact_id).map(p => ({ contact_id: p.contact_id!, price: Number(p.price) || 0 })));
       message.success('Saved'); onSaved();
     } catch (e: any) { message.error(e.message); }
@@ -173,10 +177,11 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
         </div>
         {/* the name is what goes on invoices; an older extra description can still be edited or cleared */}
         {item.description && <Form.Item name="description" label="Extra text after the name on invoices"><Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} /></Form.Item>}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: currencies.length > 1 ? '1fr 0.6fr 1fr 1fr' : '1fr 1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="unit" label="Unit"><Input placeholder={kind === 'service' ? 'e.g. hour, project' : 'e.g. pc, box, kg'} /></Form.Item>
-          {sells && <Form.Item name="sale_price" label="Selling price"><AmountInput min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>}
-          {buys && <Form.Item name="purchase_price" label="Cost / buying price"><AmountInput min={0} precision={2} prefix={currency} style={{ width: '100%' }} /></Form.Item>}
+          {currencies.length > 1 && <Form.Item name="currency" label="Currency" initialValue={item.currency || currency}><Select options={currencies.map(c => ({ value: c, label: c }))} /></Form.Item>}
+          {sells && <Form.Item name="sale_price" label="Selling price"><AmountInput min={0} precision={2} prefix={priceCur} style={{ width: '100%' }} /></Form.Item>}
+          {buys && <Form.Item name="purchase_price" label="Cost / buying price"><AmountInput min={0} precision={2} prefix={priceCur} style={{ width: '100%' }} /></Form.Item>}
         </div>
         {sells && <Card size="small" style={{ background: 'transparent', marginBottom: 16 }} title="Customer prices"
           extra={<Button size="small" icon={<PlusOutlined />} onClick={() => setCustPrices(ps => [...ps, { contact_id: null, price: Number(form.getFieldValue('sale_price')) || 0 }])}>Customer</Button>}>
@@ -185,7 +190,7 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
               <Select showSearch optionFilterProp="label" placeholder="Customer" value={p.contact_id ?? undefined}
                 onChange={v => setCustPrices(ps => ps.map((x, j) => (j === i ? { ...x, contact_id: v } : x)))}
                 options={customers.filter(c => c.id === p.contact_id || !custPrices.some(x => x.contact_id === c.id)).map(c => ({ value: c.id, label: c.name }))} />
-              <AmountInput min={0} precision={2} prefix={currency} style={{ width: '100%' }} value={p.price}
+              <AmountInput min={0} precision={2} prefix={priceCur} style={{ width: '100%' }} value={p.price}
                 onChange={v => setCustPrices(ps => ps.map((x, j) => (j === i ? { ...x, price: v } : x)))} />
               <Button icon={<DeleteOutlined />} onClick={() => setCustPrices(ps => ps.filter((_, j) => j !== i))} />
             </div>

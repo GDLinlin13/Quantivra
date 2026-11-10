@@ -9,7 +9,7 @@ import { bankService, paymentService, loadLedgerInput, accountService, pdfLayout
 import { statementPeriod } from '../../../../data/documents';
 import { planImport, nothingNew } from '../../../../data/bankImport';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
-import { balanceDue, schemeLabel, type Account, type FinDocument } from '../../../../data/finance';
+import { balanceDue, inBase, docRate, isForeignDoc, schemeLabel, type Account, type FinDocument } from '../../../../data/finance';
 import { parseBankCsv, type BankLine } from '../../../../data/bankCsv';
 import { parseStatementText, pdfToRows, rowsToLines, parseWithLayout, type PdfRow, type PdfLayout } from '../../../../data/bankPdf';
 import { TeachPdf } from './TeachPdf';
@@ -495,9 +495,12 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
     && Math.abs(Number(p.amount) - amt) < 0.005 && near(p.payment_date) && (!p.account_id || p.account_id === txn.account_id));
   const journalHits = !ready ? [] : recorded.filter(r => r.journal_id && Math.sign(r.amount) === Math.sign(Number(txn.amount))
     && Math.abs(Math.abs(r.amount) - amt) < 0.005 && near(r.txn_date));
+  // a document in the bank's own currency is compared in that currency; anything else in the company's currency
+  const inBankCur = (d: FinDocument) => isForeignDoc(d, data.currency) && d.currency === accCur;
+  const sameAmount = (d: FinDocument) => inBankCur(d) ? Math.abs(balanceDue(d) - lineAmt) < 0.005 : Math.abs(inBase(d, balanceDue(d)) - amt) < 0.005;
   const openDocs: FinDocument[] = data.docs.filter(d => (inbound ? d.doc_type === 'invoice' : ['bill', 'expense'].includes(d.doc_type))
     && !['draft', 'void', 'paid'].includes(d.status) && balanceDue(d) > 0)
-    .sort((a, b) => Number(Math.abs(balanceDue(a) - amt) > 0.005) - Number(Math.abs(balanceDue(b) - amt) > 0.005));
+    .sort((a, b) => Number(!sameAmount(a)) - Number(!sameAmount(b)));
   const contact = (id: number | null) => data.contacts.find(c => c.id === id)?.name || '';
   const bookable = data.accounts.filter((a: Account) => !a.archived && a.id !== txn.account_id);
   // money in: income first, never expenses; money out: expenses first, never income — then banks, loans, capital…
@@ -518,7 +521,12 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   const run = async (f: () => Promise<void>) => { setBusy(true); try { await f(); message.success('Matched'); onDone(); } catch (e: any) { message.error(e.message); } setBusy(false); };
   const payDoc = () => run(async () => {
     const d = data.docs.find(x => x.id === docId)!;
-    const portion = Math.min(amt, balanceDue(d));
+    const due = balanceDue(d);
+    // how much of the document this pays off, in the document's currency: in the bank's currency, what came in;
+    // in another currency, at the document's rate (close to the whole balance counts as all of it — the rest is
+    // an exchange difference)
+    const worth = inBankCur(d) ? lineAmt : isForeignDoc(d, data.currency) ? amt / docRate(d) : amt;
+    const portion = isForeignDoc(d, data.currency) && !inBankCur(d) && worth >= due * 0.95 ? due : Math.min(Math.round(worth * 100) / 100, due);
     const pid = await paymentService.record(data.companyId, {
       direction: inbound ? 'in' : 'out', amount: amt, contact_id: d.contact_id, payment_date: txn.txn_date,
       method: 'Bank transfer', reference: txn.description || undefined, account_id: txn.account_id,
@@ -560,7 +568,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                   columns={[
                     { title: 'Number', dataIndex: 'number' }, { title: 'Date', dataIndex: 'issue_date' },
                     { title: inbound ? 'Customer' : 'Supplier', key: 'c', render: (_, d) => contact(d.contact_id) },
-                    { title: 'Still owed', key: 'b', align: 'right' as const, render: (_, d) => <span style={{ fontWeight: Math.abs(balanceDue(d) - amt) < 0.005 ? 700 : 400 }}>{money(balanceDue(d), data.currency)}</span> },
+                    { title: 'Still owed', key: 'b', align: 'right' as const, render: (_, d) => <span style={{ fontWeight: sameAmount(d) ? 700 : 400 }}>{money(balanceDue(d), d.currency || data.currency)}{isForeignDoc(d, data.currency) && !inBankCur(d) && <Text type="secondary"> ≈ {money(inBase(d, balanceDue(d)), data.currency)}</Text>}</span> },
                   ]} />
               )}
               <Button type="primary" disabled={!docId || !ready} loading={busy} onClick={payDoc} style={{ marginTop: 8 }}>Record payment and match</Button>

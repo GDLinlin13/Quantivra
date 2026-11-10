@@ -5,7 +5,7 @@ import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useCompanyAccess } from '../../../contexts/CompanyAccess';
 import { hrService } from '../../../services/hr';
-import { balanceDue } from '../../../data/finance';
+import { balanceDue, inBase } from '../../../data/finance';
 import { money } from '../../../data/documentLayouts';
 
 const { Title, Text } = Typography;
@@ -40,12 +40,12 @@ export function CompanyDashboard() {
   // what customers still owe (invoices) and what we still owe (bills, expenses)
   useEffect(() => {
     if (!companyId || !canFinance) return;
-    supabase.from('fin_documents').select('doc_type, status, total, amount_paid').eq('company_id', companyId)
+    supabase.from('fin_documents').select('*').eq('company_id', companyId)
       .in('doc_type', ['invoice', 'bill', 'expense']).not('status', 'in', '(draft,void,paid)')
       .then(({ data }) => {
         const sum = (types: string[]): Outstanding => {
           const open = (data || []).filter((d: any) => types.includes(d.doc_type) && balanceDue(d) > 0);
-          return { count: open.length, total: open.reduce((s: number, d: any) => s + balanceDue(d), 0) };
+          return { count: open.length, total: open.reduce((s: number, d: any) => s + inBase(d, balanceDue(d)), 0) };
         };
         setReceivable(sum(['invoice'])); setPayable(sum(['bill', 'expense']));
       });

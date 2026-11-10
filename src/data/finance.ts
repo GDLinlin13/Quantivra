@@ -37,8 +37,18 @@ export interface FinDocument {
   notes: string | null; terms: string | null; source_id: number | null;
   paid_from_account_id?: number | null; employee_id?: number | null;
   payment_account_index?: number | null;
+  /** company currency per 1 unit of the document's currency; empty when the document is in the company's currency (migration 036) */
+  fx_rate?: number | null;
   created_at?: string;
 }
+
+/** The rate a document is booked at: its own exchange rate when it is in another currency, otherwise 1. */
+export const docRate = (d: { fx_rate?: number | null }) => Number(d.fx_rate) > 0 ? Number(d.fx_rate) : 1;
+/** True for a document in another currency (with a rate: older documents never are). */
+export const isForeignDoc = (d: { currency?: string | null; fx_rate?: number | null }, base: string) =>
+  !!d.currency && d.currency !== base && Number(d.fx_rate) > 0;
+/** An amount of the document in the company's currency. */
+export const inBase = (d: { fx_rate?: number | null }, amount: number) => Math.round((Number(amount) || 0) * docRate(d) * 100) / 100;
 
 export interface FinanceSettings {
   gstRegistered: boolean;
@@ -156,6 +166,7 @@ export const DEFAULT_ACCOUNTS: Omit<Account, 'id' | 'company_id' | 'archived'>[]
   { code: '3200', name: 'Dividends', type: 'equity', subtype: 'dividends', is_system: false },
   { code: '4000', name: 'Sales', type: 'income', subtype: 'sales', is_system: true },
   { code: '4100', name: 'Other income', type: 'income', subtype: null, is_system: false },
+  { code: '4900', name: 'Foreign exchange gain / (loss)', type: 'income', subtype: 'fx_gain_loss', is_system: true },
   { code: '5000', name: 'Cost of sales', type: 'expense', subtype: null, is_system: false },
   { code: '6000', name: 'Employee salaries / wages', type: 'expense', subtype: 'payroll', is_system: true },
   { code: '6005', name: "Director's salary", type: 'expense', subtype: 'payroll_director', is_system: true },
@@ -240,6 +251,7 @@ const CHART_UPGRADES: { marker: string; subtypes: string[]; renames?: Record<str
   { marker: 'fees_tax_agent', subtypes: ['fees_secretarial', 'fees_tax_agent', 'fees_accounting'] },
   { marker: 'gratuity_provision', subtypes: ['gratuity_provision', 'gratuity_expense'], countries: ['AE', 'SA', 'QA', 'KW', 'BH', 'OM'] },
   // a company that already made its own dividend account keeps it (no second one)
+  { marker: 'fx_gain_loss', subtypes: ['fx_gain_loss'] },
   { marker: 'dividends', subtypes: ['dividends', 'dividends_payable'], sameAs: { dividends: /dividend(?!s?\s+payable)/i, dividends_payable: /dividends?\s+payable/i } },
 ];
 

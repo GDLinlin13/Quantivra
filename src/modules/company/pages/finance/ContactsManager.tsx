@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Drawer, Form, Input, InputNumber, Checkbox, Space, Tag, message, Popconfirm, Switch, Typography, Divider, Empty } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { contactService, docService } from '../../../../services/finance';
-import { balanceDue, isSalesDoc, type Contact, type ContactPerson, type FinDocument } from '../../../../data/finance';
+import { balanceDue, inBase, isSalesDoc, type Contact, type ContactPerson, type FinDocument } from '../../../../data/finance';
 import { money } from '../../../../data/documentLayouts';
 
 const { Text } = Typography;
@@ -36,7 +36,7 @@ export function ContactsManager({ companyId, kind, currency, onChanged }: { comp
   }, [companyId, kind]);
   useEffect(() => { load(); }, [load]);
 
-  const owedBy = (id: number, types: string[]) => docs.filter(d => d.contact_id === id && types.includes(d.doc_type) && !['void', 'draft'].includes(d.status)).reduce((s, d) => s + balanceDue(d), 0);
+  const owedBy = (id: number, types: string[]) => docs.filter(d => d.contact_id === id && types.includes(d.doc_type) && !['void', 'draft'].includes(d.status)).reduce((s, d) => s + inBase(d, balanceDue(d)), 0);
   const owesUs = (id: number) => owedBy(id, ['invoice']);
   const weOwe = (id: number) => owedBy(id, ['bill', 'expense']);
   const q = search.trim().toLowerCase();
@@ -128,7 +128,7 @@ function ContactDrawer({ companyId, contact, word, currency, docs, onClose, onSa
     setSaving(false);
   };
 
-  const outstanding = docs.filter(d => !['void', 'draft'].includes(d.status)).reduce((s, d) => s + balanceDue(d), 0);
+  const outstanding = docs.filter(d => !['void', 'draft'].includes(d.status)).reduce((s, d) => s + inBase(d, balanceDue(d)), 0);
   return (
     <Drawer open onClose={onClose} size={720} title={contact.id ? contact.name : `New ${word}`}
       extra={<Button type="primary" loading={saving} onClick={save}>Save</Button>}>

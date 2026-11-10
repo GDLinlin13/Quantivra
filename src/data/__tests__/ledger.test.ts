@@ -150,3 +150,47 @@ describe('ledger', () => {
     expect(defaultAccountsFor('SG').some(a => a.subtype === 'gratuity_provision')).toBe(false);
   });
 });
+
+describe('documents in another currency', () => {
+  const usdBank = accounts.length + 1;
+  const accs = [...accounts, { ...accounts.find(a => a.code === '1000')!, id: usdBank, code: '1001', name: 'USD bank', currency: 'USD' }] as Account[];
+  const bal = (es: any[], code: string) => balances(accs, es).find(b => b.account.code === code)!.balance;
+  const usdInvoice = doc({ id: 11, doc_type: 'invoice', number: 'INV-USD', status: 'paid', issue_date: '2026-06-01', currency: 'USD', fx_rate: 7.8,
+    lines: [line('Licence', 1, 1000, 0)], total: 1000, amount_paid: 1000 });
+  const base = { accounts: accs, docs: [usdInvoice], allocations: [{ payment_id: 1, document_id: 11, amount: 1000 }], payroll: [], journals: [], currency: 'HKD' };
+  const balanced = (es: any[]) => es.every(e => Math.round(e.lines.reduce((t: number, l: any) => t + l.debit - l.credit, 0) * 100) === 0);
+
+  it('is booked at its rate', () => {
+    const es = buildLedger({ ...base, payments: [], allocations: [] } as any);
+    expect(bal(es, '1100')).toBe(7800);
+    expect(bal(es, '4000')).toBe(7800);
+  });
+
+  it('paid into the bank in that currency at a better rate: an exchange gain', () => {
+    const es = buildLedger({ ...base, payments: [{ id: 1, direction: 'in', number: 'R1', contact_id: 1, payment_date: '2026-06-20', amount: 7900, account_id: usdBank, currency: 'USD', foreign_amount: 1000 }] } as any);
+    expect(balanced(es)).toBe(true);
+    expect(bal(es, '1100')).toBe(0);
+    expect(bal(es, '4900')).toBe(100);
+    expect(bal(es, '1001')).toBe(7900);
+  });
+
+  it('paid into the company-currency bank for less: an exchange loss', () => {
+    const es = buildLedger({ ...base, payments: [{ id: 1, direction: 'in', number: 'R1', contact_id: 1, payment_date: '2026-06-20', amount: 7750, account_id: id('1000') }] } as any);
+    expect(balanced(es)).toBe(true);
+    expect(bal(es, '1100')).toBe(0);
+    expect(bal(es, '4900')).toBe(-50);
+  });
+
+  it('a bill in another currency paid at a better rate is a gain; tax return in the company currency', () => {
+    const bill = doc({ id: 12, doc_type: 'bill', number: 'B-USD', status: 'paid', issue_date: '2026-06-02', currency: 'USD', fx_rate: 7.8,
+      lines: [line('Hosting', 1, 500, 0, id('6700'))], total: 500, amount_paid: 500 });
+    const es = buildLedger({ ...base, docs: [bill], allocations: [{ payment_id: 2, document_id: 12, amount: 500 }],
+      payments: [{ id: 2, direction: 'out', number: 'P1', contact_id: 2, payment_date: '2026-06-21', amount: 3850, account_id: usdBank, currency: 'USD', foreign_amount: 500 }] } as any);
+    expect(balanced(es)).toBe(true);
+    expect(bal(es, '2000')).toBe(0);
+    expect(bal(es, '6700')).toBe(3900);
+    expect(bal(es, '4900')).toBe(50);
+    const taxed = doc({ ...usdInvoice, lines: [line('Licence', 1, 1000, 5)] });
+    expect(gstReturn([taxed] as any, '2026-06-01', '2026-06-30').box6_output_tax).toBe(390);
+  });
+});

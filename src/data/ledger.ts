@@ -1,7 +1,7 @@
 // The general ledger, worked out from what's already in the system (invoices, bills, expenses,
 // payments, finalised payroll, opening balances) plus manual journals. Nothing is posted twice:
 // change or void a document and the books follow.
-import { docTotals, type Account, type FinDocument, type DocLine } from './finance';
+import { docTotals, docRate, type Account, type FinDocument, type DocLine } from './finance';
 
 export interface LedgerLine { account_id: number; debit: number; credit: number; description?: string; contact_id?: number | null }
 export interface LedgerEntry {
@@ -98,7 +98,10 @@ export function cpfPayableIds(accounts: Account[]): number[] {
 export interface LedgerInput {
   accounts: Account[];
   docs: (FinDocument & { lines: DocLine[] })[];
-  payments: { id: number; direction: 'in' | 'out'; number: string | null; contact_id: number | null; payment_date: string; amount: number; account_id: number | null }[];
+  /** amount: in the company's currency; currency / foreign_amount: when it went through a bank in another currency */
+  payments: { id: number; direction: 'in' | 'out'; number: string | null; contact_id: number | null; payment_date: string; amount: number; account_id: number | null; currency?: string | null; foreign_amount?: number | null }[];
+  /** the company's own currency (documents in other currencies are booked at their rate) */
+  currency?: string;
   allocations: { payment_id: number; document_id: number; amount: number }[];
   payroll: { id: number; period_year: number; period_month: number; pay_date: string; status: string; total_gross: number; total_deductions: number; total_employer: number; total_net: number; split?: PayrollSplit }[];
   journals: { id: number; number: string | null; journal_date: string; memo: string | null; lines: { account_id: number; debit: number; credit: number; description?: string | null }[] }[];
@@ -129,6 +132,7 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
   const SALES = acc('sales', 'income'), GENERAL = acc('general', 'expense'), BANK = acc('bank', 'asset');
   const CLAIMS = acc('claims_payable', 'liability') || AP;
   const RETAINED = acc('retained', 'equity');
+  const FX = acc('fx_gain_loss') || acc('general', 'expense');
   const entries: LedgerEntry[] = [];
   const docById = new Map(input.docs.map(d => [d.id, d]));
 
@@ -148,10 +152,13 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
 
   for (const d of input.docs) {
     if (d.status === 'draft' || d.status === 'void' || d.doc_type === 'quote') continue;
-    const t = docTotals(d.lines, d.discounts || [], d.tax_inclusive);
-    if (!t.total && !t.subtotal) continue;
+    const t0 = docTotals(d.lines, d.discounts || [], d.tax_inclusive);
+    if (!t0.total && !t0.subtotal) continue;
+    // a document in another currency goes into the books at its exchange rate
+    const rate = docRate(d);
+    const t = rate === 1 ? t0 : { ...t0, total: r2(t0.total * rate), tax_total: r2(t0.tax_total * rate) };
     const netTotal = r2(t.total - t.tax_total);                        // income / cost without GST
-    const weights = d.lines.map((_, i) => t.lines[i]);
+    const weights = d.lines.map((_, i) => t0.lines[i]);
     const nets = spread(netTotal, weights);
     const sales = d.doc_type === 'invoice' || d.doc_type === 'credit_note';
     const sign = d.doc_type === 'credit_note' ? -1 : 1;
@@ -178,26 +185,50 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
   for (const p of input.payments) {
     const amt = r2(p.amount);
     const cash = p.account_id || BANK;
+    const inbound = p.direction === 'in';
     const allocs = input.allocations.filter(a => a.payment_id === p.id);
     // Which control account the payment settles: claims payable for staff expenses, otherwise AR / AP.
-    const settle = (docId?: number) => {
-      const doc = docId ? docById.get(docId) : undefined;
-      if (p.direction === 'in') return AR;
+    const settle = (doc?: FinDocument) => {
+      if (inbound) return AR;
       return doc && doc.doc_type === 'expense' && doc.employee_id ? CLAIMS : AP;
     };
+    // What the payment was in: a foreign bank's currency (rate = company currency per unit), else the company's own.
+    const payCur = p.currency && Number(p.foreign_amount) ? p.currency : null;
+    const payRate = payCur ? amt / Number(p.foreign_amount) : 1;
+    // Each document is paid off in its own currency (allocation amounts are in the document's currency). It is
+    // cleared at the document's rate; the money is worth the payment's rate; the difference is an exchange gain / loss.
+    type Part = { doc?: FinDocument; cleared: number; worth: number | null };
+    const parts: Part[] = allocs.map(a => {
+      const doc = docById.get(a.document_id);
+      const foreignDoc = !!doc && docRate(doc) !== 1;
+      const sameCur = !foreignDoc || (payCur ? doc!.currency === payCur : false);
+      const cleared = r2(Number(a.amount) * (doc ? docRate(doc) : 1));
+      // same currency as the money: worth the amount at the payment's rate (the company's own: 1 for 1)
+      const worth = !foreignDoc ? (payCur ? r2(Number(a.amount)) : cleared) : sameCur ? r2(Number(a.amount) * payRate) : null;
+      return { doc, cleared, worth };
+    }).filter(x => x.cleared > 0);
+    // documents in another currency than the money (e.g. a USD invoice paid into the HKD bank) share what is left
+    const known = r2(parts.reduce((t, x) => t + (x.worth ?? 0), 0));
+    const open = parts.filter(x => x.worth == null);
+    if (open.length) {
+      const shares = spread(Math.max(0, r2(amt - known)), open.map(x => x.cleared));
+      open.forEach((x, i) => { x.worth = shares[i]; });
+    }
     const lines: LedgerLine[] = [];
     let left = amt;
-    for (const a of allocs) {
-      const v = Math.min(left, r2(a.amount));
-      if (v <= 0) continue;
-      left = r2(left - v);
-      lines.push(p.direction === 'in'
-        ? { account_id: settle(a.document_id), debit: 0, credit: v, contact_id: p.contact_id }
-        : { account_id: settle(a.document_id), debit: v, credit: 0, contact_id: p.contact_id });
+    for (const x of parts) {
+      const worth = Math.min(left, x.worth!);
+      if (worth <= 0 && x.cleared <= 0) continue;
+      left = r2(left - worth);
+      const ctl = settle(x.doc);
+      lines.push(inbound ? { account_id: ctl, debit: 0, credit: x.cleared, contact_id: p.contact_id } : { account_id: ctl, debit: x.cleared, credit: 0, contact_id: p.contact_id });
+      // more received than the invoice was booked at (or less paid than the bill): a gain; otherwise a loss
+      const diff = r2(inbound ? worth - x.cleared : x.cleared - worth);
+      if (diff) lines.push(diff > 0 ? { account_id: FX, debit: 0, credit: diff, description: 'Exchange gain' } : { account_id: FX, debit: -diff, credit: 0, description: 'Exchange loss' });
     }
-    if (left > 0) lines.push(p.direction === 'in' ? { account_id: AR, debit: 0, credit: left, contact_id: p.contact_id } : { account_id: AP, debit: left, credit: 0, contact_id: p.contact_id });
-    lines.push(p.direction === 'in' ? { account_id: cash, debit: amt, credit: 0 } : { account_id: cash, debit: 0, credit: amt });
-    entries.push({ date: p.payment_date, source: p.direction === 'in' ? 'payment_in' : 'payment_out', source_id: p.id, ref: p.number || '', memo: '', lines });
+    if (left > 0) lines.push(inbound ? { account_id: AR, debit: 0, credit: left, contact_id: p.contact_id } : { account_id: AP, debit: left, credit: 0, contact_id: p.contact_id });
+    lines.push(inbound ? { account_id: cash, debit: amt, credit: 0 } : { account_id: cash, debit: 0, credit: amt });
+    entries.push({ date: p.payment_date, source: inbound ? 'payment_in' : 'payment_out', source_id: p.id, ref: p.number || '', memo: '', lines });
   }
 
   // Finalised payroll: salaries and employer contributions are costs; net pay and CPF are owed
@@ -271,17 +302,17 @@ export function gstReturn(docs: (FinDocument & { lines: DocLine[] })[], from: st
     if (d.status === 'draft' || d.status === 'void' || d.doc_type === 'quote' || !inRange(d.issue_date, from, to)) continue;
     const t = docTotals(d.lines, d.discounts || [], d.tax_inclusive);
     const factor = t.subtotal ? (t.subtotal - t.discount_total) / t.subtotal : 0;
-    const sign = d.doc_type === 'credit_note' ? -1 : 1;
+    const sign = (d.doc_type === 'credit_note' ? -1 : 1) * docRate(d);   // in the company's currency
     d.lines.forEach((l, i) => {
       let net = t.lines[i] * factor;
       const rate = Number(l.tax_rate) || 0;
       if (d.tax_inclusive && rate) net = net / (1 + rate / 100);
       if (d.doc_type === 'invoice' || d.doc_type === 'credit_note') {
         if (rate > 0) standard += sign * net; else zero += sign * net;
-      } else if (rate > 0) purchases += net;
+      } else if (rate > 0) purchases += net * docRate(d);
     });
     if (d.doc_type === 'invoice' || d.doc_type === 'credit_note') outputTax += sign * t.tax_total;
-    else inputTax += t.tax_total;
+    else inputTax += t.tax_total * docRate(d);
   }
   return {
     box1_standard: r2(standard), box2_zero: r2(zero), box4_total: r2(standard + zero),
@@ -318,7 +349,8 @@ export function aged(docs: FinDocument[], kind: 'receivable' | 'payable', asAt: 
   const byContact = new Map<number | null, typeof buckets & { total: number }>();
   for (const d of docs) {
     if (!types.includes(d.doc_type) || ['draft', 'void', 'paid'].includes(d.status) || d.issue_date > asAt) continue;
-    const owed = r2(Number(d.total) - (Number(d.amount_paid) || 0));
+    // in the company's currency (documents in another currency at their rate)
+    const owed = r2((Number(d.total) - (Number(d.amount_paid) || 0)) * docRate(d));
     if (owed <= 0) continue;
     const late = d.due_date ? Math.floor((Date.parse(asAt) - Date.parse(d.due_date)) / 86400000) : 0;
     const k = late <= 0 ? 'current' : late <= 30 ? 'd1_30' : late <= 60 ? 'd31_60' : late <= 90 ? 'd61_90' : 'd90';
