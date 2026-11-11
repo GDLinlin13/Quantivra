@@ -5,13 +5,13 @@ import { Layout, Menu, Button, Avatar, Dropdown, Typography, Modal } from 'antd'
 import { ChangePasswordCard } from '../components/ChangePasswordCard';
 import {
   DashboardOutlined, TeamOutlined, UserOutlined, SafetyOutlined,
-  SettingOutlined, LogoutOutlined, BankOutlined, AuditOutlined,
+  SettingOutlined, LogoutOutlined, BankOutlined,
   FileOutlined, BellOutlined, DollarOutlined, ShopOutlined,
-  ContactsOutlined, BarChartOutlined, PartitionOutlined,
+  ContactsOutlined, PartitionOutlined,
 } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { CompanyAccessProvider, useCompanyAccess, HR_MODULES } from '../contexts/CompanyAccess';
+import { CompanyAccessProvider, useCompanyAccess } from '../contexts/CompanyAccess';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -35,13 +35,17 @@ function CompanyLayoutInner() {
   const [collapsed, setCollapsed] = useState(false);
 
   // Sections follow the person's roles (Roles page); pay/admin pages need pay access.
+  // HR appears when at least one of its tabs would
+  const showHR = access.can('leave') || access.can('leave', 'approve') || access.can('leave', 'edit')
+    || ['view', 'approve', 'create', 'edit', 'delete'].some(a => access.can('claims', a))
+    || access.can('employees') || access.can('employees', 'edit')
+    || (access.canViewPay && access.isOn('payroll'));
   const mainMenu = [
     { key: '/company', icon: <DashboardOutlined />, label: 'Dashboard' },
-    access.canAny(HR_MODULES) && { key: '/company/hr', icon: <TeamOutlined />, label: 'HR' },
+    showHR && { key: '/company/hr', icon: <TeamOutlined />, label: 'HR' },
     access.can('finance') && { key: '/company/finance', icon: <DollarOutlined />, label: 'Finance' },
     access.can('inventory') && { key: '/company/catalog', icon: <ShopOutlined />, label: 'Catalog' },
     access.can('crm') && { key: '/company/crm', icon: <ContactsOutlined />, label: 'CRM' },
-    access.canAny(['finance', 'employees'], 'export') && { key: '/company/reports', icon: <BarChartOutlined />, label: 'Reports' },
   ].filter(Boolean) as { key: string; icon: React.ReactNode; label: string }[];
 
   const adminMenu = !access.canViewPay ? [] : [
@@ -49,7 +53,6 @@ function CompanyLayoutInner() {
     { key: '/company/profile', icon: <BankOutlined />, label: 'Company Profile' },
     { key: '/company/users', icon: <UserOutlined />, label: 'Users' },
     { key: '/company/roles', icon: <SafetyOutlined />, label: 'Roles' },
-    { key: '/company/audit', icon: <AuditOutlined />, label: 'Audit' },
     { key: '/company/files', icon: <FileOutlined />, label: 'Documents' },
   ];
 

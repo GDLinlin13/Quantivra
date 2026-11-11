@@ -26,3 +26,49 @@ export const ACTION_GUIDE: Record<string, { means: string; example: string; used
   print:   { means: 'Print documents', example: 'e.g. print payslips or forms', usedNow: false },
   void:    { means: 'Cancel something already issued', example: 'e.g. void an invoice', usedNow: false },
 };
+
+/**
+ * The ticks that do something, per section, and what each one opens. Sections not listed here
+ * (company profile, settings, users, payroll) follow the role's "Can see pay & manage users" switch.
+ */
+export const PERMISSION_TICKS: Record<string, Partial<Record<string, string>>> = {
+  employees: {
+    view: 'HR → Employees appears, to look only',
+    create: 'Add employees',
+    edit: 'Add and change employees; Leave Balances and Leave Types appear',
+    delete: 'Remove employees',
+  },
+  leave: {
+    view: 'HR → My Leave appears: apply for and see your own leave',
+    approve: 'HR → Approvals appears: approve or reject leave',
+    edit: 'Leave Balances and Leave Types appear',
+  },
+  claims: {
+    view: 'HR → My Claims appears: submit and see your own claims',
+    approve: 'HR → Claims appears: approve or reject everyone’s claims',
+    create: 'HR → Claims appears: add claims for anyone',
+    edit: 'HR → Claims appears: add and change claims for anyone',
+    delete: 'Remove claims',
+  },
+  finance: {
+    view: 'The Finance menu appears, to look only',
+    create: 'Add and change invoices, bills, payments, bank lines, journals and accounts',
+    edit: 'Add, change and remove everything in Finance',
+    delete: 'Remove invoices, bills, payments, bank lines, journals and accounts',
+  },
+  inventory: {
+    view: 'The Catalog menu appears, to look only',
+    create: 'Add and change items and stock adjustments',
+    edit: 'Add, change and remove items and stock adjustments',
+    delete: 'Remove items and stock adjustments',
+  },
+  crm: {
+    view: 'The CRM menu appears, to look only',
+    create: 'Add and change customers and suppliers',
+    edit: 'Add, change and remove customers and suppliers',
+    delete: 'Remove customers and suppliers',
+  },
+};
+
+/** Sections a company can switch off in Settings → Modules (hidden for everyone when off). */
+export const SWITCHABLE_MODULES = ['employees', 'leave', 'claims', 'payroll', 'finance', 'inventory', 'crm'];

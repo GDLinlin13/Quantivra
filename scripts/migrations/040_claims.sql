@@ -177,4 +177,19 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- ---- leave: applying needs a Leave tick (view, create, edit or approve), like My Claims ----------
+CREATE OR REPLACE FUNCTION public.app_guard_leave_apply() RETURNS trigger
+LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN RETURN NEW; END IF;
+  IF NOT public.app_can_any(NEW.company_id, ARRAY['leave'], ARRAY['view', 'create', 'edit', 'approve']) THEN
+    RAISE EXCEPTION 'Your role cannot apply for leave' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION public.app_guard_leave_apply() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS trg_leave_apply_permission ON leave_requests;
+CREATE TRIGGER trg_leave_apply_permission BEFORE INSERT ON leave_requests
+  FOR EACH ROW EXECUTE FUNCTION public.app_guard_leave_apply();
+
 SELECT 'migration 040 complete' AS status;

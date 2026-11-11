@@ -16,6 +16,8 @@ export function CompanyHRPage() {
   const access = useCompanyAccess();
   const canViewPay = access.canViewPay;
   const canManageStaff = access.can('employees', 'edit');
+  const canManageLeave = (canManageStaff || access.can('leave', 'edit')) && access.isOn('leave');
+  const canPayroll = canViewPay && access.isOn('payroll');
   const canApprove = access.can('leave', 'approve');
   const canSeeStaff = canManageStaff || access.can('employees');
   const canClaim = ['view', 'create', 'edit'].some(a => access.can('claims', a));
@@ -27,13 +29,13 @@ export function CompanyHRPage() {
       <Title level={4} style={{ color: '#f0ede6', marginBottom: 16 }}>HR</Title>
       <Tabs
         items={[
-          { key: 'leave', label: 'My Leave', children: <LeaveTab companyId={companyId} /> },
+          ...(access.can('leave') ? [{ key: 'leave', label: 'My Leave', children: <LeaveTab companyId={companyId} /> }] : []),
           ...(canClaim ? [{ key: 'myclaims', label: 'My Claims', children: <MyClaimsTab companyId={companyId} /> }] : []),
           ...(canSeeClaims ? [{ key: 'claims', label: 'Claims', children: <ClaimsTab companyId={companyId} /> }] : []),
           ...(canApprove ? [{ key: 'approvals', label: 'Approvals', children: <ApprovalsTab companyId={companyId} /> }] : []),
-          ...(canViewPay ? [{ key: 'payroll', label: 'Payroll', children: <PayrollTab companyId={companyId} /> }] : []),
+          ...(canPayroll ? [{ key: 'payroll', label: 'Payroll', children: <PayrollTab companyId={companyId} /> }] : []),
           ...(canSeeStaff ? [{ key: 'employees', label: 'Employees', children: <EmployeesTab companyId={companyId} /> }] : []),
-          ...(canManageStaff ? [
+          ...(canManageLeave ? [
             { key: 'balances', label: 'Leave Balances', children: <BalancesTab companyId={companyId} /> },
             { key: 'types', label: 'Leave Types', children: <LeaveTypesTab companyId={companyId} /> },
           ] : []),

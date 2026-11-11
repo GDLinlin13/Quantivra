@@ -3,7 +3,8 @@ import { Card, Form, Input, Select, Button, Typography, message, Divider, Space,
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { MODULES } from '../../../types';
-import { MODULE_GUIDE } from '../../../data/permissionGuide';
+import { MODULE_GUIDE, SWITCHABLE_MODULES } from '../../../data/permissionGuide';
+import { useCompanyAccess } from '../../../contexts/CompanyAccess';
 import { timezoneOptions } from '../../../utils/timezones';
 import { currencyOptions } from '../../../utils/currencies';
 import { DocumentNumbersCard } from './settings/DocumentNumbersCard';
@@ -16,6 +17,7 @@ export function CompanySettingsPage() {
   const { companyId } = useAuth();
   const [company, setCompany] = useState<any>(null);
   const [form] = Form.useForm();
+  const access = useCompanyAccess();
 
   useEffect(() => {
     if (!companyId) return;
@@ -37,11 +39,13 @@ export function CompanySettingsPage() {
 
   const toggleModule = async (mod: string) => {
     if (!company) return;
-    const modules = company.modules || [];
-    const updated = modules.includes(mod) ? modules.filter((m: string) => m !== mod) : [...modules, mod];
-    await supabase.from('companies').update({ modules: updated }).eq('id', companyId);
-    setCompany({ ...company, modules: updated });
-    message.success(`Module ${modules.includes(mod) ? 'disabled' : 'enabled'}`);
+    const on = access.isOn(mod);
+    const off = SWITCHABLE_MODULES.filter(m => (m === mod ? on : !access.isOn(m)));
+    const { error } = await supabase.from('company_settings').upsert(
+      { company_id: companyId, category: 'company', key: 'modules_off', value: { modules: off } }, { onConflict: 'company_id,category,key' });
+    if (error) { message.error(error.message); return; }
+    access.reload();
+    message.success(`${(MODULES as any)[mod]?.label || mod} switched ${on ? 'off — hidden for everyone' : 'on'}`);
   };
 
   if (!company) return null;
@@ -72,11 +76,11 @@ export function CompanySettingsPage() {
       <Title level={5} style={{ color: '#f0ede6', marginBottom: 16 }}>Modules</Title>
       <Card style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, maxWidth: 760, marginBottom: 24 }}>
         <Text style={{ color: 'rgba(240,237,230,0.6)', display: 'block', marginBottom: 12 }}>
-          Click a module to switch it on or off for your company. Here is what each one covers:
+          Click a module to switch it on or off for your company. A module that is off is hidden for everyone.
         </Text>
         <Space direction="vertical" size={10} style={{ width: '100%' }}>
-          {Object.entries(MODULES).filter(([key]) => key !== 'platform').map(([key, mod]) => {
-            const enabled = (company.modules || []).includes(key);
+          {Object.entries(MODULES).filter(([key]) => SWITCHABLE_MODULES.includes(key)).map(([key, mod]) => {
+            const enabled = access.isOn(key);
             const guide = MODULE_GUIDE[key];
             return (
               <div key={key} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>

@@ -564,7 +564,18 @@ BEGIN
   BEGIN UPDATE companies SET name = 'Sneaky' WHERE id = 1;
     IF FOUND THEN RAISE EXCEPTION 'FAIL: staff changed company details'; END IF;
   END;
-  -- staff still apply for leave themselves, but cannot approve it
+  -- without a Leave tick they cannot apply
+  BEGIN PERFORM leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-02-02","end_date":"2026-02-02","days":1}');
+    RAISE EXCEPTION 'FAIL: staff without a Leave tick applied for leave';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+:as_service
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'leave', '*', 'view');
+:as_staff
+DO $$
+DECLARE v bigint;
+BEGIN
+  -- with Leave view, staff apply for leave themselves, but cannot approve it
   v := leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-02-02","end_date":"2026-02-02","days":1}');
   BEGIN PERFORM leave_decide(v, 'approved', 'ok', 5);
     RAISE EXCEPTION 'FAIL: staff without Leave approve approved leave';
