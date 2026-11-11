@@ -145,6 +145,14 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     supplierBills(companyId, doc.contact_id, docId).then(setBillsOf).catch(() => setBillsOf([]));
   }, [companyId, sales, doc.contact_id, docId]);
   const supplierHist = useMemo(() => supplierPrices(billsOf, items, classes, pieces, currency).filter(h => h.currency === docCur), [billsOf, items, classes, pieces, currency, docCur]);
+  // the supplier's own tax (Contacts → supplier): charged or not, its name and rate; unset = the company's tax setting
+  const taxOf = (cid: number | null | undefined) => {
+    const c = !sales ? contacts.find(x => x.id === cid) : undefined;
+    return c && c.tax_charged != null ? { on: !!c.tax_charged, name: (c.tax_name || '').trim() || 'Tax', rate: c.tax_charged ? Number(c.tax_rate) || 0 : 0 } : null;
+  };
+  const supTax = taxOf(doc.contact_id);
+  const taxOn = settings.gstRegistered || !!supTax?.on;
+  const taxName = supTax?.on ? supTax.name : 'GST';
   const supplierPrice = (itemId: number, classId: number | null = null) => supplierHist.find(h => h.item_id === itemId && (h.class_id ?? null) === (classId ?? null));
   const foreign = docCur !== currency;
   const [rates, setRates] = useState<Record<string, number | null>>({});
@@ -192,7 +200,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       ...(it.stock_mode === 'pieces' ? { piece_id: null, weight: undefined, quantity: 0, unit_price: 0 } : {}),
       item_id: it.id, description: it.description || '', // the name prints first; Description is anything extra
       ...(it.stock_mode === 'pieces' ? {} : { unit_price: itemCur && itemCur !== docCur && !(empty && currencies.includes(itemCur)) ? inDocCurrency(price, itemCur) : price }),
-      tax_rate: settings.gstRegistered ? (it.tax_rate == null ? gstRate : Number(it.tax_rate)) : 0,
+      tax_rate: supTax ? supTax.rate : settings.gstRegistered ? (it.tax_rate == null ? gstRate : Number(it.tax_rate)) : 0,
       account_id: (sales ? it.income_account_id : it.expense_account_id) || null,
     });
   };
@@ -224,6 +232,8 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     const patch: Partial<FinDocument> = { contact_id: id, contact_person_id: main?.id ?? null };
     if (c?.payment_terms_days != null && docType !== 'quote' && doc.issue_date) patch.due_date = addDays(doc.issue_date, c.payment_terms_days);
     set(patch);
+    // a bill from a supplier with a tax setting: the lines take that tax
+    if (!sales) { const t = taxOf(id); if (t) setLines(ls => ls.map(l => ({ ...l, tax_rate: t.rate }))); }
     // a new document takes the currency this customer / supplier works in (CRM), unless something is paid already
     const first = contactCurrencies(c)[0];
     if (!docId && first && first !== docCur && !Number(doc.amount_paid)) setTimeout(() => switchCurrency(first, true));
@@ -500,9 +510,9 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
             return <AmountInput style={{ width: '100%' }} precision={2} suffix={per} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} />;
           } },
           { title: 'Disc %', width: 80, render: (_, l, i) => <InputNumber style={{ width: '100%' }} min={0} max={100} value={l.discount_pct} onChange={v => setLine(i, { discount_pct: Number(v) || 0 })} /> },
-          ...(settings.gstRegistered ? [{ title: 'GST %', width: 90, render: (_: any, l: DocLine, i: number) => (
+          ...(taxOn ? [{ title: `${taxName} %`, width: 90, render: (_: any, l: DocLine, i: number) => (
             <Select style={{ width: '100%' }} value={Number(l.tax_rate)} onChange={v => setLine(i, { tax_rate: v })}
-              options={[...new Set([0, gstRate, Number(l.tax_rate)])].map(r => ({ value: r, label: `${r}%` }))} />
+              options={[...new Set([0, gstRate, ...(supTax?.on ? [supTax.rate] : []), Number(l.tax_rate)])].sort((a, b) => a - b).map(r => ({ value: r, label: `${r}%` }))} />
           ) }] : []),
           { title: 'Amount', width: 150, align: 'right' as const, render: (_: any, l: DocLine, i: number) => (
             // typing the amount works the unit price out: amount / (qty after the line's discount)
@@ -582,15 +592,15 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
             <tbody>
               <tr><td>Subtotal</td><td style={{ textAlign: 'right' }}>{M(t.subtotal)}</td></tr>
               {discounts.map((d, i) => t.discounts[i] > 0 && <tr key={i}><td style={{ color: '#73d13d' }}>{d.name || 'Discount'}{d.kind === 'percent' ? ` (${d.value}%)` : ''}</td><td style={{ textAlign: 'right', color: '#73d13d' }}>-{M(t.discounts[i])}</td></tr>)}
-              {settings.gstRegistered && <tr><td>GST{doc.tax_inclusive ? ' (included)' : ''}</td><td style={{ textAlign: 'right' }}>{M(t.tax_total)}</td></tr>}
+              {taxOn && <tr><td>{taxName}{doc.tax_inclusive ? ' (included)' : ''}</td><td style={{ textAlign: 'right' }}>{M(t.tax_total)}</td></tr>}
               <tr><td style={{ fontWeight: 700, fontSize: 16, borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: 6 }}>Total</td>
                 <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 16, borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: 6 }}>{M(t.total)}</td></tr>
             </tbody>
           </table>
-          {settings.gstRegistered && (
+          {taxOn && (
             <Space style={{ marginTop: 10 }}>
               <Switch size="small" checked={!!doc.tax_inclusive} onChange={v => set({ tax_inclusive: v })} />
-              <Text type="secondary">Prices already include GST</Text>
+              <Text type="secondary">Prices already include {taxName}</Text>
             </Space>
           )}
         </div>

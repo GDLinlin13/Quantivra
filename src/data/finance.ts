@@ -25,6 +25,8 @@ export interface Contact {
   price_list_id?: number | null;
   /** the price list a supplier's prices come from (migration 049) */
   purchase_price_list_id?: number | null;
+  /** a supplier's tax: charged or not (empty = follow the company), its name and rate in percent (migration 051) */
+  tax_charged?: boolean | null; tax_name?: string | null; tax_rate?: number | null;
 }
 /** The currencies a customer / supplier bills or pays in (stored as "USD,EUR"); the first is the default. */
 export const contactCurrencies = (c?: { currency?: string | null } | null): string[] =>

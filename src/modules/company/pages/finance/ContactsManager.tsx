@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Drawer, Form, Input, InputNumber, Checkbox, Space, Tag, message, Popconfirm, Switch, Typography, Divider, Empty, Select, ConfigProvider } from 'antd';
+import { Table, Button, Drawer, Form, Input, InputNumber, Checkbox, Space, Tag, message, Popconfirm, Switch, Typography, Divider, Empty, Select, AutoComplete, ConfigProvider } from 'antd';
 import { currencyOptions } from '../../../../utils/currencies';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { contactService, docService, priceListService } from '../../../../services/finance';
@@ -118,9 +118,11 @@ export function ContactDrawer({ companyId, contact, word, currency, docs, onClos
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   useEffect(() => { priceListService.lists(companyId).then(l => setPriceLists(l.filter(x => !x.archived || x.id === contact.price_list_id || x.id === contact.purchase_price_list_id))).catch(() => setPriceLists([])); }, [companyId, contact.price_list_id, contact.purchase_price_list_id]);
   const isCustomer = Form.useWatch('is_customer', form);
+  const isSupplier = Form.useWatch('is_supplier', form);
+  const taxMode = Form.useWatch('tax_mode', form);
 
   useEffect(() => {
-    form.setFieldsValue({ is_customer: true, ...contact, currency: contactCurrencies(contact) });
+    form.setFieldsValue({ is_customer: true, ...contact, currency: contactCurrencies(contact), tax_mode: contact.tax_charged === true ? 'yes' : contact.tax_charged === false ? 'no' : 'default' });
     if (contact.id) contactService.people(contact.id).then(setPeople).catch(() => setPeople([]));
     else setPeople([{ name: '', is_primary: true }]);
   }, [contact, form]);
@@ -131,7 +133,10 @@ export function ContactDrawer({ companyId, contact, word, currency, docs, onClos
     if (!v.is_customer && !v.is_supplier) { message.error('Tick customer, supplier or both'); return; }
     setSaving(true);
     try {
-      const savedId = await contactService.save(companyId, { ...contact, ...v, currency: (v.currency || []).join(',') || null }, people);
+      const { tax_mode, ...rest } = v;
+      const savedId = await contactService.save(companyId, { ...contact, ...rest, currency: (v.currency || []).join(',') || null,
+        // the supplier's tax (migration 051): sent only for suppliers
+        ...(v.is_supplier ? { tax_charged: tax_mode === 'yes' ? true : tax_mode === 'no' ? false : null } : {}) }, people);
       message.success('Saved');
       onSaved(savedId);
     } catch (e: any) { message.error(e.message); }
@@ -159,6 +164,23 @@ export function ContactDrawer({ companyId, contact, word, currency, docs, onClos
             <Form.Item name="price_list_id" label="Price list (selling prices)" style={{ gridColumn: '1 / -1' }}>
               <Select allowClear placeholder="Normal selling prices" options={priceLists.filter(l => (l.kind || 'sales') === 'sales').map(l => ({ value: l.id, label: l.name }))} />
             </Form.Item>
+          )}
+          {isSupplier && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <Form.Item name="tax_mode" label="Does this supplier charge tax?" style={{ marginBottom: 8 }}>
+                <Select options={[{ value: 'default', label: 'Not set (follow the company’s tax setting)' }, { value: 'yes', label: 'Yes, they charge tax' }, { value: 'no', label: 'No, they do not charge tax' }]} />
+              </Form.Item>
+              {taxMode === 'yes' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <Form.Item name="tax_name" label="Tax name" style={{ marginBottom: 0 }}>
+                    <AutoComplete options={['GST', 'VAT', 'SST', 'Sales tax'].map(v => ({ value: v }))} placeholder="e.g. GST, VAT, SST" />
+                  </Form.Item>
+                  <Form.Item name="tax_rate" label="Tax rate (%)" style={{ marginBottom: 0 }}>
+                    <InputNumber min={0} max={100} precision={2} style={{ width: '100%' }} placeholder="e.g. 9" />
+                  </Form.Item>
+                </div>
+              )}
+            </div>
           )}
           <Form.Item name="address" label="Address" style={{ gridColumn: '1 / -1' }}><Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
           <Form.Item name="notes" label="Notes" style={{ gridColumn: '1 / -1' }}><Input.TextArea autoSize={{ minRows: 2, maxRows: 6 }} /></Form.Item>

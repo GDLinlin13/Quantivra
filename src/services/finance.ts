@@ -39,6 +39,8 @@ export const contactService = {
       // the customer's price list (migration 048); left out until the form has one
       ...(c.price_list_id !== undefined ? { price_list_id: c.price_list_id || null } : {}),
       ...(c.purchase_price_list_id !== undefined ? { purchase_price_list_id: c.purchase_price_list_id || null } : {}),
+      // a supplier's tax (migration 051); left out until the form has it
+      ...(c.tax_charged !== undefined ? { tax_charged: c.tax_charged ?? null, tax_name: c.tax_charged ? (c.tax_name || '').trim() || null : null, tax_rate: c.tax_charged ? Number(c.tax_rate) || 0 : null } : {}),
     };
     if (!row.name) throw new Error('Please enter a name');
     let id = c.id;
