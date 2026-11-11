@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Space, Popconfirm } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Table, Button, Modal, Form, Input, Select, message, Typography, Tag, Space, Popconfirm, Switch } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, KeyOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { adminUsersService, MIN_PASSWORD_LENGTH } from '../../../services/adminUsers';
@@ -9,12 +9,18 @@ import { USERNAME_PATTERN, USERNAME_RULE_TEXT } from '../../../utils/loginEmail'
 const { Title } = Typography;
 
 export function CompanyUsersPage() {
-  const { companyId } = useAuth();
+  const { companyId, user } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
+  const [roleOf, setRoleOf] = useState<Record<number, number>>({});
+  const [editing, setEditing] = useState<any>(null);
+  const [resetting, setResetting] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const [editForm] = Form.useForm();
+  const [pwForm] = Form.useForm();
 
   const load = async () => {
     if (!companyId) return;
@@ -24,6 +30,9 @@ export function CompanyUsersPage() {
       supabase.from('company_roles').select('*').eq('company_id', companyId),
     ]);
     setUsers(u.data || []);
+    const ids = (u.data || []).map((x: any) => x.id);
+    const links = ids.length ? await supabase.from('company_user_roles').select('user_id, role_id').in('user_id', ids) : { data: [] as any[] };
+    setRoleOf(Object.fromEntries((links.data || []).map((l: any) => [l.user_id, l.role_id])));
     setRoles(r.data || []);
     setLoading(false);
   };
@@ -55,15 +64,59 @@ export function CompanyUsersPage() {
     }
   };
 
+  const isMe = (r: any) => !!user && Number(user.id) === Number(r.id);
+  const openEdit = (r: any) => {
+    setEditing(r);
+    editForm.setFieldsValue({ full_name: r.full_name, email: r.email || '', job_title: r.job_title || '', role_id: roleOf[r.id], is_active: !!r.is_active });
+  };
+  const handleEdit = async (v: any) => {
+    if (!editing) return;
+    setSaving(true);
+    try {
+      const up = await supabase.from('company_users').update({
+        full_name: v.full_name.trim(), email: v.email?.trim() || null, job_title: v.job_title?.trim() || null,
+        ...(isMe(editing) ? {} : { is_active: !!v.is_active }),
+      }).eq('id', editing.id).select('id');
+      if (up.error) throw new Error(up.error.message);
+      if (!up.data?.length) throw new Error('Your role cannot change users');
+      // your own role stays as it is, so you can't lock yourself out
+      if (!isMe(editing) && v.role_id && v.role_id !== roleOf[editing.id]) {
+        const add = await supabase.from('company_user_roles').insert({ user_id: editing.id, role_id: v.role_id });
+        if (add.error && !/duplicate|unique/i.test(add.error.message)) throw new Error(add.error.message);
+        const del = await supabase.from('company_user_roles').delete().eq('user_id', editing.id).neq('role_id', v.role_id);
+        if (del.error) throw new Error(del.error.message);
+      }
+      message.success('User updated');
+      setEditing(null);
+      load();
+    } catch (e: any) { message.error(e.message); }
+    setSaving(false);
+  };
+  const handleReset = async (v: any) => {
+    if (!resetting) return;
+    setSaving(true);
+    try {
+      await adminUsersService.setPassword(resetting.id, v.password);
+      message.success(isMe(resetting) ? 'Password changed' : `Password reset — ${resetting.full_name} will be asked to choose a new one when they sign in`);
+      setResetting(null);
+      pwForm.resetFields();
+    } catch (e: any) { message.error(e.message); }
+    setSaving(false);
+  };
+
   const columns = [
     { title: 'Name', dataIndex: 'full_name', key: 'name', render: (v: string) => <span style={{ color: '#f0ede6' }}>{v}</span> },
     { title: 'Username', dataIndex: 'username', key: 'username', render: (v: string) => v || '-' },
     { title: 'Email', dataIndex: 'email', key: 'email', render: (v: string) => v || '-' },
     { title: 'Job Title', dataIndex: 'job_title', key: 'job_title' },
+    { title: 'Role', key: 'role', render: (_: any, r: any) => roles.find((x: any) => x.id === roleOf[r.id])?.name || '-' },
     { title: 'Status', dataIndex: 'is_active', key: 'status', render: (v: boolean) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Inactive'}</Tag> },
     { title: 'Created', dataIndex: 'created_at', key: 'created', render: (v: string) => new Date(v).toLocaleDateString() },
     {
       title: '', key: 'del', render: (_: any, r: any) => (
+        <Space size={4}>
+        <Button size="small" icon={<EditOutlined />} title="Edit" onClick={() => openEdit(r)} />
+        <Button size="small" icon={<KeyOutlined />} title="Reset password" onClick={() => { pwForm.resetFields(); setResetting(r); }} />
         <Popconfirm title={`Delete ${r.full_name}'s sign-in?`}
           description="They won't be able to sign in. A linked employee record is kept."
           okText="Delete" okButtonProps={{ danger: true }}
@@ -72,6 +125,7 @@ export function CompanyUsersPage() {
             .catch((e: any) => message.error(e.message))}>
           <Button size="small" danger icon={<DeleteOutlined />} />
         </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -114,6 +168,49 @@ export function CompanyUsersPage() {
           </Form.Item>
           <Button type="primary" htmlType="submit" block style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
             Create
+          </Button>
+        </Form>
+      </Modal>
+
+      <Modal title={`Edit ${editing?.full_name || ''}`} open={!!editing} onCancel={() => setEditing(null)} footer={null} destroyOnHidden
+        styles={{ header: { background: '#151a1e', color: '#f0ede6' }, body: { background: '#151a1e' } }}>
+        <Form form={editForm} layout="vertical" onFinish={handleEdit}>
+          <Form.Item name="full_name" label="Full Name" rules={[{ required: true, whitespace: true }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item label="Username">
+            <Input value={editing?.username || ''} disabled />
+          </Form.Item>
+          <Form.Item name="email" label="Email (optional)" rules={[{ type: 'email', message: 'Enter a valid email, or leave it empty' }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="job_title" label="Job Title">
+            <Input />
+          </Form.Item>
+          <Form.Item name="role_id" label="Role" rules={[{ required: !(editing && isMe(editing)), message: 'Choose what this person can access' }]}>
+            <Select disabled={!!editing && isMe(editing)} options={roles.map((r: any) => ({ label: r.name, value: r.id }))} />
+          </Form.Item>
+          <Form.Item name="is_active" label="Can sign in" valuePropName="checked">
+            <Switch disabled={!!editing && isMe(editing)} checkedChildren="Active" unCheckedChildren="Inactive" />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" block loading={saving} style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
+            Save
+          </Button>
+        </Form>
+      </Modal>
+
+      <Modal title={`Reset password: ${resetting?.full_name || ''}`} open={!!resetting} onCancel={() => setResetting(null)} footer={null} destroyOnHidden
+        styles={{ header: { background: '#151a1e', color: '#f0ede6' }, body: { background: '#151a1e' } }}>
+        <Form form={pwForm} layout="vertical" onFinish={handleReset}>
+          <Form.Item name="password" label={resetting && isMe(resetting) ? 'New Password' : 'Temporary Password'} rules={[{ required: true, min: MIN_PASSWORD_LENGTH }]}>
+            <Input.Password autoComplete="new-password" />
+          </Form.Item>
+          <Form.Item name="confirm" label="Type It Again" dependencies={['password']}
+            rules={[{ required: true }, ({ getFieldValue }) => ({ validator: (_, v) => (!v || v === getFieldValue('password') ? Promise.resolve() : Promise.reject(new Error('The two passwords do not match'))) })]}>
+            <Input.Password autoComplete="new-password" />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" block loading={saving} style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
+            Reset Password
           </Button>
         </Form>
       </Modal>
