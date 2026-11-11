@@ -705,7 +705,7 @@ export const bankService = {
           credit: l.account_id === txn.account_id && Number(l.credit) ? v : Number(l.credit) || 0 }));
         const gap = r2(lines.reduce((t, l) => t + l.credit - l.debit, 0));
         if (gap) {
-          const fx = diffLine?.account_id || (await supabase.from('fin_accounts').select('id').eq('company_id', companyId).eq('subtype', 'fx_gain_loss').maybeSingle()).data?.id;
+          const fx = diffLine?.account_id || (await supabase.from('fin_accounts').select('id').eq('company_id', companyId).in('subtype', ['fx_gain_loss', 'fx_loss']).limit(1)).data?.[0]?.id;
           if (!fx) throw new Error('The two banks would no longer agree — add a Foreign exchange gain / (loss) account first');
           lines.push({ account_id: fx, debit: gap > 0 ? gap : 0, credit: gap < 0 ? -gap : 0, description: 'Difference on the statement' });
         }
