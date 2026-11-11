@@ -40,9 +40,9 @@ export const PERMISSION_TICKS: Record<string, Partial<Record<string, string>>> =
   },
   leave: {
     view: 'HR → My Leave appears: apply for and see your own leave. Managers can also apply for the people who report to them',
-    create: 'Apply for leave on behalf of anyone',
+    create: 'Apply for leave on behalf of anyone; add time off in lieu; apply around the leave rules with a reason',
     approve: 'HR → Approvals appears: approve or reject leave',
-    edit: 'Leave Balances and Leave Types appear; apply for leave on behalf of anyone',
+    edit: 'Leave Balances, Leave Types and Leave Policy appear; apply for leave on behalf of anyone; add time off in lieu; apply around the leave rules with a reason',
   },
   attendance: {
     view: 'HR → My Attendance appears: clock in and out, see your own hours',

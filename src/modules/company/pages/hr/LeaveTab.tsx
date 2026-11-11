@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Button, Modal, Form, Select, DatePicker, Input, Checkbox, message, Table, Tag, Empty, Row, Col, Progress, Alert } from 'antd';
+import { Card, Button, Modal, Form, Select, DatePicker, Input, InputNumber, Checkbox, message, Table, Tag, Empty, Row, Col, Progress, Alert } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { leaveService, calendarService, hrService, type LeaveType, type LeaveBalance, type LeaveRequest, type Employee } from '../../../../services/hr';
@@ -58,33 +58,58 @@ export function LeaveTab({ companyId }: { companyId: number }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const countFor = (typeId: number | undefined, range: any, halfDay: boolean) => {
+  const countFor = (typeId: number | undefined, rangeIn: any, halfDay: boolean, hours?: number, day?: any) => {
     const lt = types.find(t => t.id === typeId);
+    // time off by the hour is one day and a number of hours
+    const range = lt?.count_method === 'hours' ? (day ? [day, day] : null) : rangeIn;
     if (!range || !range[0] || !range[1]) return null;
     return countLeave({
       start: dayjs(range[0]).format('YYYY-MM-DD'), end: dayjs(range[1]).format('YYYY-MM-DD'), halfDay,
-      method: lt?.count_method || 'working_days', allowSingleDays: !!lt?.allow_single_days,
+      method: lt?.count_method || 'working_days', allowSingleDays: !!lt?.allow_single_days, hours,
       pattern: target && targetPattern ? targetPattern : pattern, holidays,
     });
   };
+  const isHoursType = (typeId?: number) => types.find(t => t.id === typeId)?.count_method === 'hours';
+  // HR (and Admin / Director) can apply around the leave rules, giving a reason
+  const canOverride = access.canViewPay || ['leave', 'employees'].some(m => access.can(m, 'create') || access.can(m, 'edit'));
   const pickTarget = async (id: number) => {
     const e = id === me?.id ? null : actable.find(x => Number(x.id) === id) || null;
     setTarget(e);
     setTargetPattern(e ? await calendarService.effectivePattern(companyId, Number(e.id)).catch(() => null) : null);
   };
-  const preview = countFor(watch?.leave_type_id, watch?.range, !!watch?.half_day);
+  const preview = countFor(watch?.leave_type_id, watch?.range, !!watch?.half_day, watch?.hours, watch?.day);
 
   const submit = async (v: any) => {
     if (!me) return;
-    const c = countFor(v.leave_type_id, v.range, !!v.half_day);
+    const c = countFor(v.leave_type_id, v.range, !!v.half_day, v.hours, v.day);
     if (!c || c.error || c.amount <= 0) { message.error(c?.error || 'Invalid date range'); return; }
+    const hourly = isHoursType(v.leave_type_id);
+    const range = hourly ? [v.day, v.day] : v.range;
+    const payload = {
+      company_id: companyId, employee_id: target ? Number(target.id) : me.id, leave_type_id: v.leave_type_id,
+      start_date: dayjs(range[0]).format('YYYY-MM-DD'), end_date: dayjs(range[1]).format('YYYY-MM-DD'),
+      half_day: hourly ? false : !!v.half_day, days: c.amount, reason: v.reason || '',
+    };
     try {
-      const forId = target ? Number(target.id) : me.id;
-      const newId = await leaveService.apply({
-        company_id: companyId, employee_id: forId, leave_type_id: v.leave_type_id,
-        start_date: dayjs(v.range[0]).format('YYYY-MM-DD'), end_date: dayjs(v.range[1]).format('YYYY-MM-DD'),
-        half_day: !!v.half_day, days: c.amount, reason: v.reason || '',
-      });
+      let newId: number;
+      try { newId = await leaveService.apply(payload); }
+      catch (err: any) {
+        // a rule of the leave policy stopped it: HR can apply anyway, with a reason
+        if (!/^POLICY:/.test(err.message)) throw err;
+        const why = err.message.replace(/^POLICY:\s*/, '');
+        if (!canOverride) { Modal.error({ title: 'This leave can’t be applied for', content: why }); return; }
+        const reason = await new Promise<string | null>(resolve => {
+          let text = '';
+          Modal.confirm({
+            title: 'This breaks a leave rule', okText: 'Apply anyway',
+            content: (<div><div style={{ marginBottom: 8 }}>{why}</div><Input.TextArea rows={2} placeholder="Reason for applying anyway (kept with the request)" onChange={e => { text = e.target.value; }} /></div>),
+            onOk: () => { if (!text.trim()) { message.error('Give a reason'); return Promise.reject(); } resolve(text.trim()); },
+            onCancel: () => resolve(null),
+          });
+        });
+        if (!reason) return;
+        newId = await leaveService.apply({ ...payload, override_reason: reason });
+      }
       if (target && v.approve_now && access.can('leave', 'approve')) {
         await leaveService.decide(newId, 'approved', `Entered by ${me.full_name}`, user!.id);
         message.success(`Leave approved for ${target.full_name}`);
@@ -172,19 +197,28 @@ export function LeaveTab({ companyId }: { companyId: number }) {
             </Form.Item>
           )}
           <Form.Item name="leave_type_id" label="Leave Type" rules={[{ required: true }]}>
-            <Select options={types.filter(t => t.active && shownType(t)).map(t => ({ label: t.name, value: t.id }))} />
+            <Select options={types.filter(t => t.active && shownType(t) && (!t.is_toil || entitledFor(t.id) > 0)).map(t => ({ label: t.name, value: t.id }))} />
           </Form.Item>
-          <Form.Item name="range" label="Dates" rules={[{ required: true }]}>
-            <DatePicker.RangePicker style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="half_day" valuePropName="checked"><Checkbox>Half day (last day)</Checkbox></Form.Item>
+          {isHoursType(watch?.leave_type_id) ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Form.Item name="day" label="Day" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>
+              <Form.Item name="hours" label="Hours" rules={[{ required: true }]}><InputNumber style={{ width: '100%' }} min={0.25} max={24} step={0.25} /></Form.Item>
+            </div>
+          ) : (
+            <>
+              <Form.Item name="range" label="Dates" rules={[{ required: true }]}>
+                <DatePicker.RangePicker style={{ width: '100%' }} />
+              </Form.Item>
+              <Form.Item name="half_day" valuePropName="checked"><Checkbox>Half day (last day)</Checkbox></Form.Item>
+            </>
+          )}
           <Form.Item name="reason" label="Reason"><Input.TextArea rows={2} /></Form.Item>
           {target && access.can('leave', 'approve') && <Form.Item name="approve_now" valuePropName="checked"><Checkbox>Approve straight away</Checkbox></Form.Item>}
           {preview && (preview.error
             ? <Alert type="warning" showIcon message={preview.error} />
             : (
               <div style={{ color: 'rgba(240,237,230,0.6)' }}>
-                Counts as: <b style={{ color: '#4fc3f7' }}>{preview.amount} {unitLabel(preview.unit === 'weeks' ? 'weeks' : 'working_days', preview.amount)}</b>
+                Counts as: <b style={{ color: '#4fc3f7' }}>{preview.amount} {unitLabel(preview.unit === 'weeks' ? 'weeks' : preview.unit === 'hours' ? 'hours' : 'working_days', preview.amount)}</b>
                 {preview.unit === 'days' && (preview.skippedRestDays.length > 0 || preview.skippedHolidays.length > 0) && (
                   <div style={{ fontSize: 12 }}>
                     Not counted: {preview.skippedRestDays.length > 0 && `${preview.skippedRestDays.length} rest day(s)`}
