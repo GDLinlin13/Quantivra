@@ -165,6 +165,13 @@ describe('supplier prices from their bills', () => {
     expect(all.find(x => x.contact_id === 8 && x.item_id === 1)!.price).toBe(180);               // another supplier, another price
     expect(all.find(x => x.contact_id === 8 && x.item_id === 1)!.prev).toBeNull();
   });
+  it('ignores a line marked as a one-off price', () => {
+    const withOneOff = [...docs, bill(15, '2026-03-05', 7, [{ item_id: 1, unit_price: 5, price_one_off: true }])];
+    const a = supplierPrices(withOneOff as any, items, classes, pieces, 'MYR').find(x => x.contact_id === 7 && x.item_id === 1)!;
+    expect([a.price, a.number]).toEqual([230, 'B-11']);
+    const changes = costChanges([{ item_id: 1, unit_price: 5 }, { item_id: 1, unit_price: 6 }], items, classes, 'MYR', 'SGD', () => ({ price: 230, date: '2026-01-20', number: 'B-11' }));
+    expect(changes[0].lines).toEqual([0, 1]);
+  });
   it('keeps a price per weight class for items stocked by weight', () => {
     const p = all.find(x => x.item_id === 2)!;
     expect([p.contact_id, p.class_id, p.price]).toEqual([7, 9, 390]);

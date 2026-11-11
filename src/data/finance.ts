@@ -44,6 +44,8 @@ export interface DocLine {
   discount_pct: number; tax_rate: number; account_id?: number | null; item_id?: number | null; amount?: number;
   /** the piece of a by-weight item this line buys or sells (migration 046) */
   piece_id?: number | null;
+  /** a bill line at a price that is not the supplier's price from now on (migration 052) */
+  price_one_off?: boolean;
   /** screen only: the weight of the piece a bill line buys; saved on the piece, not the line */
   weight?: number;
 }

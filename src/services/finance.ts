@@ -402,7 +402,7 @@ export const docService = {
     const rows = lines.filter(l => (l.description || '').trim() || Number(l.unit_price)).map((l, i) => ({
       company_id: companyId, document_id: id, position: i, description: l.description || '',
       quantity: Number(l.quantity) || 0, unit_price: Number(l.unit_price) || 0, discount_pct: Number(l.discount_pct) || 0,
-      tax_rate: Number(l.tax_rate) || 0, account_id: l.account_id || null, ...(l.item_id ? { item_id: l.item_id } : {}), ...(l.piece_id ? { piece_id: l.piece_id } : {}), amount: t.lines[lines.indexOf(l)],
+      tax_rate: Number(l.tax_rate) || 0, account_id: l.account_id || null, ...(l.item_id ? { item_id: l.item_id } : {}), ...(l.piece_id ? { piece_id: l.piece_id } : {}), ...(l.price_one_off ? { price_one_off: true } : {}), amount: t.lines[lines.indexOf(l)],
     }));
     if (rows.length) must(await supabase.from('fin_document_lines').insert(rows));
     // keep paid status right if the total changed
@@ -1009,7 +1009,7 @@ export async function supplierBills(companyId: number, contactId: number, except
   const docs: any[] = must(await supabase.from('fin_documents').select('id, doc_type, status, number, issue_date, contact_id, currency')
     .eq('company_id', companyId).eq('contact_id', contactId).in('doc_type', ['bill', 'expense'])) || [];
   const ids = docs.map(d => d.id).filter(id => id !== exceptDocId);
-  const lines: any[] = ids.length ? (must(await supabase.from('fin_document_lines').select('document_id, item_id, unit_price, piece_id').in('document_id', ids).not('item_id', 'is', null)) || []) : [];
+  const lines: any[] = ids.length ? (must(await supabase.from('fin_document_lines').select('document_id, item_id, unit_price, piece_id, price_one_off').in('document_id', ids).not('item_id', 'is', null)) || []) : [];
   return docs.filter(d => d.id !== exceptDocId).map(d => ({ ...d, lines: lines.filter(l => l.document_id === d.id).map(l => ({ ...l, unit_price: Number(l.unit_price) })) }));
 }
 

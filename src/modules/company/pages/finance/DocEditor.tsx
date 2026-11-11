@@ -66,6 +66,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   useEffect(() => {
     if (docId) {
       docService.get(docId).then(({ doc: d, lines: ls }) => {
+        loadedPrices.current = new Map(ls.filter(l => l.id).map(l => [l.id!, Number(l.unit_price)]));
         setDoc(d); setDocType(d.doc_type); setLines(ls.length ? ls.map(l => ({ ...l, quantity: Number(l.quantity), unit_price: Number(l.unit_price), discount_pct: Number(l.discount_pct), tax_rate: Number(l.tax_rate) })) : [blankLine(gstRate)]);
         setDiscounts(d.discounts || []); setLoading(false);
       }).catch(e => { message.error(e.message); onClose(); });
@@ -84,6 +85,8 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   const typedNumber = sales && typed.has(DOC_NUMBER_ENTITY[docType]);
   // lines are numbered and can be dragged into another place
   const dragFrom = useRef<number | null>(null);
+  // the prices lines had when this document was opened (an unchanged price is not asked about again)
+  const loadedPrices = useRef(new Map<number, number>());
   const [dragOver, setDragOver] = useState<number | null>(null);
   const moveLine = (from: number, to: number) => {
     if (from === to) return;
@@ -273,32 +276,42 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       if (!fx) { message.error(`Couldn't find a ${docCur} rate — enter it: 1 ${docCur} = ? ${currency}`); return; }
       set({ fx_rate: fx });
     }
-    setSaving(true);
-    try {
-      const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines, { keepNumber: typedNumber });
-      // pieces bought: one piece per line, with its weight
-      if (!sales && lines.some(isPieces)) await catalogService.syncBillPieces(companyId, id, doc.issue_date!, lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes);
-      // a bill at a different price from this supplier's last one: say so (their prices follow the bills by themselves)
-      if (!sales) {
-        const changes = costChanges(lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes, docCur, currency,
-          (i, c) => { const h = supplierPrice(i, c); return h ? { price: h.price, date: h.date, number: h.number } : undefined; }).filter(c => c.since);
-        if (changes.length) {
-          await new Promise<void>(resolve => Modal.info({
-            title: 'Prices changed from this supplier’s last bill', okText: 'OK', width: 560, onOk: () => resolve(), onCancel: () => resolve(),
-            content: (
-              <div>
-                {changes.map((c, i) => (
-                  <div key={i} style={{ fontSize: 13 }}>
-                    <b>{c.name}</b>{c.label ? ` (${c.label})` : ''}: {docCur} {c.old.toLocaleString(undefined, { maximumFractionDigits: 4 })} → <b>{c.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}</b>
-                    <span style={{ color: '#999' }}> ({c.price > c.old ? '▲' : '▼'} {Math.abs(Math.round(((c.price - c.old) / c.old) * 1000) / 10)}% · was on {c.since})</span>
-                  </div>
-                ))}
-                <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>Supplier prices follow the bills automatically (Catalog → Supplier prices).</div>
-              </div>
-            ),
-          }));
+    // a bill at a different price from this supplier's last one: ask whether it becomes their price from now on
+    let toSave = lines;
+    if (!sales) {
+      const withWeight = lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l));
+      const changes = costChanges(withWeight, items, classes, docCur, currency,
+        (i, c) => { const h = supplierPrice(i, c); return h ? { price: h.price, date: h.date, number: h.number } : undefined; })
+        .map(c => ({ ...c, lines: c.lines.filter(ix => { const l = lines[ix]; return !(l.id && loadedPrices.current.get(l.id) === Number(l.unit_price)) && !l.price_one_off; }) }))
+        .filter(c => c.since && c.lines.length);
+      if (changes.length) {
+        const update = await new Promise<boolean>(resolve => { Modal.confirm({
+          title: 'Prices changed from this supplier’s last bill', okText: 'Yes, update the price', cancelText: 'No, this bill only', width: 580,
+          content: (
+            <div>
+              {changes.map((c, i) => (
+                <div key={i} style={{ fontSize: 13 }}>
+                  <b>{c.name}</b>{c.label ? ` (${c.label})` : ''}: {docCur} {c.old.toLocaleString(undefined, { maximumFractionDigits: 4 })} → <b>{c.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}</b>
+                  <span style={{ color: '#999' }}> ({c.price > c.old ? '▲' : '▼'} {Math.abs(Math.round(((c.price - c.old) / c.old) * 1000) / 10)}% · was on {c.since})</span>
+                </div>
+              ))}
+              <div style={{ marginTop: 8 }}>Update this supplier’s price for next time?</div>
+              <div style={{ color: '#999', fontSize: 12 }}>No: this bill keeps its price, but the supplier’s price stays as it was.</div>
+            </div>
+          ),
+          onOk: () => resolve(true), onCancel: () => resolve(false),
+        }); });
+        if (!update) {
+          const oneOff = new Set(changes.flatMap(c => c.lines));
+          toSave = lines.map((l, ix) => (oneOff.has(ix) ? { ...l, price_one_off: true } : l));
         }
       }
+    }
+    setSaving(true);
+    try {
+      const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, toSave, { keepNumber: typedNumber });
+      // pieces bought: one piece per line, with its weight
+      if (!sales && lines.some(isPieces)) await catalogService.syncBillPieces(companyId, id, doc.issue_date!, lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes);
       // An expense paid on the spot (from a bank / cash account) is recorded as paid straight away.
       if (docType === 'expense' && doc.paid_from_account_id && (status === 'approved' || doc.status === 'approved')) {
         const { doc: fresh } = await docService.get(id);
