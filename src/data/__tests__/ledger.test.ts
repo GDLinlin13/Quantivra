@@ -181,15 +181,15 @@ describe('documents in another currency', () => {
     expect(bal(es, '4900')).toBe(-50);
   });
 
-  it('the recommended chart keeps exchange gains and losses together in one account', async () => {
+  it('the recommended chart books exchange gains to Other Income and losses to Foreign Exchange Losses', async () => {
     const { RECOMMENDED_ACCOUNTS } = await import('../finance');
     const rec = RECOMMENDED_ACCOUNTS.map((a, i) => ({ ...a, id: i + 1, company_id: 1, archived: false, opening_balance: 0 })) as Account[];
     const on = (es: any[], code: string) => balances(rec, es).find(b => b.account.code === code)!.balance;
     const pay = (amount: number) => [{ id: 1, direction: 'in', number: 'R1', contact_id: 1, payment_date: '2026-06-20', amount, account_id: rec.find(a => a.code === '1010')!.id }];
     const gain = buildLedger({ ...base, accounts: rec, payments: pay(7900) } as any);
-    expect(on(gain, '6920')).toBe(-100);               // 6920 Foreign Exchange Gains / Losses (an expense account): a gain reduces it
+    expect(on(gain, '4100')).toBe(100);                // a gain is Other Income
     const loss = buildLedger({ ...base, accounts: rec, payments: pay(7750) } as any);
-    expect(on(loss, '6920')).toBe(50);                 // a loss adds to it
+    expect(on(loss, '6910')).toBe(50);                 // a loss is 6910 Foreign Exchange Losses
     expect(balanced(loss)).toBe(true);
   });
 
