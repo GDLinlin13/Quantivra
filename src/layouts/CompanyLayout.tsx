@@ -7,8 +7,7 @@ import {
   DashboardOutlined, TeamOutlined, UserOutlined, SafetyOutlined,
   SettingOutlined, LogoutOutlined, BankOutlined,
   FileOutlined, BellOutlined, DollarOutlined, ShopOutlined,
-  ContactsOutlined, PartitionOutlined,
-} from '@ant-design/icons';
+  ContactsOutlined, PartitionOutlined, ProjectOutlined, } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CompanyAccessProvider, useCompanyAccess } from '../contexts/CompanyAccess';
@@ -47,6 +46,7 @@ function CompanyLayoutInner() {
     access.can('finance') && { key: '/company/finance', icon: <DollarOutlined />, label: 'Finance' },
     access.can('inventory') && { key: '/company/catalog', icon: <ShopOutlined />, label: 'Catalog' },
     access.can('crm') && { key: '/company/crm', icon: <ContactsOutlined />, label: 'CRM' },
+    access.can('projects') && { key: '/company/projects', icon: <ProjectOutlined />, label: 'Projects' },
   ].filter(Boolean) as { key: string; icon: React.ReactNode; label: string }[];
 
   const adminMenu = !access.canViewPay ? [] : [
