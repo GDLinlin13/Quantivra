@@ -5,6 +5,7 @@ import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, Upload
 import dayjs from 'dayjs';
 import { docService, paymentService, catalogService, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
 import { ContactDrawer } from './ContactsManager';
+import { ItemDrawer } from '../Catalog';
 import { companyFileService } from '../../../../services/finance';
 import { FileViewer } from '../../../../components/FileViewer';
 import {
@@ -21,7 +22,7 @@ const { Text } = Typography;
 const blankLine = (rate: number): DocLine => ({ description: '', quantity: 1, unit_price: 0, discount_pct: 0, tax_rate: rate });
 
 /** Create or edit a quotation, invoice, credit note, bill or expense. */
-export function DocEditor({ companyId, docType: startType, docId, contacts: contactsIn, people: peopleIn, accounts, settings, branding, currency, employees = [], items = [], onClose, onSaved, onContactsChanged }: {
+export function DocEditor({ companyId, docType: startType, docId, contacts: contactsIn, people: peopleIn, accounts, settings, branding, currency, employees = [], items: itemsIn = [], onClose, onSaved, onContactsChanged, onItemsChanged }: {
   companyId: number; docType: DocType; docId?: number | null;
   contacts: Contact[]; people: ContactPerson[]; accounts: Account[]; settings: FinanceSettings; branding: Branding | null; currency: string;
   employees?: { id: number; full_name: string }[];
@@ -29,7 +30,14 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   onClose: () => void; onSaved: (id: number) => void;
   /** called after a customer / supplier was added from here, so the lists behind this screen refresh */
   onContactsChanged?: () => void;
+  /** called after a catalog item was added from here */
+  onItemsChanged?: () => void;
 }) {
+  // catalog items can be added from the Item dropdown, so this keeps its own copy
+  const [items, setItems] = useState(itemsIn);
+  useEffect(() => setItems(itemsIn), [itemsIn]);
+  const [newItem, setNewItem] = useState<{ row: number; name: string } | null>(null);
+  const [itemSearch, setItemSearch] = useState('');
   // customers / suppliers can be added from the dropdown, so this keeps its own copy
   const [contacts, setContacts] = useState(contactsIn);
   const [people, setPeople] = useState(peopleIn);
@@ -130,8 +138,8 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   // sales documents offer what we sell, purchases what we buy (plus anything already on the lines)
   const catalog = items.filter(it => lines.some(l => l.item_id === it.id)
     || (!it.archived && (it.used_for || 'both') !== (sales ? 'purchases' : 'sales')));
-  const pickItem = (i: number, id: number | null) => {
-    const it = items.find(x => x.id === id);
+  const pickItem = (i: number, id: number | null, from: CatalogItem[] = items) => {
+    const it = from.find(x => x.id === id);
     if (!it) { setLine(i, { item_id: null }); return; }
     const price = sales ? priceFor(it, doc.contact_id, custPrices) : Number(it.purchase_price) || 0;
     // an item priced in another currency: a new document with nothing priced yet takes the item's currency
@@ -313,10 +321,23 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       <Table rowKey="_row" size="small" pagination={false} dataSource={lines.map((l, i) => ({ ...l, _row: i }))}
         columns={[
           { title: '', width: 24, render: () => <HolderOutlined style={{ color: '#666' }} /> },
-          ...(catalog.length ? [{ title: 'Item', width: 240, render: (_: any, l: DocLine, i: number) => (
+          ...(catalog.length || access.canWrite('inventory') ? [{ title: 'Item', width: 240, render: (_: any, l: DocLine, i: number) => (
             <Select style={{ width: '100%' }} allowClear showSearch optionFilterProp="label" value={l.item_id ?? undefined} placeholder="From the catalog"
-              onChange={v => pickItem(i, v ?? null)}
-              options={catalog.map(it => ({ value: it.id, label: `${it.code ? `${it.code} · ` : ''}${it.name}` }))} />
+              onChange={v => pickItem(i, v ?? null)} onSearch={setItemSearch} onOpenChange={o => { if (!o) setItemSearch(''); }}
+              options={catalog.map(it => ({ value: it.id, label: `${it.code ? `${it.code} · ` : ''}${it.name}` }))}
+              popupRender={menu => (
+                <>
+                  {menu}
+                  {access.canWrite('inventory') && (
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', padding: 4 }}>
+                      <Button type="link" icon={<PlusOutlined />} style={{ width: '100%', textAlign: 'left' }}
+                        onClick={() => setNewItem({ row: i, name: itemSearch.trim() })}>
+                        {itemSearch.trim() ? `Add “${itemSearch.trim()}” to the catalog` : 'Add a new item to the catalog'}
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )} />
           ) }] : []),
           { title: 'Description', render: (_, l, i) => <Input.TextArea style={{ minWidth: 280 }} autoSize={{ minRows: 1, maxRows: 6 }} value={l.description} onChange={e => setLine(i, { description: e.target.value })} /> },
           ...(lineAccounts.length && !sales ? [{ title: 'Account', width: 240, render: (_: any, l: DocLine, i: number) => (
@@ -421,6 +442,21 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
         </div>
       )}
       </ConfigProvider>
+      {newItem && (
+        <ItemDrawer companyId={companyId} item={{ kind: 'product', name: newItem.name, used_for: sales ? 'sales' : 'purchases' } as any} accounts={accounts} settings={settings}
+          currency={currency} categories={[...new Set(items.map(i => i.category).filter(Boolean) as string[])]}
+          onClose={() => setNewItem(null)}
+          onSaved={async id => {
+            const row = newItem.row;
+            setNewItem(null); setItemSearch('');
+            try {
+              const list = await catalogService.list(companyId);
+              setItems(list);
+              pickItem(row, id, list);
+            } catch (e: any) { message.error(e.message); }
+            onItemsChanged?.();
+          }} />
+      )}
       {newContact && (
         <ContactDrawer companyId={companyId} contact={newContact} word={sales ? 'customer' : 'supplier'} currency={currency} docs={[]}
           onClose={() => setNewContact(null)}
