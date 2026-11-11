@@ -179,10 +179,10 @@ export function ContactDrawer({ companyId, contact, word, currency, docs, onClos
               {taxMode === 'yes' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <Form.Item name="tax_name" label="Tax name" style={{ marginBottom: 0 }}>
-                    <AutoComplete options={['GST', 'VAT', 'SST', 'Sales tax'].map(v => ({ value: v }))} placeholder="e.g. GST, VAT, SST" />
+                    <AutoComplete options={['GST', 'VAT', 'SST', 'Sales tax'].map(v => ({ value: v }))} />
                   </Form.Item>
                   <Form.Item name="tax_rate" label="Tax rate (%)" style={{ marginBottom: 0 }}>
-                    <InputNumber min={0} max={100} precision={2} style={{ width: '100%' }} placeholder="e.g. 9" />
+                    <InputNumber min={0} max={100} precision={2} style={{ width: '100%' }} />
                   </Form.Item>
                 </div>
               )}
