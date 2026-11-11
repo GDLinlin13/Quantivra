@@ -4,7 +4,7 @@ export const MODULE_GUIDE: Record<string, { covers: string; built: boolean }> = 
   company:    { covers: 'Company profile, which modules are switched on, logo and branding (Settings, Company Profile).', built: true },
   employees:  { covers: 'Employee records, their documents and staff reports (HR → Employees).', built: true },
   leave:      { covers: 'Applying for, approving and reporting leave (HR → My Leave, Approvals, Leave Balances).', built: true },
-  attendance: { covers: 'Clock-in / clock-out and time logs.', built: false },
+  attendance: { covers: 'Clock-in / clock-out and time logs (HR → My Attendance, Attendance). View: the person clocks themselves in and out. Create / edit / delete: everyone’s hours, with the right to add, correct or remove entries.', built: true },
   claims:     { covers: 'Expense claims (HR). View: My Claims appears and the person can claim for themselves. Approve: the Claims tab appears with everyone’s claims to approve or reject. Create / edit / delete: add, change or remove claims for anyone. Finance records approved claims under Payables → Staff claims.', built: true },
   payroll:    { covers: 'Payroll runs, payslips and pay components (HR → Payroll). Salaries also need the role’s “Can see pay & manage users” switch.', built: true },
   finance:    { covers: 'Invoices, bills, payments, banking, accounts and reports (Finance).', built: true },
@@ -34,14 +34,21 @@ export const ACTION_GUIDE: Record<string, { means: string; example: string; used
 export const PERMISSION_TICKS: Record<string, Partial<Record<string, string>>> = {
   employees: {
     view: 'HR → Employees appears, to look only',
-    create: 'Add employees',
-    edit: 'Add and change employees; Leave Balances and Leave Types appear',
+    create: 'Add employees; apply for leave on behalf of anyone',
+    edit: 'Add and change employees; Leave Balances and Leave Types appear; apply for leave on behalf of anyone',
     delete: 'Remove employees',
   },
   leave: {
-    view: 'HR → My Leave appears: apply for and see your own leave',
+    view: 'HR → My Leave appears: apply for and see your own leave. Managers can also apply for the people who report to them',
+    create: 'Apply for leave on behalf of anyone',
     approve: 'HR → Approvals appears: approve or reject leave',
-    edit: 'Leave Balances and Leave Types appear',
+    edit: 'Leave Balances and Leave Types appear; apply for leave on behalf of anyone',
+  },
+  attendance: {
+    view: 'HR → My Attendance appears: clock in and out, see your own hours',
+    create: 'HR → Attendance appears: everyone’s hours; add hours for anyone',
+    edit: 'HR → Attendance appears: everyone’s hours; add and correct entries',
+    delete: 'Remove attendance entries',
   },
   claims: {
     view: 'HR → My Claims appears: submit and see your own claims',
@@ -70,5 +77,5 @@ export const PERMISSION_TICKS: Record<string, Partial<Record<string, string>>> =
   },
 };
 
-/** Sections a company can switch off in Settings → Modules (hidden for everyone when off). */
-export const SWITCHABLE_MODULES = ['employees', 'leave', 'claims', 'payroll', 'finance', 'inventory', 'crm'];
+/** Sections a company can switch off in Settings → Modules (hidden for everyone when off). Company, Users and Settings are always on: they are where the switches live. */
+export const SWITCHABLE_MODULES = ['employees', 'leave', 'attendance', 'claims', 'payroll', 'finance', 'inventory', 'crm', 'projects', 'workflow'];

@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, Button, Modal, Form, Select, DatePicker, Input, Checkbox, message, Table, Tag, Empty, Row, Col, Progress, Alert } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { leaveService, calendarService, type LeaveType, type LeaveBalance, type LeaveRequest, type Employee } from '../../../../services/hr';
+import { leaveService, calendarService, hrService, type LeaveType, type LeaveBalance, type LeaveRequest, type Employee } from '../../../../services/hr';
+import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { countLeave, describePattern, unitLabel, DEFAULT_WORK_PATTERN, type WorkPattern } from '../../../../utils/workdays';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { supabase } from '../../../../utils/supabase';
@@ -12,6 +13,11 @@ const statusColor: Record<string, string> = { pending: 'gold', approved: 'green'
 
 export function LeaveTab({ companyId }: { companyId: number }) {
   const { user } = useAuth();
+  const access = useCompanyAccess();
+  // HR / Director apply for anyone, a manager for the people who report to them
+  const [actable, setActable] = useState<Employee[]>([]);
+  const [target, setTarget] = useState<Employee | null>(null);
+  const [targetPattern, setTargetPattern] = useState<WorkPattern | null>(null);
   const [me, setMe] = useState<Employee | null>(null);
   const [types, setTypes] = useState<LeaveType[]>([]);
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
@@ -42,10 +48,13 @@ export function LeaveTab({ companyId }: { companyId: number }) {
           calendarService.holidaySet(companyId, `${YEAR - 1}-01-01`, `${YEAR + 1}-12-31`),
         ]);
         setBalances(b); setRequests(r); setPattern(pat); setHolidays(hol);
+        const isHR = access.canViewPay || ['leave', 'employees'].some(m => access.can(m, 'create') || access.can(m, 'edit'));
+        const all = await hrService.listEmployees(companyId).catch(() => [] as Employee[]);
+        setActable(all.filter(e => e.status === 'active' && Number(e.id) !== Number(rec.id) && (isHR || Number(e.manager_id) === Number(rec.id))));
       }
     } catch (err: any) { message.error(err.message); }
     setLoading(false);
-  }, [companyId, user]);
+  }, [companyId, user, access]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -55,8 +64,13 @@ export function LeaveTab({ companyId }: { companyId: number }) {
     return countLeave({
       start: dayjs(range[0]).format('YYYY-MM-DD'), end: dayjs(range[1]).format('YYYY-MM-DD'), halfDay,
       method: lt?.count_method || 'working_days', allowSingleDays: !!lt?.allow_single_days,
-      pattern, holidays,
+      pattern: target && targetPattern ? targetPattern : pattern, holidays,
     });
+  };
+  const pickTarget = async (id: number) => {
+    const e = id === me?.id ? null : actable.find(x => Number(x.id) === id) || null;
+    setTarget(e);
+    setTargetPattern(e ? await calendarService.effectivePattern(companyId, Number(e.id)).catch(() => null) : null);
   };
   const preview = countFor(watch?.leave_type_id, watch?.range, !!watch?.half_day);
 
@@ -65,13 +79,17 @@ export function LeaveTab({ companyId }: { companyId: number }) {
     const c = countFor(v.leave_type_id, v.range, !!v.half_day);
     if (!c || c.error || c.amount <= 0) { message.error(c?.error || 'Invalid date range'); return; }
     try {
-      await leaveService.apply({
-        company_id: companyId, employee_id: me.id, leave_type_id: v.leave_type_id,
+      const forId = target ? Number(target.id) : me.id;
+      const newId = await leaveService.apply({
+        company_id: companyId, employee_id: forId, leave_type_id: v.leave_type_id,
         start_date: dayjs(v.range[0]).format('YYYY-MM-DD'), end_date: dayjs(v.range[1]).format('YYYY-MM-DD'),
         half_day: !!v.half_day, days: c.amount, reason: v.reason || '',
       });
-      message.success('Leave applied — pending approval');
-      setOpen(false); form.resetFields(); load();
+      if (target && v.approve_now && access.can('leave', 'approve')) {
+        await leaveService.decide(newId, 'approved', `Entered by ${me.full_name}`, user!.id);
+        message.success(`Leave approved for ${target.full_name}`);
+      } else message.success(target ? `Leave applied for ${target.full_name} — pending approval` : 'Leave applied — pending approval');
+      setOpen(false); setTarget(null); setTargetPattern(null); form.resetFields(); load();
     } catch (err: any) { message.error(err.message); }
   };
 
@@ -145,8 +163,14 @@ export function LeaveTab({ companyId }: { companyId: number }) {
         ]}
       />
 
-      <Modal title="Apply for Leave" open={open} onCancel={() => setOpen(false)} onOk={() => form.submit()} okText="Submit">
+      <Modal title={target ? `Apply for Leave — ${target.full_name}` : 'Apply for Leave'} open={open} onCancel={() => { setOpen(false); setTarget(null); setTargetPattern(null); }} onOk={() => form.submit()} okText="Submit">
         <Form form={form} layout="vertical" onFinish={submit}>
+          {actable.length > 0 && (
+            <Form.Item label="For">
+              <Select showSearch optionFilterProp="label" value={target ? Number(target.id) : me.id} onChange={pickTarget}
+                options={[{ value: me.id, label: `Myself (${me.full_name})` }, ...actable.map(e => ({ value: Number(e.id), label: e.full_name }))]} />
+            </Form.Item>
+          )}
           <Form.Item name="leave_type_id" label="Leave Type" rules={[{ required: true }]}>
             <Select options={types.filter(t => t.active && shownType(t)).map(t => ({ label: t.name, value: t.id }))} />
           </Form.Item>
@@ -155,6 +179,7 @@ export function LeaveTab({ companyId }: { companyId: number }) {
           </Form.Item>
           <Form.Item name="half_day" valuePropName="checked"><Checkbox>Half day (last day)</Checkbox></Form.Item>
           <Form.Item name="reason" label="Reason"><Input.TextArea rows={2} /></Form.Item>
+          {target && access.can('leave', 'approve') && <Form.Item name="approve_now" valuePropName="checked"><Checkbox>Approve straight away</Checkbox></Form.Item>}
           {preview && (preview.error
             ? <Alert type="warning" showIcon message={preview.error} />
             : (
@@ -167,7 +192,7 @@ export function LeaveTab({ companyId }: { companyId: number }) {
                     {preview.skippedHolidays.length > 0 && `${preview.skippedHolidays.length} public holiday(s) (${preview.skippedHolidays.map(d => dayjs(d).format('D MMM')).join(', ')})`}
                   </div>
                 )}
-                <div style={{ fontSize: 12 }}>Your work week: {describePattern(pattern)}</div>
+                <div style={{ fontSize: 12 }}>{target ? `${target.full_name}’s` : 'Your'} work week: {describePattern(target && targetPattern ? targetPattern : pattern)}</div>
               </div>
             ))}
         </Form>

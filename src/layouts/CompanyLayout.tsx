@@ -38,6 +38,7 @@ function CompanyLayoutInner() {
   // HR appears when at least one of its tabs would
   const showHR = access.can('leave') || access.can('leave', 'approve') || access.can('leave', 'edit')
     || ['view', 'approve', 'create', 'edit', 'delete'].some(a => access.can('claims', a))
+    || ['view', 'create', 'edit', 'delete'].some(a => access.can('attendance', a))
     || access.can('employees') || access.can('employees', 'edit')
     || (access.canViewPay && access.isOn('payroll'));
   const mainMenu = [
