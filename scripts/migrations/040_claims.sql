@@ -23,6 +23,32 @@ $$;
 REVOKE ALL ON FUNCTION public.app_is_my_employee(bigint) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.app_is_my_employee(bigint) TO authenticated, service_role;
 
+-- Some databases still have empty "claims" tables from a very early draft of Quantivra, with different
+-- columns. An empty one is dropped; one with rows is kept as "<name>_legacy". Then the tables below are made.
+DO $$
+DECLARE t text; n bigint; r record;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['claim_receipts', 'claims'] LOOP
+    IF to_regclass('public.' || t) IS NULL THEN CONTINUE; END IF;
+    IF (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = t
+          AND column_name IN ('company_id', CASE t WHEN 'claims' THEN 'document_id' ELSE 'claim_id' END,
+                              CASE t WHEN 'claims' THEN 'claim_date' ELSE 'path' END)) = 3 THEN CONTINUE; END IF;
+    EXECUTE format('SELECT count(*) FROM public.%I', t) INTO n;
+    IF n = 0 THEN
+      EXECUTE format('DROP TABLE public.%I CASCADE', t);
+    ELSE
+      FOR r IN SELECT c.relname FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE i.indrelid = ('public.' || t)::regclass LOOP
+        EXECUTE format('ALTER INDEX public.%I RENAME TO %I', r.relname, left('legacy_' || r.relname, 63));
+      END LOOP;
+      FOR r IN SELECT c.relname FROM pg_depend d JOIN pg_class c ON c.oid = d.objid AND c.relkind = 'S'
+               WHERE d.refobjid = ('public.' || t)::regclass AND d.deptype IN ('a', 'i') LOOP
+        EXECUTE format('ALTER SEQUENCE public.%I RENAME TO %I', r.relname, left('legacy_' || r.relname, 63));
+      END LOOP;
+      EXECUTE format('ALTER TABLE public.%I RENAME TO %I', t, t || '_legacy');
+    END IF;
+  END LOOP;
+END $$;
+
 CREATE TABLE IF NOT EXISTS claims (
   id             bigserial PRIMARY KEY,
   company_id     bigint NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
