@@ -38,6 +38,7 @@ export const contactService = {
       notes: c.notes || null, archived: !!c.archived, updated_at: new Date().toISOString(),
       // the customer's price list (migration 048); left out until the form has one
       ...(c.price_list_id !== undefined ? { price_list_id: c.price_list_id || null } : {}),
+      ...(c.purchase_price_list_id !== undefined ? { purchase_price_list_id: c.purchase_price_list_id || null } : {}),
     };
     if (!row.name) throw new Error('Please enter a name');
     let id = c.id;
@@ -1011,7 +1012,10 @@ export const priceListService = {
   async save(companyId: number, list: Partial<PriceList>, rows: { item_id: number; class_id: number | null; price: number }[], customerIds: number[]): Promise<number> {
     const name = (list.name || '').trim();
     if (!name) throw new Error('Please name the price list');
-    const row = { company_id: companyId, name, notes: list.notes || null, archived: !!list.archived };
+    const kind = list.kind || 'sales';
+    const col = kind === 'purchase' ? 'purchase_price_list_id' : 'price_list_id';
+    // the kind column exists from migration 049; sales lists don't send it so they keep saving before it is run
+    const row = { company_id: companyId, name, notes: list.notes || null, archived: !!list.archived, ...(kind === 'purchase' ? { kind } : {}) };
     let id = list.id;
     const dup = (e: any) => { if (e && /uq_price_lists_name|duplicate/i.test(e.message)) throw new Error(`There is already a price list called “${name}”`); };
     if (id) { const r = await supabase.from('price_lists').update(row).eq('id', id); dup(r.error); plMust(r); }
@@ -1020,11 +1024,20 @@ export const priceListService = {
     const keep = rows.filter(r => Number(r.price) >= 0 && r.price != null);
     if (keep.length) plMust(await supabase.from('price_list_items').insert(keep.map(r => ({ company_id: companyId, price_list_id: id, item_id: r.item_id, class_id: r.class_id, price: Number(r.price) || 0 }))));
     // customers: those ticked now use this list; those no longer ticked go back to the normal prices
-    const now = plMust(await supabase.from('contacts').select('id').eq('company_id', companyId).eq('price_list_id', id!)) || [];
+    const now = plMust(await supabase.from('contacts').select('id').eq('company_id', companyId).eq(col, id!)) || [];
     const drop = now.map((c: any) => c.id).filter((c: number) => !customerIds.includes(c));
-    if (drop.length) plMust(await supabase.from('contacts').update({ price_list_id: null }).in('id', drop));
-    if (customerIds.length) plMust(await supabase.from('contacts').update({ price_list_id: id }).in('id', customerIds));
+    if (drop.length) plMust(await supabase.from('contacts').update({ [col]: null }).in('id', drop));
+    if (customerIds.length) plMust(await supabase.from('contacts').update({ [col]: id }).in('id', customerIds));
     return id!;
   },
   async remove(id: number) { plMust(await supabase.from('price_lists').delete().eq('id', id)); },
+  /** Put new prices on a list (a supplier's list after a bill at a new price): existing rows change, others are added. */
+  async setPrices(companyId: number, listId: number, prices: { item_id: number; class_id: number | null; price: number }[]) {
+    const have = plMust(await supabase.from('price_list_items').select('id, item_id, class_id').eq('price_list_id', listId)) || [];
+    for (const p of prices) {
+      const row = have.find((h: any) => h.item_id === p.item_id && (h.class_id ?? null) === (p.class_id ?? null));
+      if (row) plMust(await supabase.from('price_list_items').update({ price: p.price }).eq('id', row.id));
+      else plMust(await supabase.from('price_list_items').insert({ company_id: companyId, price_list_id: listId, item_id: p.item_id, class_id: p.class_id, price: p.price }));
+    }
+  },
 };
