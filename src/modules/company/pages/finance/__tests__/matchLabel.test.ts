@@ -3,7 +3,7 @@ import { matchLabel } from '../MatchDetails';
 
 const data: any = {
   accounts: [{ id: 1, code: '1001', name: 'DBS - SGD' }, { id: 2, code: '6900', name: 'Bank charges' }, { id: 3, code: '2200', name: 'Net salaries payable' }, { id: 4, code: '1100', name: 'Accounts receivable', subtype: 'receivable' }],
-  contacts: [{ id: 9, name: 'Argos Solutions Limited' }],
+  contacts: [{ id: 9, name: 'Sample Customer Limited' }],
 };
 const look: any = {
   journals: [
@@ -24,6 +24,6 @@ describe('what a matched bank line shows', () => {
     expect(matchLabel(t({ journal_id: 2, description: 'GIRO PAYROLL' }), data, look)).toEqual({ title: 'Salaries — May 2026', accounts: 'Net salaries payable' });
   });
   it('shows the payment, customer and invoice', () => {
-    expect(matchLabel(t({ payment_id: 5 }), data, look)).toEqual({ title: 'RCT-2026-0001 · Argos Solutions Limited · CCSG2605001', accounts: 'Accounts receivable' });
+    expect(matchLabel(t({ payment_id: 5 }), data, look)).toEqual({ title: 'RCT-2026-0001 · Sample Customer Limited · CCSG2605001', accounts: 'Accounts receivable' });
   });
 });
