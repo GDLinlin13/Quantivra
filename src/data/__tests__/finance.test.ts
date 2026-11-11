@@ -124,10 +124,11 @@ describe('the recommended chart of accounts', () => {
   it('has the agreed accounts: merged payroll, fees and tax accounts, income of five accounts', () => {
     const name = (c: string) => rec.find(a => a.code === c)?.name;
     expect([name('6600'), name('6005'), name('6010'), name('2031'), name('6850'), name('6900'), name('6910'), name('6920'), name('7000'), name('7010'), name('8000')]).toEqual([
-      'IT Expenses', "Director's Salary and Fees", 'Employer Contributions and Payroll Expenses', 'Payroll Contributions and Statutory Deductions Payable',
+      'IT Expenses', "Director's Salary / Wages", 'Employer Contributions and Payroll Expenses', 'Payroll Contributions and Statutory Deductions Payable',
       'Tax Advisory and Filing Fees', 'Bank and Payment Charges', 'Foreign Exchange Losses', 'Depreciation and Amortisation', 'Interest and Finance Charges',
       'Other Non-operating Expenses', 'Corporate Income Tax Expense']);
     expect(rec.filter(a => a.type === 'income').map(a => a.code)).toEqual(['4000', '4010', '4020', '4090', '4100']);
+    expect(rec.find(a => a.code === '6008')!.name).toBe("Director's Fees");      // director's fees are separate from the director's wages
     expect(rec.find(a => a.code === '4100')!.subtype).toBe('fx_gain');      // exchange gains post to Other Income, losses to 6910
   });
 
@@ -136,7 +137,7 @@ describe('the recommended chart of accounts', () => {
     expect(rec.length).toBeLessThanOrEqual(90);
     const codes = new Set(rec.map(a => a.code));
     for (const gone of ['1120', '1140', '1210', '1220', '1230', '1340', '1410', '1500', '2020', '2032', '2033', '2060', '2110', '2220', '2400', '3020', '3210',
-      '5040', '5050', '5060', '5070', '5080', '6008', '6015', '6020', '6050', '6130', '6210', '6220', '6310', '6510', '6520', '6880', '6940', '6950', '7100', '7110', '7130', '7140', '8020', '8030']) expect(codes.has(gone), gone).toBe(false);
+      '5040', '5050', '5060', '5070', '5080', '6015', '6020', '6050', '6130', '6210', '6220', '6310', '6510', '6520', '6880', '6940', '6950', '7100', '7110', '7130', '7140', '8020', '8030']) expect(codes.has(gone), gone).toBe(false);
   });
 
   it('follows the numbering: 1xxx assets … 8xxx taxation', () => {
