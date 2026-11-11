@@ -10,7 +10,7 @@ export const MODULE_GUIDE: Record<string, { covers: string; built: boolean }> = 
   finance:    { covers: 'Invoices, bills, payments, banking, accounts and reports (Finance).', built: true },
   inventory:  { covers: 'Catalog: products and services, prices, stock on hand and stock adjustments.', built: true },
   crm:        { covers: 'Customers and suppliers with their contact people (CRM).', built: true },
-  projects:   { covers: 'Projects, tasks, milestones and timesheets.', built: false },
+  projects:   { covers: 'Projects, tasks, milestones and timesheets (Projects). View: the Projects menu, and logging your own hours. Create / edit / delete: managing projects, tasks and milestones, and everyone’s timesheets.', built: true },
   users:      { covers: 'Logins, roles and permissions. Changing them also needs “Can see pay & manage users”.', built: true },
   workflow:   { covers: 'Approval chains (who approves what, in which order).', built: false },
   settings:   { covers: 'Company settings: leave, payroll and approval rules, work week, holidays, document numbers.', built: true },
@@ -49,6 +49,12 @@ export const PERMISSION_TICKS: Record<string, Partial<Record<string, string>>> =
     create: 'HR → Attendance appears: everyone’s hours; add hours for anyone',
     edit: 'HR → Attendance appears: everyone’s hours; add and correct entries',
     delete: 'Remove attendance entries',
+  },
+  projects: {
+    view: 'The Projects menu appears: see projects, and log your own hours',
+    create: 'Add and change projects, tasks and milestones; see and fix everyone’s timesheets',
+    edit: 'Add, change and remove projects, tasks and milestones; see and fix everyone’s timesheets',
+    delete: 'Remove projects, tasks and milestones, and timesheet entries',
   },
   claims: {
     view: 'HR → My Claims appears: submit and see your own claims',

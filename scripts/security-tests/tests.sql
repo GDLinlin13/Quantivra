@@ -775,6 +775,68 @@ BEGIN
   ASSERT (SELECT count(*) FROM leave_requests WHERE employee_id = 1 AND start_date = '2026-04-03') = 1, 'FAIL: HR (Employees edit) cannot apply for anyone';
 END $$;
 ROLLBACK;
+\echo '9o. projects: view reads and logs own hours, create / edit manages, nothing crosses companies'
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;            -- Sam Staff is employee A2
+INSERT INTO projects (company_id, name) VALUES (1, 'Alpha project'), (2, 'Beta project');
+INSERT INTO project_tasks (company_id, project_id, title) VALUES (1, (SELECT id FROM projects WHERE name = 'Alpha project'), 'Design');
+INSERT INTO project_timesheets (company_id, project_id, employee_id, work_date, hours) VALUES (1, (SELECT id FROM projects WHERE name = 'Alpha project'), 1, '2026-05-01', 3);
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'projects', '*', 'view');
+:as_staff
+DO $$
+DECLARE v bigint;
+BEGIN
+  ASSERT (SELECT count(*) FROM projects) = 1 AND (SELECT count(*) FROM project_tasks) = 1, 'FAIL: staff cannot see their company projects';
+  BEGIN INSERT INTO projects (company_id, name) VALUES (1, 'Sneaky');
+    RAISE EXCEPTION 'FAIL: view-only staff added a project';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO project_tasks (company_id, project_id, title) VALUES (1, (SELECT id FROM projects WHERE name = 'Alpha project'), 'Sneaky');
+    RAISE EXCEPTION 'FAIL: view-only staff added a task';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  -- their own hours
+  INSERT INTO project_timesheets (company_id, project_id, employee_id, work_date, hours) VALUES (1, (SELECT id FROM projects WHERE name = 'Alpha project'), 2, '2026-05-02', 2.5) RETURNING id INTO v;
+  ASSERT (SELECT count(*) FROM project_timesheets) = 1, 'FAIL: staff see colleagues'' hours';
+  UPDATE project_timesheets SET hours = 3 WHERE id = v;
+  ASSERT (SELECT hours FROM project_timesheets WHERE id = v) = 3, 'FAIL: staff cannot change their own hours';
+  BEGIN INSERT INTO project_timesheets (company_id, project_id, employee_id, work_date, hours) VALUES (1, (SELECT id FROM projects WHERE name = 'Alpha project'), 1, '2026-05-02', 2);
+    RAISE EXCEPTION 'FAIL: staff logged hours for a colleague';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO project_timesheets (company_id, project_id, employee_id, work_date, hours) VALUES (1, (SELECT id FROM projects WHERE name = 'Beta project'), 2, '2026-05-02', 2);
+    RAISE EXCEPTION 'FAIL: staff logged hours on another company''s project';
+  EXCEPTION WHEN insufficient_privilege OR not_null_violation THEN NULL; END;
+  BEGIN INSERT INTO project_timesheets (company_id, project_id, employee_id, work_date, hours) VALUES (1, (SELECT id FROM projects WHERE name = 'Alpha project'), 2, '2026-05-02', 30);
+    RAISE EXCEPTION 'FAIL: 30 hours in one entry accepted';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  DELETE FROM project_timesheets WHERE id = v;
+  ASSERT NOT EXISTS (SELECT 1 FROM project_timesheets WHERE id = v), 'FAIL: staff cannot remove their own hours';
+END $$;
+:as_b
+DO $$ BEGIN ASSERT (SELECT count(*) FROM projects) = 1 AND (SELECT count(*) FROM project_timesheets) = 0, 'FAIL: B sees A projects or hours'; END $$;
+ROLLBACK;
+BEGIN; :as_service
+INSERT INTO projects (company_id, name) VALUES (1, 'Alpha project'), (2, 'Beta project');
+INSERT INTO project_timesheets (company_id, project_id, employee_id, work_date, hours) VALUES (1, (SELECT id FROM projects WHERE name = 'Alpha project'), 1, '2026-05-01', 3);
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'projects', '*', 'create');
+:as_staff
+DO $$
+DECLARE v bigint; n int;
+BEGIN
+  INSERT INTO projects (company_id, name, status) VALUES (1, 'New one', 'planned') RETURNING id INTO v;
+  INSERT INTO project_tasks (company_id, project_id, title) VALUES (1, v, 'Kick-off');
+  INSERT INTO project_milestones (company_id, project_id, title, due_date) VALUES (1, v, 'Launch', '2026-06-30');
+  UPDATE projects SET status = 'active' WHERE id = v;
+  ASSERT (SELECT status FROM projects WHERE id = v) = 'active', 'FAIL: create cannot change a project';
+  ASSERT (SELECT count(*) FROM project_timesheets) = 1, 'FAIL: Projects create does not show everyone''s hours';
+  BEGIN INSERT INTO projects (company_id, name) VALUES (2, 'Planted in B');
+    RAISE EXCEPTION 'FAIL: staff added a project to another company';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO project_tasks (company_id, project_id, title) VALUES (1, (SELECT id FROM projects WHERE name = 'Beta project'), 'Cross-company');
+    RAISE EXCEPTION 'FAIL: task linked to another company''s project';
+  EXCEPTION WHEN insufficient_privilege OR not_null_violation THEN NULL; END;
+  DELETE FROM projects WHERE id = v;
+  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: create-only staff deleted a project';
+END $$;
+ROLLBACK;
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;
