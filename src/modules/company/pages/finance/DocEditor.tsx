@@ -255,6 +255,11 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     if (docType !== 'expense' && !doc.contact_id) { message.error(sales ? 'Choose a customer' : 'Choose a supplier'); return; }
     if (!lines.some(l => (l.description || '').trim() || l.item_id || Number(l.unit_price))) { message.error('Add at least one line'); return; }
     if (typedNumber && !(doc.number || '').trim()) { message.error(`Enter the ${DOC_LABEL[docType].toLowerCase()} number`); return; }
+    // the supplier's own invoice number can only be recorded once
+    if (!sales && doc.contact_id && (doc.reference || '').trim()) {
+      const dup = await docService.duplicateReference(companyId, doc.contact_id, doc.reference || '', docId).catch(() => null);
+      if (dup) { message.error(`Invoice number ${(doc.reference || '').trim()} is already recorded for this supplier (${dup.number}).`); return; }
+    }
     for (const l of lines) {
       if (!isPieces(l)) continue;
       const nm = items.find(x => x.id === l.item_id)?.name;
@@ -398,7 +403,8 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
             </Form.Item>
           ) : (
             <Form.Item label={sales ? 'Reference / PO no.' : 'Invoice no.'}>
-              <Input value={doc.reference || ''} onChange={e => set({ reference: e.target.value })} />
+              <Input value={doc.reference || ''} onChange={e => set({ reference: e.target.value })}
+                onBlur={() => { if (!sales && doc.contact_id && (doc.reference || '').trim()) docService.duplicateReference(companyId, doc.contact_id, doc.reference || '', docId).then(d => { if (d) message.error(`Invoice number ${(doc.reference || '').trim()} is already recorded for this supplier (${d.number}).`); }).catch(() => null); }} />
             </Form.Item>
           )}
         </div>

@@ -430,6 +430,16 @@ export const docService = {
     }
     must(await supabase.from('fin_documents').delete().eq('id', id));
   },
+  /** Another bill / expense of this supplier with the same invoice number (their own number, kept in Reference); void ones don't count. */
+  async duplicateReference(companyId: number, contactId: number, reference: string, exceptDocId?: number | null): Promise<{ id: number; number: string } | null> {
+    const ref = reference.trim();
+    if (!ref) return null;
+    const rows: any[] = must(await supabase.from('fin_documents').select('id, number, reference, status')
+      .eq('company_id', companyId).eq('contact_id', contactId).in('doc_type', ['bill', 'expense']).neq('status', 'void')) || [];
+    const norm = (v: string) => v.trim().replace(/\s+/g, ' ').toLowerCase();
+    const hit = rows.find(r => r.id !== exceptDocId && r.reference && norm(r.reference) === norm(ref));
+    return hit ? { id: hit.id, number: hit.number } : null;
+  },
   /** Turn a quotation into a new draft invoice (keeps the lines and discounts). */
   async quoteToInvoice(companyId: number, quoteId: number, dueDays: number): Promise<number> {
     const { doc, lines } = await this.get(quoteId);
