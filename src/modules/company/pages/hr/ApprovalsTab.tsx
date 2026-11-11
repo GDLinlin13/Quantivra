@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Tag, message, Modal, Input, Space, Segmented, Empty } from 'antd';
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import { leaveService, type LeaveRequest } from '../../../../services/hr';
-import { useAuth } from '../../../../contexts/AuthContext';
+import { workflowService, approverLabel, type RequestStatus } from '../../../../services/workflow';
+import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 
 const statusColor: Record<string, string> = { pending: 'gold', approved: 'green', rejected: 'red', cancelled: 'default' };
 
 export function ApprovalsTab({ companyId }: { companyId: number }) {
-  const { user } = useAuth();
+  const access = useCompanyAccess();
+  const [status, setStatus] = useState<Map<number, RequestStatus>>(new Map());
   const [filter, setFilter] = useState<'pending' | 'all'>('pending');
   const [rows, setRows] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,7 +17,9 @@ export function ApprovalsTab({ companyId }: { companyId: number }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setRows(await leaveService.requests(companyId, filter === 'pending' ? { status: 'pending' } : {}));
+      const list = await leaveService.requests(companyId, filter === 'pending' ? { status: 'pending' } : {});
+      setRows(list);
+      setStatus(await workflowService.status('leave', list.filter(r => r.status === 'pending').map(r => r.id)));
     } catch (e: any) { message.error(e.message); }
     setLoading(false);
   }, [companyId, filter]);
@@ -36,8 +40,8 @@ export function ApprovalsTab({ companyId }: { companyId: number }) {
       okButtonProps: { danger: decision === 'rejected' },
       onOk: async () => {
         try {
-          await leaveService.decide(r.id, decision, note, user!.id);
-          message.success(`Leave ${decision}`);
+          const res = await workflowService.decide('leave', r.id, decision, note);
+          message.success(res === 'pending' ? 'Approved — passed on to the next step' : `Leave ${decision}`);
           load();
         } catch (e: any) { message.error(e.message); }
       },
@@ -60,14 +64,23 @@ export function ApprovalsTab({ companyId }: { companyId: number }) {
           { title: 'To', dataIndex: 'end_date', key: 'to' },
           { title: 'Days', dataIndex: 'days', key: 'd' },
           { title: 'Reason', dataIndex: 'reason', key: 'r', render: (v: string) => v || '—' },
-          { title: 'Status', dataIndex: 'status', key: 's', render: (v: string) => <Tag color={statusColor[v]}>{v}</Tag> },
+          { title: 'Status', dataIndex: 'status', key: 's', render: (v: string, r) => {
+            const st = status.get(r.id);
+            return <Space size={4} wrap><Tag color={statusColor[v]}>{v}</Tag>{st?.mode === 'flow' && <Tag>Step {st.step_no} of {st.steps_total}</Tag>}</Space>;
+          } },
           {
-            title: '', key: 'act', render: (_, r) => r.status === 'pending' ? (
-              <Space>
-                <Button size="small" type="primary" ghost icon={<CheckOutlined />} onClick={() => decide(r, 'approved')}>Approve</Button>
-                <Button size="small" danger icon={<CloseOutlined />} onClick={() => decide(r, 'rejected')}>Reject</Button>
-              </Space>
-            ) : (r.decision_note || '—'),
+            title: '', key: 'act', render: (_, r) => {
+              if (r.status !== 'pending') return r.decision_note || '—';
+              const st = status.get(r.id);
+              // before update 043 there is no status: the Approve tick decides
+              const canAct = st ? st.can_act : access.can('leave', 'approve');
+              return canAct ? (
+                <Space>
+                  <Button size="small" type="primary" ghost icon={<CheckOutlined />} onClick={() => decide(r, 'approved')}>Approve</Button>
+                  <Button size="small" danger icon={<CloseOutlined />} onClick={() => decide(r, 'rejected')}>Reject</Button>
+                </Space>
+              ) : <span style={{ color: 'rgba(240,237,230,0.45)' }}>{st?.mode === 'flow' ? `Waiting for ${approverLabel(st.waiting_for || '')}` : '—'}</span>;
+            },
           },
         ]}
       />

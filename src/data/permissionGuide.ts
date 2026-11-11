@@ -12,7 +12,7 @@ export const MODULE_GUIDE: Record<string, { covers: string; built: boolean }> = 
   crm:        { covers: 'Customers and suppliers with their contact people (CRM).', built: true },
   projects:   { covers: 'Projects, tasks, milestones and timesheets (Projects). View: the Projects menu, and logging your own hours. Create / edit / delete: managing projects, tasks and milestones, and everyone’s timesheets.', built: true },
   users:      { covers: 'Logins, roles and permissions. Changing them also needs “Can see pay & manage users”.', built: true },
-  workflow:   { covers: 'Approval chains (who approves what, in which order).', built: false },
+  workflow:   { covers: 'Approval chains for leave and claims (Workflow): who approves, in which order, and for requests of what size. View: see the chains. Create / edit: change them. Without a chain, anyone with the Approve tick decides.', built: true },
   settings:   { covers: 'Company settings: leave, payroll and approval rules, work week, holidays, document numbers.', built: true },
 };
 
@@ -49,6 +49,11 @@ export const PERMISSION_TICKS: Record<string, Partial<Record<string, string>>> =
     create: 'HR → Attendance appears: everyone’s hours; add hours for anyone',
     edit: 'HR → Attendance appears: everyone’s hours; add and correct entries',
     delete: 'Remove attendance entries',
+  },
+  workflow: {
+    view: 'The Workflow menu appears: see the approval chains',
+    create: 'Change the approval chains',
+    edit: 'Change the approval chains',
   },
   projects: {
     view: 'The Projects menu appears: see projects, and log your own hours',

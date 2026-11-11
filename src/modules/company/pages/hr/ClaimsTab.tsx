@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import { claimService, CLAIM_CATEGORIES, type Claim, type ClaimReceipt } from '../../../../services/claims';
 import { leaveService, hrService, type Employee } from '../../../../services/hr';
 import { ATTACH_TYPES } from '../../../../services/finance';
+import { workflowService, approverLabel, type RequestStatus } from '../../../../services/workflow';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { supabase } from '../../../../utils/supabase';
@@ -200,6 +201,7 @@ export function ClaimsTab({ companyId }: { companyId: number }) {
   const [rejecting, setRejecting] = useState<Claim | null>(null);
   const [note, setNote] = useState('');
   const [viewing, setViewing] = useState<ClaimReceipt | null>(null);
+  const [chain, setChain] = useState<Map<number, RequestStatus>>(new Map());
   const paidState = usePaidState(claims);
 
   const load = useCallback(async () => {
@@ -208,6 +210,7 @@ export function ClaimsTab({ companyId }: { companyId: number }) {
       const [list, emps, cur] = await Promise.all([claimService.list(companyId), hrService.listEmployees(companyId).catch(() => []), companyCurrency(companyId)]);
       setClaims(list); setEmployees(emps); setCurrency(cur);
       setFiles(await claimService.receipts(list.map(c => c.id)));
+      setChain(await workflowService.status('claim', list.filter(c => c.status === 'pending').map(c => c.id)));
     } catch (e: any) { message.error(e.message); }
     setLoading(false);
   }, [companyId]);
@@ -217,7 +220,11 @@ export function ClaimsTab({ companyId }: { companyId: number }) {
   const shown = claims.filter(c => filter === 'all' || c.status === filter);
   const count = (s: string) => claims.filter(c => c.status === s).length;
   const decide = async (c: Claim, status: 'approved' | 'rejected', why?: string) => {
-    try { await claimService.decide(c.id, status, why); message.success(status === 'approved' ? 'Approved' : 'Rejected'); load(); }
+    try {
+      const res = await claimService.decide(c.id, status, why);
+      message.success(res === 'pending' ? 'Approved — passed on to the next step' : status === 'approved' ? 'Approved' : 'Rejected');
+      load();
+    }
     catch (e: any) { message.error(e.message); }
   };
 
@@ -249,16 +256,20 @@ export function ClaimsTab({ companyId }: { companyId: number }) {
           { title: 'Status', key: 's', render: (_, c) => (
             <Space size={4} wrap>
               <Tag color={CLAIM_STATUS_COLOR[c.status]}>{c.status[0].toUpperCase() + c.status.slice(1)}</Tag>
+              {chain.get(c.id)?.mode === 'flow' && <Tag>Step {chain.get(c.id)!.step_no} of {chain.get(c.id)!.steps_total}</Tag>}
               {paidState(c)}
               {c.decision_note && <Text type="secondary" style={{ fontSize: 12 }}>{c.decision_note}</Text>}
             </Space>
           ) },
           { title: '', key: 'x', width: 220, render: (_, c) => (
             <Space size={4}>
-              {canApprove && c.status === 'pending' && <>
+              {c.status === 'pending' && (chain.get(c.id) ? chain.get(c.id)!.can_act : canApprove) && <>
                 <Button size="small" type="primary" icon={<CheckOutlined />} onClick={() => decide(c, 'approved')}>Approve</Button>
                 <Button size="small" danger icon={<CloseOutlined />} onClick={() => { setRejecting(c); setNote(''); }}>Reject</Button>
               </>}
+              {c.status === 'pending' && chain.get(c.id)?.mode === 'flow' && !chain.get(c.id)!.can_act && (
+                <Text type="secondary" style={{ fontSize: 12 }}>Waiting for {approverLabel(chain.get(c.id)!.waiting_for || '')}</Text>
+              )}
               {canWrite && c.status === 'pending' && <Button size="small" onClick={() => setEditing(c)}>Change</Button>}
               {canRemove && !c.document_id && (
                 <Popconfirm title="Delete this claim?" onConfirm={async () => { try { await claimService.remove(c.id); load(); } catch (e: any) { message.error(e.message); } }}>

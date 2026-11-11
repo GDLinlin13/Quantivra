@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from './AuthContext';
+import { workflowService, type FlowKind } from '../services/workflow';
 
 /**
  * What the signed-in company user may open, from their roles:
@@ -22,28 +23,31 @@ interface CompanyAccess {
   canRemove: (module: string) => boolean;
   /** false when the company switched the section off in Settings → Modules */
   isOn: (module: string) => boolean;
+  /** kinds of request this person approves ('leave', 'claim'): by tick, as a line manager, or by a step's role */
+  approves: FlowKind[];
   reload: () => void;
 }
 
 const Ctx = createContext<CompanyAccess>({
   loading: true, canViewPay: false, can: () => false, canAny: () => false,
   // outside the provider (tests) nothing is hidden; the database still decides
-  canWrite: () => true, canRemove: () => true, isOn: () => true, reload: () => {},
+  canWrite: () => true, canRemove: () => true, isOn: () => true, approves: [], reload: () => {},
 });
 
 export function CompanyAccessProvider({ children }: { children: ReactNode }) {
   const { user, companyId } = useAuth();
-  const [state, setState] = useState<{ loading: boolean; pay: boolean; perms: Set<string>; off: Set<string> }>({ loading: true, pay: false, perms: new Set(), off: new Set() });
+  const [state, setState] = useState<{ loading: boolean; pay: boolean; perms: Set<string>; off: Set<string>; approves: FlowKind[] }>({ loading: true, pay: false, perms: new Set(), off: new Set(), approves: [] });
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
     if (!user?.id || !companyId) return;
     let active = true;
     (async () => {
-      const [pay, links, off] = await Promise.all([
+      const [pay, links, off, approves] = await Promise.all([
         supabase.rpc('app_can_view_pay', { p_company_id: companyId }),
         supabase.from('company_user_roles').select('role_id').eq('user_id', user.id),
         supabase.from('company_settings').select('value').eq('company_id', companyId).eq('category', 'company').eq('key', 'modules_off').maybeSingle(),
+        workflowService.approverKinds(companyId),
       ]);
       const roleIds = (links.data || []).map((l: any) => l.role_id);
       const perms = roleIds.length
@@ -54,8 +58,9 @@ export function CompanyAccessProvider({ children }: { children: ReactNode }) {
         pay: pay.data === true,
         perms: new Set(perms.map((p: any) => `${p.module}:${p.action}`)),
         off: new Set<string>(Array.isArray(off.data?.value?.modules) ? off.data.value.modules : []),
+        approves,
       });
-    })().catch(() => { if (active) setState({ loading: false, pay: false, perms: new Set(), off: new Set() }); });
+    })().catch(() => { if (active) setState({ loading: false, pay: false, perms: new Set(), off: new Set(), approves: [] }); });
     return () => { active = false; };
   }, [user?.id, companyId, tick]);
 
@@ -69,6 +74,7 @@ export function CompanyAccessProvider({ children }: { children: ReactNode }) {
     canWrite: m => can(m, 'create') || can(m, 'edit'),
     canRemove: m => can(m, 'delete') || can(m, 'edit'),
     isOn,
+    approves: state.approves,
     reload: () => setTick(t => t + 1),
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

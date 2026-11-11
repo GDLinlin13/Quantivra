@@ -21,6 +21,7 @@ import { CompanyCatalogPage } from '../modules/company/pages/Catalog';
 import { CompanyDocumentsPage } from '../modules/company/pages/Documents';
 import { CompanyCRMPage } from '../modules/company/pages/CRM';
 import { CompanyProjectsPage } from '../modules/company/pages/Projects';
+import { CompanyWorkflowPage } from '../modules/company/pages/Workflow';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -48,6 +49,7 @@ export const router = createBrowserRouter([
       { path: 'inventory', element: <Navigate to="/company/catalog" replace /> },
       { path: 'crm', element: <CompanyCRMPage /> },
       { path: 'projects', element: <CompanyProjectsPage /> },
+      { path: 'workflow', element: <CompanyWorkflowPage /> },
       { path: 'reports', element: <Navigate to="/company/finance" replace /> },
       { path: 'profile', element: <CompanyProfilePage /> },
       { path: 'users', element: <CompanyUsersPage /> },

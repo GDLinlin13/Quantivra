@@ -37,6 +37,7 @@ function CompanyLayoutInner() {
   // HR appears when at least one of its tabs would
   const showHR = access.can('leave') || access.can('leave', 'approve') || access.can('leave', 'edit')
     || ['view', 'approve', 'create', 'edit', 'delete'].some(a => access.can('claims', a))
+    || (access.isOn('leave') && access.approves.includes('leave')) || (access.isOn('claims') && access.approves.includes('claim'))
     || ['view', 'create', 'edit', 'delete'].some(a => access.can('attendance', a))
     || access.can('employees') || access.can('employees', 'edit')
     || (access.canViewPay && access.isOn('payroll'));
@@ -47,6 +48,7 @@ function CompanyLayoutInner() {
     access.can('inventory') && { key: '/company/catalog', icon: <ShopOutlined />, label: 'Catalog' },
     access.can('crm') && { key: '/company/crm', icon: <ContactsOutlined />, label: 'CRM' },
     access.can('projects') && { key: '/company/projects', icon: <ProjectOutlined />, label: 'Projects' },
+    access.can('workflow') && { key: '/company/workflow', icon: <PartitionOutlined />, label: 'Workflow' },
   ].filter(Boolean) as { key: string; icon: React.ReactNode; label: string }[];
 
   const adminMenu = !access.canViewPay ? [] : [
