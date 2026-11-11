@@ -75,7 +75,7 @@ export const financeSettingsService = {
 
 // ---- files attached to documents (migration 028) --------------------------------------------
 
-const ATTACH_BUCKET = 'fin-attachments';
+export const ATTACH_BUCKET = 'fin-attachments';
 export interface Attachment { id: number; document_id: number; path: string; file_name: string; content_type: string | null; size_bytes: number | null }
 export const ATTACH_TYPES = '.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.xls,.xlsx,.xlsm,.csv,.doc,.docx,.ppt,.pptx';
 /** The file's type; some computers leave it empty for Excel / CSV, so work it out from the name. */
@@ -93,7 +93,7 @@ export const contentTypeOf = (file: File) => {
 export const ATTACH_MAX_MB = 50;
 
 /** Shrink pictures, then check the size; storage's own limit is 50 MB from database update 035 (10 MB before). */
-async function readyToUpload(original: File): Promise<File> {
+export async function readyToUpload(original: File): Promise<File> {
   const max = ATTACH_MAX_MB * 1024 * 1024;
   let file = await shrinkFile(original);
   // a PDF over the limit is redrawn smaller (pages as pictures)
@@ -113,13 +113,13 @@ async function readyToUpload(original: File): Promise<File> {
   return file;
 }
 /** Big files take a while to send: say so until they're stored. */
-async function sending<T>(file: File, run: () => Promise<T>): Promise<T> {
+export async function sending<T>(file: File, run: () => Promise<T>): Promise<T> {
   if (file.size < 5 * 1024 * 1024) return run();
   const key = `upload-${file.name}`;
   message.open({ key, type: 'loading', content: `Uploading ${file.name} (${(file.size / 1048576).toFixed(1)} MB)…`, duration: 0 });
   try { return await run(); } finally { message.destroy(key); }
 }
-const uploadError = (file: File, msg: string) =>
+export const uploadError = (file: File, msg: string) =>
   /exceed|too large|maximum allowed size|payload/i.test(msg) ? `${file.name} is too big for the current limit (10 MB). Files up to 50 MB need database update 035 — ask your administrator to run it in Supabase.`
     : /mime|type/i.test(msg) ? `${file.name}: only PDF, pictures and Microsoft Office (Word, Excel, PowerPoint) files can be uploaded` : msg;
 

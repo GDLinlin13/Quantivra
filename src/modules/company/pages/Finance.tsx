@@ -12,6 +12,7 @@ import { FinanceSettingsTab } from './finance/FinanceSettingsTab';
 import { Accounting } from './finance/Accounting';
 import { Bank } from './finance/Bank';
 import { PayrollPayables } from './finance/PayrollPayables';
+import { StaffClaims } from './finance/StaffClaims';
 
 const { Title } = Typography;
 
@@ -69,6 +70,7 @@ export function CompanyFinancePage() {
         <Tabs activeKey={tab.purchases} onChange={k => change('purchases', k)} items={[
           { key: 'bills', label: 'Bills', children: <DocList data={d} docType="bill" /> },
           { key: 'payroll', label: 'Payroll', children: <PayrollPayables data={d} /> },
+          { key: 'claims', label: 'Staff claims', children: <StaffClaims data={d} /> },
           { key: 'paid', label: 'Payments made', children: <PaymentsList data={d} direction="out" /> },
         ]} />
       )}
