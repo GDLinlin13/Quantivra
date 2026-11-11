@@ -869,6 +869,8 @@ export const catalogService = {
       // stock by weight (migration 046); left out until an item uses it
       ...(i.stock_mode !== undefined ? {
         stock_mode: i.stock_mode, price_basis: i.price_basis || 'per_kg',
+        // selling basis (migration 047); left out unless it differs, so older databases keep saving
+        ...(i.sale_basis && i.sale_basis !== (i.price_basis || 'per_kg') ? { sale_basis: i.sale_basis } : i.sale_basis !== undefined ? { sale_basis: null } : {}),
         loose_unit: i.stock_mode === 'loose' ? (i.loose_unit || '').trim() || null : null,
         loose_factor: i.stock_mode === 'loose' ? Number(i.loose_factor) || null : null,
       } : {}),

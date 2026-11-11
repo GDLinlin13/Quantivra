@@ -75,6 +75,12 @@ describe('stock by weight', () => {
     expect(piecePrice({ price_basis: 'per_piece' }, cls[0], 2.5, false)).toEqual({ quantity: 1, unit_price: 200 });
     expect(piecePrice({ price_basis: 'per_kg' }, null, 2.5, true)).toEqual({ quantity: 2.5, unit_price: 0 });
   });
+  it('buys per KG and sells per piece', () => {
+    const mixed = { price_basis: 'per_kg', sale_basis: 'per_piece' } as const;
+    expect(piecePrice(mixed, cls[0], 2.5, false)).toEqual({ quantity: 2.5, unit_price: 200 });
+    expect(piecePrice(mixed, cls[0], 2.5, true)).toEqual({ quantity: 1, unit_price: 260 });
+    expect(piecePrice({ price_basis: 'per_kg' }, cls[0], 2.5, true)).toEqual({ quantity: 2.5, unit_price: 260 });
+  });
   it('converts loose amounts', () => {
     expect(fromLoose(250, 1000)).toBe(0.25);
     expect(toLoose(0.015, 1000)).toBe(15);
