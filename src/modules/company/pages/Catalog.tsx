@@ -213,7 +213,9 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
     <Drawer open onClose={onClose} size={640} title={item.id ? item.name : kind === 'service' ? 'New service' : 'New product'}
       extra={canWrite && <Button type="primary" loading={saving} onClick={submit}>Save</Button>}>
       <ConfigProvider componentDisabled={!canWrite}>
-      <Form form={form} layout="vertical" initialValues={{ kind: 'product', used_for: 'both', ...item, tax_rate: item.tax_rate == null ? 'default' : Number(item.tax_rate) }}>
+      <Form form={form} layout="vertical" initialValues={{ kind: 'product', used_for: 'both', ...item, tax_rate: item.tax_rate == null ? 'default' : Number(item.tax_rate),
+          // an empty selling basis means "the same as the buying basis"; show it as chosen
+          price_basis: item.price_basis || 'per_kg', sale_basis: item.sale_basis || item.price_basis || 'per_kg' }}>
         <Space size={16} wrap style={{ marginBottom: 16 }}>
           <Form.Item name="kind" noStyle><Segmented options={[{ value: 'product', label: 'Product' }, { value: 'service', label: 'Service' }]} /></Form.Item>
           <Form.Item name="used_for" noStyle><Segmented options={[{ value: 'sales', label: 'Sales' }, { value: 'purchases', label: 'Purchases' }, { value: 'both', label: 'Both' }]} /></Form.Item>
@@ -285,10 +287,10 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
                     Each piece has its own weight and is sold once. The weight decides the class and the price; buy them on a bill (one line per piece) or receive them in Stock → Pieces.
                   </Text>
                   <Space size={24} wrap align="start">
-                    <Form.Item name="price_basis" label="Buying prices are" initialValue="per_kg">
+                    <Form.Item name="price_basis" label="Buying prices are">
                       <Segmented options={[{ value: 'per_kg', label: 'Per KG' }, { value: 'per_piece', label: 'Per piece' }]} />
                     </Form.Item>
-                    <Form.Item name="sale_basis" label="Selling prices are" initialValue={item.sale_basis || item.price_basis || 'per_kg'}>
+                    <Form.Item name="sale_basis" label="Selling prices are">
                       <Segmented options={[{ value: 'per_kg', label: 'Per KG' }, { value: 'per_piece', label: 'Per piece' }]} />
                     </Form.Item>
                   </Space>
