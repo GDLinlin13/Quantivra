@@ -13,8 +13,10 @@ export interface CatalogItem {
   purchase_currency?: string | null;
   /** normal; pieces = each piece has its own weight and is sold once; loose = any amount of a small unit (migration 046) */
   stock_mode?: StockMode;
-  /** pieces: class prices are per KG (x the piece's weight) or one price per piece */
+  /** pieces: the buying (cost) prices of the classes are per KG (x the piece's weight) or one price per piece */
   price_basis?: 'per_kg' | 'per_piece';
+  /** pieces: the same for the selling prices; empty = as price_basis (migration 047) */
+  sale_basis?: 'per_kg' | 'per_piece' | null;
   /** loose: the small unit ("g") and how many make one item unit (1 kg = 1000 g) */
   loose_unit?: string | null; loose_factor?: number | null;
 }
@@ -49,9 +51,11 @@ export function classOf<T extends Pick<WeightClass, 'min_kg' | 'max_kg'>>(classe
 }
 
 /** What a piece is priced at: the class price x its weight, or the class price as it stands. */
-export function piecePrice(item: Pick<CatalogItem, 'price_basis'>, cls: Pick<WeightClass, 'sale_price' | 'purchase_price'> | null, weight: number, sales: boolean): { quantity: number; unit_price: number } {
+export const basisOf = (item: Pick<CatalogItem, 'price_basis' | 'sale_basis'>, sales: boolean) => (sales ? item.sale_basis || item.price_basis : item.price_basis) || 'per_kg';
+
+export function piecePrice(item: Pick<CatalogItem, 'price_basis' | 'sale_basis'>, cls: Pick<WeightClass, 'sale_price' | 'purchase_price'> | null, weight: number, sales: boolean): { quantity: number; unit_price: number } {
   const price = cls ? Number(sales ? cls.sale_price : cls.purchase_price) || 0 : 0;
-  return item.price_basis === 'per_piece' ? { quantity: 1, unit_price: price } : { quantity: Number(weight) || 0, unit_price: price };
+  return basisOf(item, sales) === 'per_piece' ? { quantity: 1, unit_price: price } : { quantity: Number(weight) || 0, unit_price: price };
 }
 
 /** Pieces that are on an invoice (not void) are gone; quotations and bills don't take pieces away. */

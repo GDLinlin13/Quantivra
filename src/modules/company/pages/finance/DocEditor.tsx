@@ -14,7 +14,7 @@ import {
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
-import { priceFor, classOf, classLabel, piecePrice, kgText, type CatalogItem, type CustomerPrice, type WeightClass, type Piece } from '../../../../data/catalog';
+import { priceFor, basisOf, classOf, classLabel, piecePrice, kgText, type CatalogItem, type CustomerPrice, type WeightClass, type Piece } from '../../../../data/catalog';
 import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
@@ -413,7 +413,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
           } },
           { title: 'Unit price', width: 120, render: (_, l, i) => {
             const it = l.item_id ? items.find(x => x.id === l.item_id) : null;
-            const per = it && (it.stock_mode === 'loose' || (it.stock_mode === 'pieces' && it.price_basis !== 'per_piece')) ? `/ ${it.stock_mode === 'pieces' ? 'kg' : it.unit || ''}` : undefined;
+            const per = it && (it.stock_mode === 'loose' || (it.stock_mode === 'pieces' && basisOf(it, sales) !== 'per_piece')) ? `/ ${it.stock_mode === 'pieces' ? 'kg' : it.unit || ''}` : undefined;
             return <AmountInput style={{ width: '100%' }} precision={2} suffix={per} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} />;
           } },
           { title: 'Disc %', width: 80, render: (_, l, i) => <InputNumber style={{ width: '100%' }} min={0} max={100} value={l.discount_pct} onChange={v => setLine(i, { discount_pct: Number(v) || 0 })} /> },

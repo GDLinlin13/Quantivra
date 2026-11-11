@@ -159,6 +159,7 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
   const [custPrices, setCustPrices] = useState<{ contact_id: number | null; price: number | null }[]>([]);
   const mode: StockMode = Form.useWatch('stock_mode', form) ?? item.stock_mode ?? 'normal';
   const basis = Form.useWatch('price_basis', form) ?? item.price_basis ?? 'per_kg';
+  const saleBasis = Form.useWatch('sale_basis', form) ?? item.sale_basis ?? basis;
   const [classes, setClasses] = useState<WeightClass[]>([]);
   useEffect(() => {
     if (item.id) catalogService.classes(companyId).then(cs => setClasses(cs.filter(c => c.item_id === item.id))).catch(() => null);
@@ -189,7 +190,7 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
     try {
       const { purchase_currency: _pc, ...rest } = { ...item, ...v } as any;
       // stock by weight needs database update 046; items that don't use it never send it
-      if (rest.stock_mode === 'normal' && !('stock_mode' in item)) { delete rest.stock_mode; delete rest.price_basis; }
+      if (rest.stock_mode === 'normal' && !('stock_mode' in item)) { delete rest.stock_mode; delete rest.price_basis; delete rest.sale_basis; }
       if (rest.stock_mode === 'pieces') {
         if (!classes.length) throw new Error('Add at least one weight class');
         if (classes.some(c => c.min_kg == null || (c.max_kg != null && Number(c.max_kg) < Number(c.min_kg)))) throw new Error('Check the weight classes: “to” must not be below “from”');
@@ -283,12 +284,17 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
                   <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
                     Each piece has its own weight and is sold once. The weight decides the class and the price; buy them on a bill (one line per piece) or receive them in Stock → Pieces.
                   </Text>
-                  <Form.Item name="price_basis" label="Class prices are" initialValue="per_kg">
-                    <Segmented options={[{ value: 'per_kg', label: 'Per KG (× the piece’s weight)' }, { value: 'per_piece', label: 'One price per piece' }]} />
-                  </Form.Item>
+                  <Space size={24} wrap align="start">
+                    <Form.Item name="price_basis" label="Buying prices are" initialValue="per_kg">
+                      <Segmented options={[{ value: 'per_kg', label: 'Per KG' }, { value: 'per_piece', label: 'Per piece' }]} />
+                    </Form.Item>
+                    <Form.Item name="sale_basis" label="Selling prices are" initialValue={item.sale_basis || item.price_basis || 'per_kg'}>
+                      <Segmented options={[{ value: 'per_kg', label: 'Per KG' }, { value: 'per_piece', label: 'Per piece' }]} />
+                    </Form.Item>
+                  </Space>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 1.2fr auto', gap: 8, marginBottom: 4 }}>
                     <Text type="secondary">From (kg)</Text><Text type="secondary">To (kg)</Text>
-                    <Text type="secondary">{basis === 'per_kg' ? 'Selling / KG' : 'Selling / piece'}</Text><Text type="secondary">{basis === 'per_kg' ? 'Cost / KG' : 'Cost / piece'}</Text><span />
+                    <Text type="secondary">{saleBasis === 'per_kg' ? 'Selling / KG' : 'Selling / piece'}</Text><Text type="secondary">{basis === 'per_kg' ? 'Cost / KG' : 'Cost / piece'}</Text><span />
                   </div>
                   {classes.map((c, i) => (
                     <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 1.2fr auto', gap: 8, marginBottom: 6 }}>
