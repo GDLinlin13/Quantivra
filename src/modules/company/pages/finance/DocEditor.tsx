@@ -319,7 +319,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
               options={catalog.map(it => ({ value: it.id, label: `${it.code ? `${it.code} · ` : ''}${it.name}` }))} />
           ) }] : []),
           { title: 'Description', render: (_, l, i) => <Input.TextArea style={{ minWidth: 280 }} autoSize={{ minRows: 1, maxRows: 6 }} value={l.description} onChange={e => setLine(i, { description: e.target.value })} /> },
-          ...(lineAccounts.length && !sales ? [{ title: 'Account', width: 180, render: (_: any, l: DocLine, i: number) => (
+          ...(lineAccounts.length && !sales ? [{ title: 'Account', width: 240, render: (_: any, l: DocLine, i: number) => (
             <Select style={{ width: '100%' }} showSearch optionFilterProp="label" value={l.account_id ?? undefined} onChange={v => setLine(i, { account_id: v })}
               options={accountOptions as any} placeholder="General expenses" />
           ) }] : []),

@@ -7,6 +7,7 @@ import { NoAutofill } from './components/NoAutofill';
 export default function App() {
   return (
     <ConfigProvider
+      popupMatchSelectWidth={false}
       theme={{
         algorithm: theme.darkAlgorithm,
         token: {
