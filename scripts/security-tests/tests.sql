@@ -1119,6 +1119,46 @@ DELETE FROM fin_documents WHERE number IN ('PC-1', 'PC-2');
 DELETE FROM catalog_items WHERE name = 'Patin';
 COMMIT;
 
+\echo '9s. price lists: lists and prices stay inside their company, a customer only takes a list of their own company'
+BEGIN; :as_a
+DO $$
+DECLARE v_i bigint; v_l bigint; v_c bigint;
+BEGIN
+  INSERT INTO catalog_items (company_id, name, sale_price) VALUES (1, 'Pl item', 10) RETURNING id INTO v_i;
+  INSERT INTO price_lists (company_id, name) VALUES (1, 'Restaurants') RETURNING id INTO v_l;
+  INSERT INTO price_list_items (company_id, price_list_id, item_id, price) VALUES (1, v_l, v_i, 8);
+  INSERT INTO contacts (company_id, name, is_customer, price_list_id) VALUES (1, 'Pl customer', true, v_l) RETURNING id INTO v_c;
+  PERFORM set_config('qv.alpha_list', v_l::text, false);
+  PERFORM set_config('qv.alpha_item', v_i::text, false);
+  BEGIN INSERT INTO price_lists (company_id, name) VALUES (2, 'Planted'); RAISE EXCEPTION 'FAIL: A added a price list to B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO price_lists (company_id, name) VALUES (1, 'restaurants'); RAISE EXCEPTION 'FAIL: duplicate list name allowed';
+  EXCEPTION WHEN unique_violation THEN NULL; END;
+  BEGIN INSERT INTO price_list_items (company_id, price_list_id, item_id, price) VALUES (1, v_l, v_i, 9); RAISE EXCEPTION 'FAIL: one item twice on a list';
+  EXCEPTION WHEN unique_violation THEN NULL; END;
+END $$;
+COMMIT;
+BEGIN; :as_b
+DO $$
+DECLARE v_c bigint;
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM price_lists WHERE company_id = 1), 'FAIL: B sees A price lists';
+  ASSERT NOT EXISTS (SELECT 1 FROM price_list_items WHERE company_id = 1), 'FAIL: B sees A prices';
+  INSERT INTO contacts (company_id, name, is_customer) VALUES (2, 'Beta buyer 2', true) RETURNING id INTO v_c;
+  BEGIN UPDATE contacts SET price_list_id = current_setting('qv.alpha_list')::bigint WHERE id = v_c;
+    RAISE EXCEPTION 'FAIL: B put a customer on an A price list';
+  EXCEPTION WHEN insufficient_privilege OR foreign_key_violation OR check_violation THEN NULL; END;
+  BEGIN INSERT INTO price_list_items (company_id, price_list_id, item_id, price) VALUES (2, current_setting('qv.alpha_list')::bigint, current_setting('qv.alpha_item')::bigint, 1);
+    RAISE EXCEPTION 'FAIL: B priced an A item on an A list';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_a
+DELETE FROM contacts WHERE name = 'Pl customer';
+DELETE FROM price_lists WHERE name = 'Restaurants';
+DELETE FROM catalog_items WHERE name = 'Pl item';
+COMMIT;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;

@@ -65,7 +65,8 @@ export function CompanyFinancePage() {
       {area === 'sales' && (
         <Tabs activeKey={tab.sales} onChange={k => change('sales', k)} items={[
           { key: 'invoices', label: 'Invoices', children: <DocList data={d} docType="invoice" /> },
-          { key: 'quotes', label: 'Quotations', children: <DocList data={d} docType="quote" /> },
+          // price lists replace quotations: the tab shows when switched on in GST & settings, or while quotations exist
+          ...(d.settings.quotationsOn || d.docs.some(x => x.doc_type === 'quote') ? [{ key: 'quotes', label: 'Quotations', children: <DocList data={d} docType="quote" /> }] : []),
           { key: 'received', label: 'Payments received', children: <PaymentsList data={d} direction="in" /> },
           { key: 'statements', label: 'Statements', children: <Statements data={d} /> },
         ]} />

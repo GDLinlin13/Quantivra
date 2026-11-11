@@ -32,6 +32,10 @@ export function FinanceSettingsTab({ companyId, country, settings, onSaved }: { 
             <Form.Item label={taxRegLabel(country)}><Input value={s.gstNumber || ''} onChange={e => setS({ ...s, gstNumber: e.target.value })} /></Form.Item>
           </div>
         )}
+        <Form.Item label="Quotations">
+          <Switch checked={!!s.quotationsOn} onChange={v => setS({ ...s, quotationsOn: v })} checkedChildren="On" unCheckedChildren="Off" />
+          <Text type="secondary" style={{ marginLeft: 12, fontSize: 12 }}>Off by default: price lists (Catalog) replace quotations. Existing quotations stay visible.</Text>
+        </Form.Item>
         <Form.Item label="Quotations are valid for (days)">
           <InputNumber min={0} value={s.quoteValidityDays ?? 30} onChange={v => setS({ ...s, quoteValidityDays: Number(v) || 0 })} />
         </Form.Item>

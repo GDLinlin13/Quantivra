@@ -15,6 +15,8 @@ import { currencyOptions } from '../../../utils/currencies';
 import { money } from '../../../data/documentLayouts';
 import { AmountInput } from '../../../components/AmountInput';
 import { useCompanyAccess } from '../../../contexts/CompanyAccess';
+import { PriceListsTab } from './PriceLists';
+import { brandingService, type Branding } from '../../../services/branding';
 import { fmtDate } from '../../../utils/dateFormat';
 
 const { Title, Text } = Typography;
@@ -32,6 +34,8 @@ export function CompanyCatalogPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [settings, setSettings] = useState<FinanceSettings>(DEFAULT_FINANCE_SETTINGS);
   const [currency, setCurrency] = useState('SGD');
+  const [company, setCompany] = useState<any>(null);
+  const [branding, setBranding] = useState<Branding | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -42,12 +46,13 @@ export function CompanyCatalogPage() {
       const [it, adj, input, s, co, cls, pcs] = await Promise.all([
         catalogService.list(companyId), catalogService.adjustments(companyId), loadLedgerInput(companyId),
         financeSettingsService.get(companyId).catch(() => DEFAULT_FINANCE_SETTINGS),
-        supabase.from('companies').select('currency').eq('id', companyId).maybeSingle(),
+        supabase.from('companies').select('currency, country, name').eq('id', companyId).maybeSingle(),
         catalogService.classes(companyId), catalogService.pieces(companyId),
       ]);
       setClasses(cls); setPieces(pcs);
       setItems(it); setAdjustments(adj); setDocs(input.docs); setAccounts(input.accounts); setSettings(s);
-      setCurrency(co.data?.currency || 'SGD'); setError(null);
+      setCurrency(co.data?.currency || 'SGD'); setCompany(co.data); setError(null);
+      brandingService.get(companyId).then(setBranding).catch(() => null);
     } catch (e: any) {
       setError(/catalog_|does not exist|item_id/i.test(e.message) ? 'Catalog needs database update 025 — ask your administrator to run it in Supabase.' : e.message);
     }
@@ -65,6 +70,7 @@ export function CompanyCatalogPage() {
       <Title level={4} style={{ color: '#f0ede6' }}>Catalog</Title>
       <Tabs items={[
         { key: 'items', label: 'Products & services', children: <ItemsTab companyId={companyId} items={items} stock={stock} accounts={accounts} settings={settings} currency={currency} reload={load} /> },
+        { key: 'prices', label: 'Price lists', children: <PriceListsTab companyId={companyId} items={items} classes={classes} currency={currency} company={company} branding={branding} /> },
         { key: 'stock', label: 'Stock', children: <StockTab companyId={companyId} items={items} stock={stock} docs={docs} adjustments={adjustments} pieces={pieces} classes={classes} currency={currency} reload={load} /> },
       ]} />
     </div>
@@ -153,10 +159,7 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
   const priceCur = Form.useWatch('currency', form) || item.currency || currency;
   const buyWatch = Form.useWatch('purchase_currency', form);
   const buyCur = (sells && buys ? buyWatch : null) || priceCur;
-  // special prices for particular customers
-  const [customers, setCustomers] = useState<Contact[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [custPrices, setCustPrices] = useState<{ contact_id: number | null; price: number | null }[]>([]);
   const mode: StockMode = Form.useWatch('stock_mode', form) ?? item.stock_mode ?? 'normal';
   const basis = Form.useWatch('price_basis', form) ?? item.price_basis ?? 'per_kg';
   const saleBasis = Form.useWatch('sale_basis', form) ?? item.sale_basis ?? basis;
@@ -166,8 +169,7 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
   }, [companyId, item.id]);
   const setClass = (i: number, patch: Partial<WeightClass>) => setClasses(cs => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
   useEffect(() => {
-    contactService.list(companyId).then(cs => { setCustomers(cs.filter(c => c.is_customer && !c.archived)); setContacts(cs.filter(c => !c.archived)); }).catch(() => { setCustomers([]); setContacts([]); });
-    if (item.id) catalogService.prices(companyId, item.id).then(ps => setCustPrices(ps.map(p => ({ contact_id: p.contact_id, price: p.price })))).catch(() => null);
+    contactService.list(companyId).then(cs => setContacts(cs.filter(c => !c.archived))).catch(() => setContacts([]));
   }, [companyId, item.id]);
   const allCur = useMemo(() => currencyOptions(), []);
   const currencyGroups = (kind: 'suppliers' | 'customers', _for: string) => {
@@ -202,7 +204,6 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
         currency: v.currency && v.currency !== currency ? v.currency : null,
         ...(buyIn || 'purchase_currency' in item ? { purchase_currency: buyIn } : {}) });
       if (rest.stock_mode === 'pieces') await catalogService.saveClasses(companyId, id, classes);
-      await catalogService.setPrices(companyId, id, custPrices.filter(p => p.contact_id).map(p => ({ contact_id: p.contact_id!, price: Number(p.price) || 0 })));
       message.success('Saved'); onSaved(id);
     } catch (e: any) { message.error(e.message); }
     setSaving(false);
@@ -241,19 +242,6 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
           {sells && <Form.Item name="sale_price" label="Selling price"><AmountInput min={0} precision={2} prefix={priceCur} style={{ width: '100%' }} /></Form.Item>}
           {buys && <Form.Item name="purchase_price" label="Cost / buying price"><AmountInput min={0} precision={2} prefix={buyCur} style={{ width: '100%' }} /></Form.Item>}
         </div>
-        {sells && <Card size="small" style={{ background: 'transparent', marginBottom: 16 }} title="Customer prices"
-          extra={<Button size="small" icon={<PlusOutlined />} onClick={() => setCustPrices(ps => [...ps, { contact_id: null, price: Number(form.getFieldValue('sale_price')) || 0 }])}>Customer</Button>}>
-          {!custPrices.length ? <Text type="secondary">Every customer pays the selling price.</Text> : custPrices.map((p, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: 8, marginBottom: 8 }}>
-              <Select showSearch optionFilterProp="label" placeholder="Customer" value={p.contact_id ?? undefined}
-                onChange={v => setCustPrices(ps => ps.map((x, j) => (j === i ? { ...x, contact_id: v } : x)))}
-                options={customers.filter(c => c.id === p.contact_id || !custPrices.some(x => x.contact_id === c.id)).map(c => ({ value: c.id, label: c.name }))} />
-              <AmountInput min={0} precision={2} prefix={priceCur} style={{ width: '100%' }} value={p.price}
-                onChange={v => setCustPrices(ps => ps.map((x, j) => (j === i ? { ...x, price: v } : x)))} />
-              <Button icon={<DeleteOutlined />} onClick={() => setCustPrices(ps => ps.filter((_, j) => j !== i))} />
-            </div>
-          ))}
-        </Card>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="category" label="Category">
             <Select allowClear showSearch mode={undefined} options={categories.map(c => ({ value: c, label: c }))}

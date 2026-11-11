@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Drawer, Form, Input, InputNumber, Checkbox, Space, Tag, message, Popconfirm, Switch, Typography, Divider, Empty, Select, ConfigProvider } from 'antd';
 import { currencyOptions } from '../../../../utils/currencies';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
-import { contactService, docService } from '../../../../services/finance';
+import { contactService, docService, priceListService } from '../../../../services/finance';
+import type { PriceList } from '../../../../data/catalog';
 import { balanceDue, inBase, isSalesDoc, contactCurrencies, type Contact, type ContactPerson, type FinDocument } from '../../../../data/finance';
 import { money } from '../../../../data/documentLayouts';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
@@ -114,6 +115,9 @@ export function ContactDrawer({ companyId, contact, word, currency, docs, onClos
   const [form] = Form.useForm();
   const [people, setPeople] = useState<ContactPerson[]>([]);
   const [saving, setSaving] = useState(false);
+  const [priceLists, setPriceLists] = useState<PriceList[]>([]);
+  useEffect(() => { priceListService.lists(companyId).then(l => setPriceLists(l.filter(x => !x.archived || x.id === contact.price_list_id))).catch(() => setPriceLists([])); }, [companyId, contact.price_list_id]);
+  const isCustomer = Form.useWatch('is_customer', form);
 
   useEffect(() => {
     form.setFieldsValue({ is_customer: true, ...contact, currency: contactCurrencies(contact) });
@@ -151,6 +155,11 @@ export function ContactDrawer({ companyId, contact, word, currency, docs, onClos
           <Form.Item name="currency" label="Currencies they bill / pay in">
             <Select mode="multiple" showSearch allowClear optionFilterProp="label" placeholder={currency} options={currencyOptions()} />
           </Form.Item>
+          {isCustomer !== false && priceLists.length > 0 && (
+            <Form.Item name="price_list_id" label="Price list" style={{ gridColumn: '1 / -1' }}>
+              <Select allowClear placeholder="Normal selling prices" options={priceLists.map(l => ({ value: l.id, label: l.name }))} />
+            </Form.Item>
+          )}
           <Form.Item name="address" label="Address" style={{ gridColumn: '1 / -1' }}><Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
           <Form.Item name="notes" label="Notes" style={{ gridColumn: '1 / -1' }}><Input.TextArea autoSize={{ minRows: 2, maxRows: 6 }} /></Form.Item>
         </div>
