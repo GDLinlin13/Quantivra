@@ -205,10 +205,8 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, onCl
     setSaving(true);
     try {
       const { purchase_currency: _pc, ...rest } = { ...item, ...v } as any;
-      // sold in a smaller unit as well (kg and g): stocked "loose"; stock by weight needs database update 046, so plain items never send it
-      const small = (rest.loose_unit || '').trim(), factor = Number(rest.loose_factor) || 0;
-      if ((rest.stock_mode ?? 'normal') !== 'pieces') rest.stock_mode = kind === 'product' && small && factor > 0 ? 'loose' : 'normal';
-      if (small && !(factor > 0)) throw new Error('Enter how many ' + small + ' make one ' + (rest.unit || 'unit'));
+      // normal: any amount of the unit can be bought or sold (100 kg in, 1 kg or 0.1 kg out); stock by weight needs database update 046, so plain items never send it
+      if ((rest.stock_mode ?? 'normal') !== 'pieces') { rest.stock_mode = 'normal'; rest.loose_unit = null; rest.loose_factor = null; }
       if (rest.stock_mode === 'normal' && !('stock_mode' in item)) { delete rest.stock_mode; delete rest.price_basis; delete rest.sale_basis; delete rest.loose_unit; delete rest.loose_factor; }
       if (rest.stock_mode === 'pieces') {
         if (classes.some(c => c.min_kg == null || (c.max_kg != null && Number(c.max_kg) < Number(c.min_kg)))) throw new Error('Check the weight classes: “to” must not be below “from”');
@@ -261,16 +259,6 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, onCl
             </Form.Item>
           )}
         </div>
-        {kind === 'product' && mode !== 'pieces' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
-            <Form.Item name="loose_unit" label="Also sold in a smaller unit (optional)">
-              <Select allowClear showSearch optionFilterProp="label" placeholder="e.g. Gram (g)" options={UNITS} />
-            </Form.Item>
-            <Form.Item name="loose_factor" label={`How many make one ${form.getFieldValue('unit') || item.unit || 'unit'}`}>
-              <InputNumber min={0} style={{ width: '100%' }} placeholder="e.g. 1,000" />
-            </Form.Item>
-          </div>
-        )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           {settings.gstRegistered && (
             <Form.Item name="tax_rate" label="GST">
