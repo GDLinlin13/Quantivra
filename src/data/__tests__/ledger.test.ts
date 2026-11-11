@@ -266,3 +266,15 @@ describe('a USD invoice paid short in the USD bank, the gap booked as bank charg
     expect(bal('4900')).toBe(Math.round(50000 * (rate - 7.8) * 100) / 100); // exchange gain on the whole invoice
   });
 });
+
+describe('one payment clearing the bills of two suppliers', () => {
+  it('books each bill to its own supplier and the bank once', () => {
+    const b = (docId: number, contact: number, total: number) => doc({ id: docId, doc_type: 'bill', number: `BX-${docId}`, status: 'approved', issue_date: '2026-06-01', contact_id: contact, total, amount_paid: total, lines: [line('Goods', 1, total, 0, id('6700'))] });
+    const es = buildLedger({ ...input, docs: [b(41, 7, 100), b(42, 8, 60)], allocations: [{ payment_id: 91, document_id: 41, amount: 100 }, { payment_id: 91, document_id: 42, amount: 60 }],
+      payments: [{ id: 91, direction: 'out', number: 'P9', contact_id: null, payment_date: '2026-06-20', amount: 160, account_id: id('1010') }] } as any);
+    expect(es.every(e => Math.round(e.lines.reduce((t: number, l: any) => t + l.debit - l.credit, 0) * 100) === 0)).toBe(true);
+    const pay = es.find(e => e.source === 'payment_out')!;
+    expect(pay.lines.filter(l => l.account_id === id('2000')).map(l => [l.contact_id, l.debit])).toEqual([[7, 100], [8, 60]]);
+    expect(pay.lines.filter(l => l.account_id === id('1010')).map(l => l.credit)).toEqual([160]);
+  });
+});
