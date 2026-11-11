@@ -16,6 +16,7 @@ export function CompanyHRPage() {
   const canViewPay = access.canViewPay;
   const canManageStaff = access.can('employees', 'edit');
   const canApprove = access.can('leave', 'approve');
+  const canSeeStaff = canManageStaff || access.can('employees');
   if (!companyId) return <Alert type="error" message="No company context" />;
 
   return (
@@ -26,8 +27,8 @@ export function CompanyHRPage() {
           { key: 'leave', label: 'My Leave', children: <LeaveTab companyId={companyId} /> },
           ...(canApprove ? [{ key: 'approvals', label: 'Approvals', children: <ApprovalsTab companyId={companyId} /> }] : []),
           ...(canViewPay ? [{ key: 'payroll', label: 'Payroll', children: <PayrollTab companyId={companyId} /> }] : []),
+          ...(canSeeStaff ? [{ key: 'employees', label: 'Employees', children: <EmployeesTab companyId={companyId} /> }] : []),
           ...(canManageStaff ? [
-            { key: 'employees', label: 'Employees', children: <EmployeesTab companyId={companyId} /> },
             { key: 'balances', label: 'Leave Balances', children: <BalancesTab companyId={companyId} /> },
             { key: 'types', label: 'Leave Types', children: <LeaveTypesTab companyId={companyId} /> },
           ] : []),

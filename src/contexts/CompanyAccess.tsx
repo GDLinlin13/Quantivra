@@ -9,17 +9,24 @@ import { useAuth } from './AuthContext';
  *    database by migration 020)
  *  - can(module, action): the role's permissions (Roles page), used to decide
  *    which sections and tabs to show.
+ *  - canWrite(module) / canRemove(module): add & change (create or edit tick) /
+ *    remove (delete or edit tick); buttons follow these, and the database
+ *    enforces the same rules (migration 039).
  */
 interface CompanyAccess {
   loading: boolean;
   canViewPay: boolean;
   can: (module: string, action?: string) => boolean;
   canAny: (modules: string[], action?: string) => boolean;
+  canWrite: (module: string) => boolean;
+  canRemove: (module: string) => boolean;
   reload: () => void;
 }
 
 const Ctx = createContext<CompanyAccess>({
-  loading: true, canViewPay: false, can: () => false, canAny: () => false, reload: () => {},
+  loading: true, canViewPay: false, can: () => false, canAny: () => false,
+  // outside the provider (tests) nothing is hidden; the database still decides
+  canWrite: () => true, canRemove: () => true, reload: () => {},
 });
 
 export function CompanyAccessProvider({ children }: { children: ReactNode }) {
@@ -53,6 +60,8 @@ export function CompanyAccessProvider({ children }: { children: ReactNode }) {
   const value: CompanyAccess = {
     loading: state.loading, canViewPay: state.pay, can,
     canAny: (modules, action = 'view') => modules.some(m => can(m, action)),
+    canWrite: m => can(m, 'create') || can(m, 'edit'),
+    canRemove: m => can(m, 'delete') || can(m, 'edit'),
     reload: () => setTick(t => t + 1),
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

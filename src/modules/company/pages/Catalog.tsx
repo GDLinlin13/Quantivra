@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Typography, Tabs, Table, Button, Space, Input, Segmented, Tag, Drawer, Form, Select, InputNumber, Switch, message, Popconfirm,
   Modal, DatePicker, Empty, Alert, Spin, Card, Statistic,
+  ConfigProvider,
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, SwapOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -12,6 +13,7 @@ import { stockMoves, onHand, type CatalogItem, type StockAdjustment } from '../.
 import { DEFAULT_FINANCE_SETTINGS, type Account, type Contact, type FinanceSettings } from '../../../data/finance';
 import { money } from '../../../data/documentLayouts';
 import { AmountInput } from '../../../components/AmountInput';
+import { useCompanyAccess } from '../../../contexts/CompanyAccess';
 
 const { Title, Text } = Typography;
 
@@ -66,6 +68,8 @@ export function CompanyCatalogPage() {
 function ItemsTab({ companyId, items, stock, accounts, settings, currency, reload }: {
   companyId: number; items: CatalogItem[]; stock: Map<number, number>; accounts: Account[]; settings: FinanceSettings; currency: string; reload: () => void;
 }) {
+  const access = useCompanyAccess();
+  const canWrite = access.canWrite('inventory'), canRemove = access.canRemove('inventory');
   const [kind, setKind] = useState('all');
   const [use, setUse] = useState('all');
   const [search, setSearch] = useState('');
@@ -84,10 +88,10 @@ function ItemsTab({ companyId, items, stock, accounts, settings, currency, reloa
           <Input allowClear prefix={<SearchOutlined />} placeholder="Search name, code, category" style={{ width: 260 }} value={search} onChange={e => setSearch(e.target.value)} />
           <Space size={6}><Switch size="small" checked={showArchived} onChange={setShowArchived} /><Text type="secondary">Show archived</Text></Space>
         </Space>
-        <Space>
+        {canWrite && <Space>
           <Button icon={<PlusOutlined />} onClick={() => setEditing({ kind: 'service' })}>Service</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ kind: 'product' })}>Product</Button>
-        </Space>
+        </Space>}
       </div>
       <Table rowKey="id" size="small" dataSource={shown} pagination={{ pageSize: 50, hideOnSinglePage: true }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing in the catalog yet" /> }}
@@ -109,13 +113,13 @@ function ItemsTab({ companyId, items, stock, accounts, settings, currency, reloa
           },
           { title: '', key: 'x', width: 60, render: (_, i) => i.archived ? <Tag>archived</Tag> : null },
           {
-            title: '', key: 'a', width: 90, render: (_, i) => (
+            title: '', key: 'a', width: 90, render: (_, i) => canWrite && (
               <Space>
                 <Button size="small" icon={<EditOutlined />} onClick={() => setEditing(i)} />
-                <Popconfirm title={`Delete ${i.name}?`} description="Invoices and bills that used it keep their lines."
+                {canRemove && <Popconfirm title={`Delete ${i.name}?`} description="Invoices and bills that used it keep their lines."
                   onConfirm={async () => { try { await catalogService.remove(i.id); message.success('Deleted'); reload(); } catch (e: any) { message.error(e.message); } }}>
                   <Button size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
+                </Popconfirm>}
               </Space>
             ),
           },
@@ -131,6 +135,7 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
   companyId: number; item: Partial<CatalogItem>; accounts: Account[]; settings: FinanceSettings; currency: string; categories: string[];
   onClose: () => void; onSaved: () => void;
 }) {
+  const canWrite = useCompanyAccess().canWrite('inventory');
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const kind = Form.useWatch('kind', form) ?? item.kind;
@@ -165,7 +170,8 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
   useEffect(() => { if (!accounts.length) accountService.list(companyId).catch(() => null); }, [accounts.length, companyId]);
   return (
     <Drawer open onClose={onClose} size={640} title={item.id ? item.name : kind === 'service' ? 'New service' : 'New product'}
-      extra={<Button type="primary" loading={saving} onClick={submit}>Save</Button>}>
+      extra={canWrite && <Button type="primary" loading={saving} onClick={submit}>Save</Button>}>
+      <ConfigProvider componentDisabled={!canWrite}>
       <Form form={form} layout="vertical" initialValues={{ kind: 'product', used_for: 'both', ...item, tax_rate: item.tax_rate == null ? 'default' : Number(item.tax_rate) }}>
         <Space size={16} wrap style={{ marginBottom: 16 }}>
           <Form.Item name="kind" noStyle><Segmented options={[{ value: 'product', label: 'Product' }, { value: 'service', label: 'Service' }]} /></Form.Item>
@@ -234,6 +240,7 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
           <Switch checkedChildren="Archived" unCheckedChildren="In use" />
         </Form.Item>
       </Form>
+      </ConfigProvider>
     </Drawer>
   );
 }
@@ -241,6 +248,8 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
 function StockTab({ companyId, items, stock, docs, adjustments, currency, reload }: {
   companyId: number; items: CatalogItem[]; stock: Map<number, number>; docs: Docs; adjustments: StockAdjustment[]; currency: string; reload: () => void;
 }) {
+  const access = useCompanyAccess();
+  const canWrite = access.canWrite('inventory'), canRemove = access.canRemove('inventory');
   const tracked = items.filter(i => i.track_stock && !i.archived);
   const [history, setHistory] = useState<CatalogItem | null>(null);
   const [adjusting, setAdjusting] = useState<CatalogItem | null>(null);
@@ -260,7 +269,7 @@ function StockTab({ companyId, items, stock, docs, adjustments, currency, reload
           { title: 'In stock', key: 'q', align: 'right' as const, render: (_, i) => { const q = stock.get(i.id) ?? 0; return <b style={{ color: q < 0 ? '#ff7875' : undefined }}>{q}{i.unit ? ` ${i.unit}` : ''}</b>; } },
           { title: 'Reorder at', dataIndex: 'reorder_level', align: 'right' as const, render: (v: number | null) => (v == null ? '—' : v) },
           { title: 'Value at cost', key: 'v', align: 'right' as const, render: (_, i) => money(Math.max(0, stock.get(i.id) ?? 0) * Number(i.purchase_price || 0), currency) },
-          { title: '', key: 'a', width: 120, render: (_, i) => <Button size="small" icon={<SwapOutlined />} onClick={() => setAdjusting(i)}>Adjust</Button> },
+          { title: '', key: 'a', width: 120, render: (_, i) => canWrite && <Button size="small" icon={<SwapOutlined />} onClick={() => setAdjusting(i)}>Adjust</Button> },
         ]} />
       {adjusting && <AdjustModal companyId={companyId} item={adjusting} current={stock.get(adjusting.id) ?? 0} onClose={() => setAdjusting(null)} onDone={() => { setAdjusting(null); reload(); }} />}
       {history && (
@@ -282,9 +291,9 @@ function StockTab({ companyId, items, stock, docs, adjustments, currency, reload
               {adjustments.filter(a => a.item_id === history.id).map(a => (
                 <div key={a.id} style={{ marginTop: 4 }}>
                   {a.adj_date} · {a.quantity > 0 ? '+' : ''}{a.quantity} {a.reason ? `· ${a.reason}` : ''}{' '}
-                  <Popconfirm title="Remove this adjustment?" onConfirm={async () => { await catalogService.removeAdjustment(a.id); reload(); setHistory(null); }}>
+                  {canRemove && <Popconfirm title="Remove this adjustment?" onConfirm={async () => { await catalogService.removeAdjustment(a.id); reload(); setHistory(null); }}>
                     <Button size="small" type="link" danger>remove</Button>
-                  </Popconfirm>
+                  </Popconfirm>}
                 </div>
               ))}
             </div>

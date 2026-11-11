@@ -250,6 +250,10 @@ END $$;
 ROLLBACK;
 
 \echo '9d. pay access: staff without it see no salaries, ID numbers or payroll, and cannot grant it to themselves'
+-- staff may edit employees here (their Employees tick), which still never reaches pay or ID numbers
+BEGIN; :as_service
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'employees', '*', 'edit');
+COMMIT;
 BEGIN; :as_staff
 DO $$
 DECLARE n int;
@@ -283,6 +287,9 @@ BEGIN
   UPDATE company_roles SET can_view_pay = true WHERE id = 3;
 END $$;
 ROLLBACK;
+BEGIN; :as_service
+DELETE FROM company_permissions WHERE role_id = 3;
+COMMIT;
 
 \echo '9e. the master role (Admin / Director) always keeps full access'
 BEGIN; :as_a
@@ -527,6 +534,68 @@ BEGIN; :as_a
 DELETE FROM company_files;
 COMMIT;
 
+\echo '9k. every section follows role permissions: view only reads, create / edit writes, approve decides leave'
+BEGIN; :as_service
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES
+  (3, 'finance', '*', 'view'), (3, 'crm', '*', 'view'), (3, 'inventory', '*', 'view'), (3, 'employees', '*', 'view');
+:as_staff
+DO $$
+DECLARE v bigint;
+BEGIN
+  PERFORM 1 FROM fin_accounts WHERE company_id = 1;
+  BEGIN INSERT INTO fin_accounts (company_id, code, name, type) VALUES (1, '9990', 'Sneaky', 'expense');
+    RAISE EXCEPTION 'FAIL: view-only staff added a Finance account';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO contacts (company_id, name) VALUES (1, 'Sneaky');
+    RAISE EXCEPTION 'FAIL: view-only staff added a CRM contact';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO catalog_items (company_id, name) VALUES (1, 'Sneaky');
+    RAISE EXCEPTION 'FAIL: view-only staff added a Catalog item';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO leave_types (company_id, name) VALUES (1, 'Sneaky');
+    RAISE EXCEPTION 'FAIL: view-only staff added a leave type';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM hr_upsert_employee('{"company_id":1,"employee_code":"S9","full_name":"Sneaky"}');
+    RAISE EXCEPTION 'FAIL: view-only staff added an employee';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM hr_delete_employee(2);
+    RAISE EXCEPTION 'FAIL: view-only staff removed an employee';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN UPDATE companies SET name = 'Sneaky' WHERE id = 1;
+    IF FOUND THEN RAISE EXCEPTION 'FAIL: staff changed company details'; END IF;
+  END;
+  -- staff still apply for leave themselves, but cannot approve it
+  v := leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-02-02","end_date":"2026-02-02","days":1}');
+  BEGIN PERFORM leave_decide(v, 'approved', 'ok', 5);
+    RAISE EXCEPTION 'FAIL: staff without Leave approve approved leave';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN UPDATE leave_requests SET status = 'approved' WHERE id = v;
+    RAISE EXCEPTION 'FAIL: staff approved leave directly';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_service
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES
+  (3, 'finance', '*', 'create'), (3, 'crm', '*', 'edit'), (3, 'leave', '*', 'approve');
+:as_staff
+DO $$
+DECLARE v bigint;
+BEGIN
+  INSERT INTO fin_accounts (company_id, code, name, type) VALUES (1, '9991', 'Allowed', 'expense');
+  INSERT INTO contacts (company_id, name) VALUES (1, 'Allowed');
+  BEGIN INSERT INTO fin_accounts (company_id, code, name, type) VALUES (2, '9992', 'Other company', 'expense');
+    RAISE EXCEPTION 'FAIL: staff added a Finance account to another company';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO catalog_items (company_id, name) VALUES (1, 'No catalog tick');
+    RAISE EXCEPTION 'FAIL: Finance permission let staff change the Catalog';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  DELETE FROM fin_accounts WHERE code = '9991';
+  ASSERT FOUND = false, 'FAIL: create-only staff deleted a Finance account';
+  v := leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-02-03","end_date":"2026-02-03","days":1}');
+  PERFORM leave_decide(v, 'approved', 'ok', 5);
+  ASSERT (SELECT status FROM leave_requests WHERE id = v) = 'approved', 'FAIL: staff with Leave approve cannot approve';
+END $$;
+ROLLBACK;
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;

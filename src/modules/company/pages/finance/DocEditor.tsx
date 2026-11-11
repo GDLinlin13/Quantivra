@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Table, Divider, Typography, message, Switch, Popconfirm, Alert, Tag, Segmented, Upload } from 'antd';
+import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Table, Divider, Typography, message, Switch, Popconfirm, Alert, Tag, Segmented, Upload, ConfigProvider } from 'antd';
+import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { docService, paymentService, catalogService, attachmentService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
@@ -26,6 +27,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
   items?: CatalogItem[];
   onClose: () => void; onSaved: (id: number) => void;
 }) {
+  const access = useCompanyAccess();
   // a purchase can switch between a bill (pay later) and an expense (already paid / staff claim) until it's saved
   const [docType, setDocType] = useState<DocType>(startType);
   const sales = docType === 'quote' || docType === 'invoice' || docType === 'credit_note';
@@ -199,10 +201,12 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
 
   const dateLabel = docType === 'quote' ? 'Valid until' : docType === 'expense' ? 'Paid on' : 'Due date';
   const issued = doc.status && doc.status !== 'draft';
+  // view-only roles see the document but cannot change it
+  const canWrite = access.canWrite('finance');
   return (
     <Drawer open onClose={onClose} size={Math.min(1440, window.innerWidth - 24)} loading={loading}
       title={<Space>{docId ? `${DOC_LABEL[docType]} ${doc.number || ''}` : `New ${DOC_LABEL[docType].toLowerCase()}`}{doc.status && <Tag color={STATUS_COLOR[doc.status]}>{STATUS_LABEL[doc.status]}</Tag>}</Space>}
-      extra={
+      extra={canWrite &&
         <Space>
           {(!issued || doc.status === 'void') && <Button loading={saving} onClick={() => save()}>Save draft</Button>}
           {!issued && (
@@ -213,6 +217,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
           {issued && doc.status !== 'void' && <Button type="primary" loading={saving} onClick={() => save()}>Save changes</Button>}
         </Space>
       }>
+      <ConfigProvider componentDisabled={!canWrite}>
       {Number(doc.amount_paid) > 0 && <Alert type="info" showIcon style={{ marginBottom: 12 }} title={`${M(Number(doc.amount_paid))} has been paid on this ${DOC_LABEL[docType].toLowerCase()}.`} />}
       {!sales && !docId && (
         <Segmented style={{ marginBottom: 12 }} value={docType} onChange={v => {
@@ -383,7 +388,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
         </div>
       </div>
       {docId && doc.status === 'void' && <Alert type="warning" showIcon style={{ marginTop: 16 }} title="This document is void. Saving it as a draft brings it back." />}
-      {docId && !['void', 'paid'].includes(doc.status || '') && (
+      {canWrite && docId && !['void', 'paid'].includes(doc.status || '') && (
         <div style={{ marginTop: 24 }}>
           <Popconfirm title={`Void this ${DOC_LABEL[docType].toLowerCase()}?`} description="It stays on record but no longer counts."
             onConfirm={async () => { await docService.setStatus(docId, 'void'); message.success('Voided'); onSaved(docId); }}>
@@ -391,6 +396,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
           </Popconfirm>
         </div>
       )}
+      </ConfigProvider>
       {viewFile && <FileViewer name={viewFile.file_name} load={() => companyFileService.blob(viewFile.path)} onClose={() => setViewFile(null)} />}
     </Drawer>
   );

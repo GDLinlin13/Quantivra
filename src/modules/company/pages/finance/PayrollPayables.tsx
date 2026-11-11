@@ -7,12 +7,14 @@ import { money } from '../../../../data/documentLayouts';
 import { schemeLabel } from '../../../../data/finance';
 import type { FinanceData } from './DocList';
 import { AmountInput } from '../../../../components/AmountInput';
+import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 
 const { Text } = Typography;
 const period = (r: PayrollDue['run']) => dayjs(`${r.period_year}-${String(r.period_month).padStart(2, '0')}-01`).format('MMM YYYY');
 
 /** Payables → Payroll: net salaries and CPF (or the country's contributions) still to pay for each finalised payroll run. */
 export function PayrollPayables({ data }: { data: FinanceData }) {
+  const access = useCompanyAccess();
   const [input, setInput] = useState<Awaited<ReturnType<typeof loadLedgerInput>> | null>(null);
   const [paying, setPaying] = useState<{ due: PayrollDue; what: 'net' | 'stat' } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,7 +53,7 @@ export function PayrollPayables({ data }: { data: FinanceData }) {
       <Space size={16} wrap style={{ marginBottom: 12 }}>
         <Card size="small" style={{ minWidth: 200 }}><Statistic title="Salaries to pay" value={M(netDue)} /></Card>
         <Card size="small" style={{ minWidth: 200 }}><Statistic title={`${X} to pay`} value={M(statDue)} /></Card>
-        {netDue > 0 && (
+        {access.canWrite('finance') && netDue > 0 && (
           <Popconfirm title="Mark every unpaid salary as paid from the bank on its pay date?"
             description="Use this if salaries were already paid. Don't also match those bank lines in Bank." onConfirm={markAllNet}>
             <Button loading={busy}>Mark all salaries as paid on their pay dates</Button>
@@ -73,7 +75,7 @@ export function PayrollPayables({ data }: { data: FinanceData }) {
             render: (_, d) => d.statDue > 0 ? <b>{M(d.statDue)}</b> : <Tag color="green">Paid</Tag>,
           },
           {
-            title: '', key: 'a', width: 200, render: (_, d) => (
+            title: '', key: 'a', width: 200, render: (_, d) => access.canWrite('finance') && (
               <Space size={4}>
                 {d.netDue > 0 && <Button size="small" onClick={() => setPaying({ due: d, what: 'net' })}>Pay salaries</Button>}
                 {d.statDue > 0 && <Button size="small" onClick={() => setPaying({ due: d, what: 'stat' })}>Pay {X}</Button>}

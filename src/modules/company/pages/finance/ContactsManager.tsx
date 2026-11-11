@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Drawer, Form, Input, InputNumber, Checkbox, Space, Tag, message, Popconfirm, Switch, Typography, Divider, Empty, Select } from 'antd';
+import { Table, Button, Drawer, Form, Input, InputNumber, Checkbox, Space, Tag, message, Popconfirm, Switch, Typography, Divider, Empty, Select, ConfigProvider } from 'antd';
 import { currencyOptions } from '../../../../utils/currencies';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { contactService, docService } from '../../../../services/finance';
 import { balanceDue, inBase, isSalesDoc, contactCurrencies, type Contact, type ContactPerson, type FinDocument } from '../../../../data/finance';
 import { money } from '../../../../data/documentLayouts';
+import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 
 const { Text } = Typography;
 
@@ -13,6 +14,8 @@ const { Text } = Typography;
  * Used by CRM (customers) and Finance (suppliers).
  */
 export function ContactsManager({ companyId, kind, currency, onChanged }: { companyId: number; kind: 'customer' | 'supplier' | 'all'; currency: string; onChanged?: () => void }) {
+  const access = useCompanyAccess();
+  const canWrite = access.canWrite('crm'), canRemove = access.canRemove('crm');
   const [rows, setRows] = useState<Contact[]>([]);
   const [people, setPeople] = useState<ContactPerson[]>([]);
   const [docs, setDocs] = useState<FinDocument[]>([]);
@@ -53,7 +56,7 @@ export function ContactsManager({ companyId, kind, currency, onChanged }: { comp
           <Input allowClear prefix={<SearchOutlined />} placeholder={`Search ${word}s or people`} style={{ width: 260 }} value={search} onChange={e => setSearch(e.target.value)} />
           <Space size={6}><Switch size="small" checked={showArchived} onChange={setShowArchived} /><Text style={{ color: 'rgba(240,237,230,0.7)' }}>Show archived</Text></Space>
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ is_customer: kind !== 'supplier', is_supplier: kind === 'supplier' })}>{kind === 'all' ? 'Contact' : `Add ${word}`}</Button>
+        {canWrite && <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ is_customer: kind !== 'supplier', is_supplier: kind === 'supplier' })}>{kind === 'all' ? 'Contact' : `Add ${word}`}</Button>}
       </div>
       <Table rowKey="id" size="small" loading={loading} dataSource={list} pagination={{ pageSize: 50, hideOnSinglePage: true }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`No ${word}s yet`} /> }}
@@ -82,13 +85,13 @@ export function ContactsManager({ companyId, kind, currency, onChanged }: { comp
           }] : []),
           ...(kind !== 'all' ? [{ title: '', key: 't', render: (_: any, c: Contact) => <Space size={4}>{c.is_customer && c.is_supplier && <Tag>{kind === 'customer' ? 'also supplier' : 'also customer'}</Tag>}{c.archived && <Tag>archived</Tag>}</Space> }] : []),
           {
-            title: '', key: 'a', width: 90, render: (_, c) => (
+            title: '', key: 'a', width: 90, render: (_, c) => canWrite && (
               <Space>
                 <Button size="small" icon={<EditOutlined />} onClick={() => setEditing(c)} />
-                <Popconfirm title={`Delete ${c.name}?`} description="Contacts with invoices or bills can't be deleted — archive them instead."
+                {canRemove && <Popconfirm title={`Delete ${c.name}?`} description="Contacts with invoices or bills can't be deleted — archive them instead."
                   onConfirm={async () => { try { await contactService.remove(c.id); message.success('Deleted'); load(); } catch (e: any) { message.error(e.message); } }}>
                   <Button size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
+                </Popconfirm>}
               </Space>
             ),
           },
@@ -106,6 +109,7 @@ function ContactDrawer({ companyId, contact, word, currency, docs, onClose, onSa
   companyId: number; contact: Partial<Contact>; word: string; currency: string; docs: FinDocument[];
   onClose: () => void; onSaved: () => void;
 }) {
+  const canWrite = useCompanyAccess().canWrite('crm');
   const [form] = Form.useForm();
   const [people, setPeople] = useState<ContactPerson[]>([]);
   const [saving, setSaving] = useState(false);
@@ -132,7 +136,8 @@ function ContactDrawer({ companyId, contact, word, currency, docs, onClose, onSa
   const outstanding = docs.filter(d => !['void', 'draft'].includes(d.status)).reduce((s, d) => s + inBase(d, balanceDue(d)), 0);
   return (
     <Drawer open onClose={onClose} size={720} title={contact.id ? contact.name : `New ${word}`}
-      extra={<Button type="primary" loading={saving} onClick={save}>Save</Button>}>
+      extra={canWrite && <Button type="primary" loading={saving} onClick={save}>Save</Button>}>
+      <ConfigProvider componentDisabled={!canWrite}>
       <Form form={form} layout="vertical">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="name" label="Company / name" rules={[{ required: true }]} style={{ gridColumn: '1 / -1' }}><Input /></Form.Item>
@@ -187,6 +192,7 @@ function ContactDrawer({ companyId, contact, word, currency, docs, onClose, onSa
           )}
         </>
       )}
+      </ConfigProvider>
     </Drawer>
   );
 }

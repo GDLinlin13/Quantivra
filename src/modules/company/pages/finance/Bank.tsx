@@ -23,11 +23,14 @@ import { currencyOptions } from '../../../../utils/currencies';
 import type { FinanceData } from './DocList';
 import { AmountInput } from '../../../../components/AmountInput';
 import { payrollService } from '../../../../services/payroll';
+import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 
 const { Text } = Typography;
 
 /** Bank: statement lines (typed in or imported from CSV), matched to payments, invoices, bills or accounts. */
 export function Bank({ data }: { data: FinanceData }) {
+  const access = useCompanyAccess();
+  const canWrite = access.canWrite('finance'), canRemove = access.canRemove('finance');
   const { companyId, currency, accounts } = data;
   // open accounts first; closed ones stay listed to look back at, but take nothing new
   const allBanks = accounts.filter(a => a.subtype === 'bank' || a.subtype === 'cash');
@@ -142,7 +145,7 @@ export function Bank({ data }: { data: FinanceData }) {
     return (
       <div>
         <Empty description="No bank accounts yet">
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setBankEdit({})}>Bank account</Button>
+          {canWrite && <Button type="primary" icon={<PlusOutlined />} onClick={() => setBankEdit({})}>Bank account</Button>}
         </Empty>
         {bankModal}
       </div>
@@ -257,8 +260,8 @@ export function Bank({ data }: { data: FinanceData }) {
             ...banks.map(b => ({ value: b.id, label: bankLabel(b) })),
             ...(closedBanks.length ? [{ label: 'Closed', options: closedBanks.map(b => ({ value: b.id, label: `${bankLabel(b)} · closed` })) }] : []),
           ] as any} />
-        {!closed && <Button icon={<EditOutlined />} onClick={() => account && setBankEdit(account)} title="Edit this bank account" />}
-        {account && !closed && used && (
+        {canWrite && !closed && <Button icon={<EditOutlined />} onClick={() => account && setBankEdit(account)} title="Edit this bank account" />}
+        {canWrite && account && !closed && used && (
           <Popconfirm title={`Close ${account.name}?`} okText="Close account"
             description={<div style={{ maxWidth: 320 }}>Its lines and history stay and can still be viewed; no new lines, imports or matches.
               {Math.abs(statementBalance) > 0.004 && <div style={{ marginTop: 6, color: '#faad14' }}>The balance per statement is {num(statementBalance)}, not 0.</div>}</div>}
@@ -269,13 +272,13 @@ export function Bank({ data }: { data: FinanceData }) {
         {account && closed && (
           <>
             <Tag color="default" style={{ marginInlineEnd: 0 }}>Closed — view only</Tag>
-            <Popconfirm title={`Reopen ${account.name}?`} okText="Reopen"
+            {canWrite && <Popconfirm title={`Reopen ${account.name}?`} okText="Reopen"
               onConfirm={async () => { try { await accountService.setClosed(account.id, false); message.success(`${account.name} reopened`); data.reload(); } catch (e: any) { message.error(e.message); } }}>
               <Button>Reopen</Button>
-            </Popconfirm>
+            </Popconfirm>}
           </>
         )}
-        {account && !closed && !used && !Number(account.opening_balance) && !Number(account.opening_foreign) && banks.length > 1 && (
+        {canRemove && account && !closed && !used && !Number(account.opening_balance) && !Number(account.opening_foreign) && banks.length > 1 && (
           <Popconfirm title={`Delete ${account.name}?`} description="It has no activity, so nothing else changes."
             onConfirm={async () => {
               try {
@@ -288,9 +291,9 @@ export function Bank({ data }: { data: FinanceData }) {
             <Button danger icon={<DeleteOutlined />} title="Delete this bank account" />
           </Popconfirm>
         )}
-        <Button icon={<PlusOutlined />} onClick={() => setBankEdit({})}>Bank account</Button>
-        {!closed && <Upload accept=".csv,text/csv,.pdf,application/pdf,.png,.jpg,.jpeg,.webp" showUploadList={false} beforeUpload={onFile}><Button icon={<UploadOutlined />}>Import statement (PDF or CSV)</Button></Upload>}
-        {!closed && <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>Add a line</Button>}
+        {canWrite && <Button icon={<PlusOutlined />} onClick={() => setBankEdit({})}>Bank account</Button>}
+        {canWrite && !closed && <Upload accept=".csv,text/csv,.pdf,application/pdf,.png,.jpg,.jpeg,.webp" showUploadList={false} beforeUpload={onFile}><Button icon={<UploadOutlined />}>Import statement (PDF or CSV)</Button></Upload>}
+        {canWrite && !closed && <Button icon={<PlusOutlined />} onClick={() => setAdding(true)}>Add a line</Button>}
       </Space>
       {/* the summary cards share one row and are all the same height */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 12 }}>
@@ -327,7 +330,7 @@ export function Bank({ data }: { data: FinanceData }) {
           { title: 'Balance', key: 'bal', align: 'right' as const, width: 150, render: (_, t) => (running.has(t.id) ? num(running.get(t.id)!) : '') },
           { title: 'Matched to', key: 'm', width: 220, render: (_, t) => t.status === 'ignored' ? <Tag>ignored</Tag> : matchLabel(t, data, look)?.accounts || '' },
           {
-            title: '', key: 'a', width: 210, render: (_, t) => closed ? null : t.status === ('expected' as any) ? (
+            title: '', key: 'a', width: 210, render: (_, t) => closed || !canWrite ? null : t.status === ('expected' as any) ? (
               // recorded in Quantivra (e.g. a transfer from another bank): Match = it's on the statement
               <Space size={4}>
               {foreign ? <Button size="small" type="primary" icon={<LinkOutlined />} onClick={() => setFxMatch(t)}>Match</Button> : (
@@ -490,7 +493,7 @@ export function Bank({ data }: { data: FinanceData }) {
             showImport(lines);
           }} />
       )}
-      {details && <MatchDetails data={data} txn={details} look={look} accCur={accCur} onClose={() => setDetails(null)} onFilesChanged={loadWithFiles} readOnly={closed}
+      {details && <MatchDetails data={data} txn={details} look={look} accCur={accCur} onClose={() => setDetails(null)} onFilesChanged={loadWithFiles} readOnly={closed || !canWrite}
         onChanged={() => { setDetails(null); load(); data.reload(); }} />}
       {matching && <MatchModal data={data} txn={matching} accCur={accCur} dues={dues} payments={payments} usedPayments={new Set(allTxns.filter(x => x.payment_id).map(x => x.payment_id!))}
         recorded={expected} lastRate={lastRate}
