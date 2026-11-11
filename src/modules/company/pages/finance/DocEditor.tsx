@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Table, Divider, Typography, message, Switch, Popconfirm, Alert, Tag, Segmented, Upload, ConfigProvider } from 'antd';
+import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Table, Divider, Typography, message, Switch, Popconfirm, Alert, Tag, Segmented, Upload, ConfigProvider, Modal } from 'antd';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -14,7 +14,7 @@ import {
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
-import { priceFor, basisOf, classOf, classLabel, piecePrice, kgText, type CatalogItem, type CustomerPrice, type WeightClass, type Piece } from '../../../../data/catalog';
+import { priceFor, basisOf, costChanges, classOf, classLabel, piecePrice, kgText, type CatalogItem, type CustomerPrice, type WeightClass, type Piece } from '../../../../data/catalog';
 import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
@@ -46,6 +46,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   const [newContact, setNewContact] = useState<Partial<Contact> | null>(null);
   const [contactSearch, setContactSearch] = useState('');
   const access = useCompanyAccess();
+  const canCatalog = access.canWrite('inventory');
   // a purchase can switch between a bill (pay later) and an expense (already paid / staff claim) until it's saved
   const [docType, setDocType] = useState<DocType>(startType);
   const sales = docType === 'quote' || docType === 'invoice' || docType === 'credit_note';
@@ -231,6 +232,29 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines, { keepNumber: typedNumber });
       // pieces bought: one piece per line, with its weight
       if (!sales && lines.some(isPieces)) await catalogService.syncBillPieces(companyId, id, doc.issue_date!, lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes);
+      // a bill at a new price: offer to keep the catalog's cost up to date
+      if (!sales) {
+        const changes = costChanges(lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes, docCur, currency);
+        if (changes.length && canCatalog) {
+          const yes = await new Promise<boolean>(resolve => Modal.confirm({
+            title: 'New buying prices', okText: 'Update the catalog', cancelText: 'No, keep the catalog as it is', width: 520,
+            content: (
+              <div>
+                <div style={{ marginBottom: 8 }}>These prices differ from the cost in the catalog. Update it?</div>
+                {changes.map((c, i) => (
+                  <div key={i} style={{ fontSize: 13 }}>
+                    <b>{c.name}</b>{c.label ? ` (${c.label})` : ''}: {docCur} {c.old.toLocaleString(undefined, { maximumFractionDigits: 4 })} → <b>{c.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}</b>
+                  </div>
+                ))}
+              </div>
+            ),
+            onOk: () => resolve(true), onCancel: () => resolve(false),
+          }));
+          if (yes) {
+            try { await catalogService.setCosts(changes); onItemsChanged?.(); message.success('Catalog costs updated'); } catch (e: any) { message.error(e.message); }
+          }
+        }
+      }
       // An expense paid on the spot (from a bank / cash account) is recorded as paid straight away.
       if (docType === 'expense' && doc.paid_from_account_id && (status === 'approved' || doc.status === 'approved')) {
         const { doc: fresh } = await docService.get(id);

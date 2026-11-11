@@ -156,3 +156,28 @@ export function piecesCost(item: Pick<CatalogItem, 'price_basis'>, pieces: Piece
     return s + (c ? (item.price_basis === 'per_piece' ? Number(c.purchase_price) : Number(c.purchase_price) * p.weight) : 0);
   }, 0) * 100) / 100;
 }
+
+export interface CostChange { item_id: number; class_id: number | null; name: string; label: string; old: number; price: number }
+/**
+ * Prices on a bill that differ from the catalog's cost: the item's buying price, or — for items stocked by weight —
+ * the buying price of the class the piece falls in. Only lines in the item's own buying currency are compared.
+ */
+export function costChanges(lines: { item_id?: number | null; unit_price: number; weight?: number }[], items: CatalogItem[], classes: WeightClass[],
+  docCurrency: string, companyCurrency: string): CostChange[] {
+  const out = new Map<string, CostChange>();
+  for (const l of lines) {
+    const it = l.item_id ? items.find(x => x.id === l.item_id) : undefined;
+    const price = Number(l.unit_price) || 0;
+    if (!it || !(price > 0)) continue;
+    if ((it.purchase_currency || it.currency || companyCurrency) !== docCurrency) continue;
+    let cls: WeightClass | null = null;
+    if (it.stock_mode === 'pieces') {
+      cls = classOf(classes.filter(c => c.item_id === it.id), Number(l.weight) || 0);
+      if (!cls) continue;
+    }
+    const old = Number(cls ? cls.purchase_price : it.purchase_price) || 0;
+    if (Math.abs(old - price) < 0.005) continue;
+    out.set(`${it.id}:${cls?.id ?? 0}`, { item_id: it.id, class_id: cls?.id ?? null, name: it.name, label: cls ? classLabel(cls) : '', old, price });
+  }
+  return [...out.values()];
+}

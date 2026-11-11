@@ -891,6 +891,13 @@ export const catalogService = {
   async adjust(companyId: number, itemId: number, quantity: number, date: string, reason: string) {
     must(await supabase.from('catalog_stock_adjustments').insert({ company_id: companyId, item_id: itemId, quantity, adj_date: date, reason: reason || null }));
   },
+  /** New buying prices from a bill: an item's cost, or the cost of one of its weight classes. */
+  async setCosts(changes: { item_id: number; class_id?: number | null; price: number }[]) {
+    for (const c of changes) {
+      if (c.class_id) must(await supabase.from('catalog_weight_classes').update({ purchase_price: c.price }).eq('id', c.class_id));
+      else must(await supabase.from('catalog_items').update({ purchase_price: c.price, updated_at: new Date().toISOString() }).eq('id', c.item_id));
+    }
+  },
   /** Weight classes of one item (empty until migration 046 is run). */
   async classes(companyId: number): Promise<WeightClass[]> {
     const r = await supabase.from('catalog_weight_classes').select('*').eq('company_id', companyId).order('min_kg');
