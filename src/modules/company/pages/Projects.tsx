@@ -13,6 +13,7 @@ import {
   projectService, hoursLabel, PROJECT_STATUS_LABEL, PROJECT_STATUS_COLOR, TASK_STATUS_LABEL,
   type Project, type ProjectTask, type ProjectMilestone, type Timesheet, type ProjectStatus, type TaskStatus,
 } from '../../../services/projects';
+import { fmtDate } from '../../../utils/dateFormat';
 
 const { Title, Text } = Typography;
 const D = 'YYYY-MM-DD';
@@ -114,7 +115,7 @@ function ProjectDrawer({ shared, project, hours, onClose }: { shared: Shared; pr
             columns={[
               { title: 'Task', dataIndex: 'title' },
               { title: 'Assigned to', key: 'a', width: 150, render: (_, t) => emp(t.assignee_id) },
-              { title: 'Due', dataIndex: 'due_date', width: 110, render: (v: string | null) => v || '—' },
+              { title: 'Due', dataIndex: 'due_date', width: 110, render: (v: string | null) => fmtDate(v) || '—' },
               { title: 'Status', key: 's', width: 140, render: (_, t) => (
                 <Select size="small" style={{ width: '100%' }} disabled={!canWrite} value={t.status} options={statusOptions(TASK_STATUS_LABEL)}
                   onChange={(v: TaskStatus) => run(() => projectService.saveTask(companyId, { ...t, status: v }))} />
@@ -140,7 +141,7 @@ function ProjectDrawer({ shared, project, hours, onClose }: { shared: Shared; pr
                 <Checkbox checked={m.done} disabled={!canWrite} onChange={e => run(() => projectService.saveMilestone(companyId, { ...m, done: e.target.checked }))} />
               ) },
               { title: 'Milestone', key: 't', render: (_, m) => <span style={{ textDecoration: m.done ? 'line-through' : undefined, opacity: m.done ? 0.6 : 1 }}>{m.title}</span> },
-              { title: 'Date', dataIndex: 'due_date', width: 120, render: (v: string | null, m) => (v ? <span style={{ color: !m.done && v < dayjs().format(D) ? '#ff7875' : undefined }}>{v}</span> : '—') },
+              { title: 'Date', dataIndex: 'due_date', width: 120, render: (v: string | null, m) => (v ? <span style={{ color: !m.done && v < dayjs().format(D) ? '#ff7875' : undefined }}>{fmtDate(v)}</span> : '—') },
               { title: '', key: 'x', width: 50, render: (_, m) => canRemove && (
                 <Popconfirm title="Delete this milestone?" onConfirm={() => run(() => projectService.removeMilestone(m.id))}><Button size="small" danger icon={<DeleteOutlined />} /></Popconfirm>
               ) },
@@ -181,7 +182,7 @@ function ProjectsTab({ shared, hours }: { shared: Shared; hours: Timesheet[] }) 
       <Table dataSource={shown} rowKey="id" size="small" pagination={{ pageSize: 50, hideOnSinglePage: true }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No projects" /> }}
         columns={[
-          { title: 'Code', dataIndex: 'code', width: 100, render: (v: string | null) => v || '—' },
+          { title: 'Code', dataIndex: 'code', width: 100, render: (v: string | null) => fmtDate(v) || '—' },
           { title: 'Project', key: 'n', render: (_, p) => <a onClick={() => setEditing(p)}>{p.name}</a> },
           { title: 'Customer', key: 'c', render: (_, p) => contacts.find(c => c.id === p.contact_id)?.name || '—' },
           { title: 'Manager', key: 'm', render: (_, p) => employees.find(e => Number(e.id) === p.manager_id)?.full_name || '—' },
@@ -195,7 +196,7 @@ function ProjectsTab({ shared, hours }: { shared: Shared; hours: Timesheet[] }) 
             const h = hoursOf(p.id);
             return <span style={{ color: p.budget_hours && h > p.budget_hours ? '#ff7875' : undefined }}>{hoursLabel(h)}{p.budget_hours ? ` / ${hoursLabel(p.budget_hours)}` : ''}</span>;
           } }] : []),
-          { title: 'Due', dataIndex: 'end_date', width: 110, render: (v: string | null) => v || '—' },
+          { title: 'Due', dataIndex: 'end_date', width: 110, render: (v: string | null) => fmtDate(v) || '—' },
           { title: '', key: 'x', width: 50, render: (_, p) => canRemove && (
             <Popconfirm title={`Delete ${p.name}?`} description="Its tasks, milestones and logged hours go too."
               onConfirm={async () => { try { await projectService.remove(p.id); message.success('Deleted'); reload(); } catch (e: any) { message.error(e.message); } }}>
@@ -292,11 +293,11 @@ function MyTimesheetTab({ shared }: { shared: Shared }) {
       <Table dataSource={rows} rowKey="id" size="small" loading={loading} pagination={{ pageSize: 100, hideOnSinglePage: true }}
         locale={{ emptyText: <span style={{ color: 'rgba(240,237,230,0.4)' }}>No hours this month</span> }}
         columns={[
-          { title: 'Date', dataIndex: 'work_date', width: 120 },
+          { title: 'Date', dataIndex: 'work_date', render: (v: string) => fmtDate(v), width: 120 },
           { title: 'Project', key: 'p', render: (_, r) => pname(r.project_id) },
           { title: 'Task', key: 't', render: (_, r) => tname(r.task_id) },
           { title: 'Hours', key: 'h', align: 'right' as const, width: 100, render: (_, r) => hoursLabel(r.hours) },
-          { title: 'Note', dataIndex: 'note', render: (v: string | null) => v || '—' },
+          { title: 'Note', dataIndex: 'note', render: (v: string | null) => fmtDate(v) || '—' },
           { title: '', key: 'x', width: 90, render: (_, r) => (
             <Space size={4}>
               <Button size="small" icon={<EditOutlined />} onClick={() => setEditing(r)} />
@@ -364,11 +365,11 @@ function TimesheetsTab({ shared }: { shared: Shared }) {
         <Table dataSource={rows} rowKey="id" size="small" loading={loading} pagination={{ pageSize: 100, hideOnSinglePage: true }}
           locale={{ emptyText: <span style={{ color: 'rgba(240,237,230,0.4)' }}>No hours</span> }}
           columns={[
-            { title: 'Date', dataIndex: 'work_date', width: 120 },
+            { title: 'Date', dataIndex: 'work_date', render: (v: string) => fmtDate(v), width: 120 },
             { title: 'Employee', key: 'e', render: (_, r) => ename(r.employee_id) },
             { title: 'Project', key: 'p', render: (_, r) => pname(r.project_id) },
             { title: 'Hours', key: 'h', align: 'right' as const, width: 100, render: (_, r) => hoursLabel(r.hours) },
-            { title: 'Note', dataIndex: 'note', render: (v: string | null) => v || '—' },
+            { title: 'Note', dataIndex: 'note', render: (v: string | null) => fmtDate(v) || '—' },
             { title: '', key: 'x', width: 90, render: (_, r) => (
               <Space size={4}>
                 {canWrite && <Button size="small" icon={<EditOutlined />} onClick={() => setEditing(r)} />}

@@ -11,6 +11,7 @@ import { PayslipView, printPayslip } from './PayslipView';
 import { BulkPayslips } from './BulkPayslips';
 import { formatFileName, elementsToPdf, downloadBlob } from '../../../../utils/payslipFiles';
 import { supabase } from '../../../../utils/supabase';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => ({ label: dayjs().month(i).format('MMMM'), value: i + 1 }));
 const money = (n: number, c = 'SGD') => `${c} ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -128,7 +129,7 @@ export function PayrollTab({ companyId }: { companyId: number }) {
           <Select value={month} onChange={setMonth} options={MONTHS} style={{ width: 130 }} />
           <InputNumber value={year} onChange={v => setYear(v || year)} min={2020} max={2100} />
           <span style={{ color: 'rgba(240,237,230,0.6)' }}>paid on</span>
-          <DatePicker value={payDate} onChange={setPayDate} placeholder={dayjs(`${year}-${String(month).padStart(2, '0')}-01`).endOf('month').format('YYYY-MM-DD')} />
+          <DatePicker value={payDate} onChange={setPayDate} placeholder={fmtDate(dayjs(`${year}-${String(month).padStart(2, '0')}-01`).endOf('month').format('YYYY-MM-DD'))} />
           <Button type="primary" icon={<PlayCircleOutlined />} loading={running} onClick={doRun}
             style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>Run Payroll</Button>
         </Space>
@@ -161,7 +162,7 @@ export function PayrollTab({ companyId }: { companyId: number }) {
         locale={{ emptyText: <span style={{ color: 'rgba(240,237,230,0.4)' }}>No payroll runs yet</span> }}
         columns={[
           { title: 'Period', key: 'p', render: (_, r) => dayjs(`${r.period_year}-${r.period_month}-01`).format('MMM YYYY') },
-          { title: 'Pay Date', dataIndex: 'pay_date', key: 'pd' },
+          { title: 'Pay Date', dataIndex: 'pay_date', render: (v: string) => fmtDate(v), key: 'pd' },
           { title: 'Gross', key: 'g', render: (_, r) => money(r.total_gross, r.currency) },
           { title: 'Deductions', key: 'd', render: (_, r) => money(r.total_deductions, r.currency) },
           { title: 'Employer Cost', key: 'e', render: (_, r) => money(r.total_employer, r.currency) },

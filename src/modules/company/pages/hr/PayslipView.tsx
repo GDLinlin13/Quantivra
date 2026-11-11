@@ -9,6 +9,7 @@ import { companyFields, money as fmtMoney, plainAmount } from '../../../../data/
 import { hrService, type Employee } from '../../../../services/hr';
 import type { FieldValues, ListValues } from '../../../../utils/gridTemplate';
 import { nationalIdLabel } from '../../../../data/countries';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 
 export const PRINT_CSS = `@page{size:A4;margin:12mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -87,7 +88,7 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
       bank_account: bankFull || bankMasked || '',
       bank_account_masked: bankMasked || '',
       period: period ? dayjs(`${period.period_year}-${period.period_month}-01`).format('MMMM YYYY') : '',
-      pay_date: period?.pay_date || '',
+      pay_date: period?.pay_date ? fmtDate(period.pay_date) : '',
       gross_pay: M(slip.gross_pay),
       total_deductions: M(slip.total_deductions),
       net_pay: M(slip.net_pay),

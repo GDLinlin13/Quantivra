@@ -17,6 +17,7 @@ import { DocumentView } from './DocumentView';
 import { PRINT_CSS } from '../hr/PayslipView';
 import { elementsToPdf, downloadBlob, formatDocFileName } from '../../../../utils/payslipFiles';
 import { AmountInput } from '../../../../components/AmountInput';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const { Text } = Typography;
 
@@ -103,10 +104,10 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`No ${DOC_LABEL[docType].toLowerCase()}s yet`} /> }}
         columns={[
           { title: 'Number', dataIndex: 'number', render: (v: string, d) => <a onClick={() => setEditing({ id: d.id, type: d.doc_type })}>{v}</a> },
-          { title: 'Date', dataIndex: 'issue_date', sorter: (a, b) => a.issue_date.localeCompare(b.issue_date) },
+          { title: 'Date', dataIndex: 'issue_date', render: (v: string) => fmtDate(v), sorter: (a, b) => a.issue_date.localeCompare(b.issue_date) },
           { title: sales ? 'Customer' : docType === 'expense' ? 'Paid to' : 'Supplier', key: 'c', render: (_, d) => contactName(d.contact_id) },
           ...(docType === 'expense' || (docType === 'bill' && mine.some(d => d.employee_id)) ? [{ title: 'Claimed by', key: 'e', render: (_: any, d: FinDocument) => data.employees.find(e => e.id === d.employee_id)?.full_name || '—' }] : []),
-          ...(docType !== 'expense' ? [{ title: docType === 'quote' ? 'Valid until' : 'Due', key: 'due', render: (_: any, d: FinDocument) => d.doc_type === 'expense' ? '—' : d.due_date ? <span style={{ color: isOverdue(d) ? '#ff7875' : undefined }}>{d.due_date}</span> : '—' }] : []),
+          ...(docType !== 'expense' ? [{ title: docType === 'quote' ? 'Valid until' : 'Due', key: 'due', render: (_: any, d: FinDocument) => d.doc_type === 'expense' ? '—' : d.due_date ? <span style={{ color: isOverdue(d) ? '#ff7875' : undefined }}>{fmtDate(d.due_date)}</span> : '—' }] : []),
           { title: 'Total', key: 't', align: 'right' as const, render: (_, d) => money(d.total, d.currency), sorter: (a, b) => a.total - b.total },
           ...(payable ? [{ title: 'Balance', key: 'b', align: 'right' as const, render: (_: any, d: FinDocument) => d.status === 'void' ? '—' : money(balanceDue(d), d.currency) }] : []),
           { title: 'Status', key: 's', render: (_, d) => <Space size={4}><Tag color={STATUS_COLOR[d.status]}>{STATUS_LABEL[d.status]}</Tag>{isOverdue(d) && <Tag color="red">Overdue</Tag>}</Space> },

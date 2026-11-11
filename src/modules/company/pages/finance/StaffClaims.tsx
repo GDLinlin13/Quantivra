@@ -4,6 +4,7 @@ import { claimService, accountForCategory, type Claim } from '../../../../servic
 import { money } from '../../../../data/documentLayouts';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import type { FinanceData } from './DocList';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const { Text } = Typography;
 
@@ -61,7 +62,7 @@ export function StaffClaims({ data }: { data: FinanceData }) {
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No approved claims waiting" /> }}
         columns={[
           { title: 'Employee', key: 'e', render: (_, c) => name(c.employee_id) },
-          { title: 'Date', dataIndex: 'claim_date', width: 110 },
+          { title: 'Date', dataIndex: 'claim_date', render: (v: string) => fmtDate(v), width: 110 },
           { title: 'Category', dataIndex: 'category' },
           { title: 'Description', dataIndex: 'description', render: (v: string | null) => v || '—' },
           { title: 'Amount', key: 'a', align: 'right' as const, render: (_, c) => money(c.amount, c.currency) },

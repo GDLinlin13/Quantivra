@@ -8,6 +8,7 @@ import { schemeLabel } from '../../../../data/finance';
 import type { FinanceData } from './DocList';
 import { AmountInput } from '../../../../components/AmountInput';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const { Text } = Typography;
 const period = (r: PayrollDue['run']) => dayjs(`${r.period_year}-${String(r.period_month).padStart(2, '0')}-01`).format('MMM YYYY');
@@ -63,7 +64,7 @@ export function PayrollPayables({ data }: { data: FinanceData }) {
       <Table rowKey={d => d.run.id} size="small" dataSource={dues} pagination={false}
         columns={[
           { title: 'Payroll', key: 'p', render: (_, d) => period(d.run) },
-          { title: 'Pay date', key: 'pd', render: (_, d) => d.run.pay_date },
+          { title: 'Pay date', key: 'pd', render: (_, d) => fmtDate(d.run.pay_date) },
           { title: 'Net salaries', key: 'n', align: 'right' as const, render: (_, d) => M(d.net) },
           {
             title: 'Salaries to pay', key: 'nd', align: 'right' as const,

@@ -5,6 +5,7 @@ import { companyFields, money as fmtMoney, pickPaymentAccount } from '../../../.
 import { docTotals, balanceDue, DOC_LABEL, type FinDocument, type DocLine, type Contact, type ContactPerson, type FinanceSettings } from '../../../../data/finance';
 import type { FieldValues, ListValues } from '../../../../utils/gridTemplate';
 import { taxRegLabel } from '../../../../data/countries';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const qtyText = (n: number) => String(Number(n)).replace(/\.0+$/, '');
 
@@ -23,7 +24,7 @@ export function documentData(doc: FinDocument, lines: DocLine[], contact: Contac
     // {{currency}} is the document's own currency (a USD invoice says USD, not the company's HKD)
     currency: doc.currency || company?.currency || 'SGD',
     document_title: DOC_LABEL[doc.doc_type].toUpperCase(),
-    invoice_no: doc.number, invoice_date: doc.issue_date, due_date: doc.due_date || '',
+    invoice_no: doc.number, invoice_date: fmtDate(doc.issue_date), due_date: fmtDate(doc.due_date),
     payment_terms: termsDays != null ? (termsDays === 0 ? 'Due on receipt' : `${termsDays} days`) : '',
     reference: doc.reference || '', company_gst_no: settings.gstRegistered ? (settings.gstNumber || '') : '',
     customer_name: contact?.name || '', customer_address: contact?.address || '',
@@ -71,7 +72,7 @@ export function DocumentView({ doc, lines, contact, person, company, branding, s
   return (
     <div id={domId} style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
       <DocumentShell country={company?.country} branding={branding} companyName={company?.name || ''} forPrint title={fields.document_title}
-        meta={<>{doc.number}<br />Date {doc.issue_date}{doc.due_date ? <><br />{doc.doc_type === 'quote' ? 'Valid until' : 'Due'} {doc.due_date}</> : null}{doc.reference ? <><br />Ref {doc.reference}</> : null}</>}
+        meta={<>{doc.number}<br />Date {fmtDate(doc.issue_date)}{doc.due_date ? <><br />{doc.doc_type === 'quote' ? 'Valid until' : 'Due'} {fmtDate(doc.due_date)}</> : null}{doc.reference ? <><br />Ref {doc.reference}</> : null}</>}
         showLogo={inv?.showLogo ?? true} showCompanyBlock={inv?.showCompanyBlock ?? true} footerNote={inv?.footerNote}>
         <div style={{ fontSize: 13, color: '#111', marginBottom: 12, whiteSpace: 'pre-line' }}>
           <div style={{ color: '#666', fontSize: 12 }}>{doc.doc_type === 'quote' ? 'Prepared for' : 'Bill to'}</div>

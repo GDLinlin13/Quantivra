@@ -10,6 +10,7 @@ import { FileViewer } from '../../../../components/FileViewer';
 import { AmountInput } from '../../../../components/AmountInput';
 import { DocumentView } from './DocumentView';
 import type { FinanceData } from './DocList';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const { Text } = Typography;
 
@@ -209,7 +210,7 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged,
             <Table rowKey={x => x.doc.id} size="small" pagination={false} style={{ marginTop: 6 }} dataSource={paidDocs}
               columns={[
                 { title: 'Document', key: 'n', render: (_, x) => <Space size={4}><Tag>{DOC_LABEL[x.doc.doc_type]}</Tag>{x.doc.number}</Space> },
-                { title: 'Date', key: 'd', render: (_, x) => x.doc.issue_date },
+                { title: 'Date', key: 'd', render: (_, x) => fmtDate(x.doc.issue_date) },
                 { title: 'Total', key: 't', align: 'right' as const, render: (_, x) => money(x.doc.total, x.doc.currency) },
                 { title: 'Paid here', key: 'p', align: 'right' as const, render: (_, x) => M(Number(x.alloc.amount)) },
                 {

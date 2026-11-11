@@ -6,6 +6,7 @@ import { contactService, docService } from '../../../../services/finance';
 import { balanceDue, inBase, isSalesDoc, contactCurrencies, type Contact, type ContactPerson, type FinDocument } from '../../../../data/finance';
 import { money } from '../../../../data/documentLayouts';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const { Text } = Typography;
 
@@ -183,7 +184,7 @@ export function ContactDrawer({ companyId, contact, word, currency, docs, onClos
               <Table rowKey="id" size="small" style={{ marginTop: 8 }} pagination={false} dataSource={docs}
                 columns={[
                   { title: 'Number', dataIndex: 'number' },
-                  { title: 'Date', dataIndex: 'issue_date' },
+                  { title: 'Date', dataIndex: 'issue_date', render: (v: string) => fmtDate(v) },
                   { title: 'Total', key: 't', align: 'right' as const, render: (_, d) => money(d.total, d.currency) },
                   { title: 'Balance', key: 'b', align: 'right' as const, render: (_, d) => (isSalesDoc(d.doc_type) || d.doc_type === 'bill') && d.status !== 'void' ? money(balanceDue(d), d.currency) : '—' },
                   { title: 'Status', dataIndex: 'status' },

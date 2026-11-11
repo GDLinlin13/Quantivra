@@ -4,6 +4,7 @@ import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import { leaveService, type LeaveRequest } from '../../../../services/hr';
 import { workflowService, approverLabel, type RequestStatus } from '../../../../services/workflow';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const statusColor: Record<string, string> = { pending: 'gold', approved: 'green', rejected: 'red', cancelled: 'default' };
 
@@ -32,7 +33,7 @@ export function ApprovalsTab({ companyId }: { companyId: number }) {
       title: `${decision === 'approved' ? 'Approve' : 'Reject'} leave — ${r.employees?.full_name}`,
       content: (
         <div>
-          <div style={{ margin: '8px 0' }}>{r.leave_types?.name} · {r.start_date} → {r.end_date} · {r.days} {r.leave_types?.count_method === 'weeks' ? 'week(s)' : 'day(s)'}</div>
+          <div style={{ margin: '8px 0' }}>{r.leave_types?.name} · {fmtDate(r.start_date)} → {fmtDate(r.end_date)} · {r.days} {r.leave_types?.count_method === 'weeks' ? 'week(s)' : 'day(s)'}</div>
           <Input.TextArea placeholder="Note (optional)" rows={2} onChange={e => { note = e.target.value; }} />
         </div>
       ),
@@ -60,8 +61,8 @@ export function ApprovalsTab({ companyId }: { companyId: number }) {
         columns={[
           { title: 'Employee', key: 'e', render: (_, r) => <span style={{ color: '#f0ede6' }}>{r.employees?.full_name} <span style={{ color: 'rgba(240,237,230,0.4)' }}>({r.employees?.employee_code})</span></span> },
           { title: 'Type', key: 't', render: (_, r) => r.leave_types?.name || '—' },
-          { title: 'From', dataIndex: 'start_date', key: 'f' },
-          { title: 'To', dataIndex: 'end_date', key: 'to' },
+          { title: 'From', dataIndex: 'start_date', render: (v: string) => fmtDate(v), key: 'f' },
+          { title: 'To', dataIndex: 'end_date', render: (v: string) => fmtDate(v), key: 'to' },
           { title: 'Days', dataIndex: 'days', key: 'd' },
           { title: 'Reason', dataIndex: 'reason', key: 'r', render: (v: string) => v || '—' },
           { title: 'Status', dataIndex: 'status', key: 's', render: (v: string, r) => {

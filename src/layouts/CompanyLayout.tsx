@@ -11,6 +11,7 @@ import {
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CompanyAccessProvider, useCompanyAccess } from '../contexts/CompanyAccess';
+import { DateFormatProvider } from '../contexts/DateFormat';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -120,7 +121,7 @@ function CompanyLayoutInner() {
           </Dropdown>
         </Header>
         <Content style={{ padding: 24 }}>
-          <Outlet />
+          <DateFormatProvider><Outlet /></DateFormatProvider>
         </Content>
       </Layout>
     </Layout>
