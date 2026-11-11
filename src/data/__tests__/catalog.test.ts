@@ -126,3 +126,22 @@ describe('new buying prices on a bill', () => {
     expect(costChanges([{ item_id: 2, unit_price: 390, weight: 1.2 }], items, classes, 'MYR', 'SGD')).toEqual([]);
   });
 });
+
+import { listPrice } from '../catalog';
+describe('price lists', () => {
+  const rows = [
+    { price_list_id: 1, item_id: 5, class_id: null, price: 12 },
+    { price_list_id: 1, item_id: 7, class_id: 9, price: 450 },
+    { price_list_id: 2, item_id: 5, class_id: null, price: 10 },
+  ];
+  it('gives the list price of an item or of a weight class', () => {
+    expect(listPrice(rows as any, 1, 5)).toBe(12);
+    expect(listPrice(rows as any, 2, 5)).toBe(10);
+    expect(listPrice(rows as any, 1, 7, 9)).toBe(450);
+  });
+  it('says nothing when the list does not cover it, or the customer has no list', () => {
+    expect(listPrice(rows as any, 1, 6)).toBeUndefined();
+    expect(listPrice(rows as any, 1, 7, 8)).toBeUndefined();
+    expect(listPrice(rows as any, null, 5)).toBeUndefined();
+  });
+});

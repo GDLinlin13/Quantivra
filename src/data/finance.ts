@@ -21,6 +21,8 @@ export interface Contact {
   id: number; company_id: number; is_customer: boolean; is_supplier: boolean; name: string;
   reg_no?: string | null; tax_no?: string | null; email?: string | null; phone?: string | null; website?: string | null;
   address?: string | null; currency?: string | null; payment_terms_days?: number | null; notes?: string | null; archived?: boolean;
+  /** the price list this customer buys at (migration 048) */
+  price_list_id?: number | null;
 }
 /** The currencies a customer / supplier bills or pays in (stored as "USD,EUR"); the first is the default. */
 export const contactCurrencies = (c?: { currency?: string | null } | null): string[] =>
@@ -69,6 +71,8 @@ export interface FinanceSettings {
   gstNumber?: string;
   invoiceTerms?: string;    // default terms printed on invoices
   quoteValidityDays?: number;
+  /** Quotations are hidden unless switched on (price lists replace them) */
+  quotationsOn?: boolean;
 }
 export const DEFAULT_FINANCE_SETTINGS: FinanceSettings = { gstRegistered: false, gstRate: 9, quoteValidityDays: 30 };
 

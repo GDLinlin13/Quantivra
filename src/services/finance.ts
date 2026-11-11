@@ -1,4 +1,4 @@
-import { classOf, soldPieceIds, type CatalogItem, type StockAdjustment, type CustomerPrice, type WeightClass, type Piece } from '../data/catalog';
+import { classOf, soldPieceIds, type CatalogItem, type StockAdjustment, type CustomerPrice, type WeightClass, type Piece, type PriceList, type PriceListRow } from '../data/catalog';
 import { message } from 'antd';
 import { shrinkFile, shrinkPdf } from '../utils/shrinkFile';
 import { supabase } from '../utils/supabase';
@@ -36,6 +36,8 @@ export const contactService = {
       reg_no: c.reg_no || null, tax_no: c.tax_no || null, email: c.email || null, phone: c.phone || null, website: c.website || null,
       address: c.address || null, currency: c.currency || null, payment_terms_days: c.payment_terms_days ?? null,
       notes: c.notes || null, archived: !!c.archived, updated_at: new Date().toISOString(),
+      // the customer's price list (migration 048); left out until the form has one
+      ...(c.price_list_id !== undefined ? { price_list_id: c.price_list_id || null } : {}),
     };
     if (!row.name) throw new Error('Please enter a name');
     let id = c.id;
@@ -987,4 +989,42 @@ export const catalogService = {
       if (r.error) throw new Error(/catalog_customer_prices|does not exist/i.test(r.error.message) ? 'Customer prices need database update 027 — ask your administrator to run it in Supabase.' : r.error.message);
     }
   },
+};
+
+// ---- price lists (migration 048) -------------------------------------------------------------
+
+const PL_NEEDS = 'Price lists need database update 048 — ask your administrator to run it in Supabase.';
+const plMust = (r: { data: any; error: any }): any => {
+  if (r.error) throw new Error(/price_list|does not exist|price_list_id/i.test(r.error.message) && /relation|exist|column/i.test(r.error.message) ? PL_NEEDS : r.error.message);
+  return r.data;
+};
+export const priceListService = {
+  async lists(companyId: number): Promise<PriceList[]> {
+    const r = await supabase.from('price_lists').select('*').eq('company_id', companyId).order('name');
+    return r.error ? [] : r.data || [];
+  },
+  async rows(companyId: number): Promise<PriceListRow[]> {
+    const r = await supabase.from('price_list_items').select('id, price_list_id, item_id, class_id, price').eq('company_id', companyId);
+    return r.error ? [] : (r.data || []).map((x: any) => ({ ...x, price: Number(x.price) }));
+  },
+  /** Save a list with its prices (rows with no price are left out) and the customers that use it. Returns the list id. */
+  async save(companyId: number, list: Partial<PriceList>, rows: { item_id: number; class_id: number | null; price: number }[], customerIds: number[]): Promise<number> {
+    const name = (list.name || '').trim();
+    if (!name) throw new Error('Please name the price list');
+    const row = { company_id: companyId, name, notes: list.notes || null, archived: !!list.archived };
+    let id = list.id;
+    const dup = (e: any) => { if (e && /uq_price_lists_name|duplicate/i.test(e.message)) throw new Error(`There is already a price list called “${name}”`); };
+    if (id) { const r = await supabase.from('price_lists').update(row).eq('id', id); dup(r.error); plMust(r); }
+    else { const r = await supabase.from('price_lists').insert(row).select('id').single(); dup(r.error); id = plMust(r).id; }
+    plMust(await supabase.from('price_list_items').delete().eq('price_list_id', id!));
+    const keep = rows.filter(r => Number(r.price) >= 0 && r.price != null);
+    if (keep.length) plMust(await supabase.from('price_list_items').insert(keep.map(r => ({ company_id: companyId, price_list_id: id, item_id: r.item_id, class_id: r.class_id, price: Number(r.price) || 0 }))));
+    // customers: those ticked now use this list; those no longer ticked go back to the normal prices
+    const now = plMust(await supabase.from('contacts').select('id').eq('company_id', companyId).eq('price_list_id', id!)) || [];
+    const drop = now.map((c: any) => c.id).filter((c: number) => !customerIds.includes(c));
+    if (drop.length) plMust(await supabase.from('contacts').update({ price_list_id: null }).in('id', drop));
+    if (customerIds.length) plMust(await supabase.from('contacts').update({ price_list_id: id }).in('id', customerIds));
+    return id!;
+  },
+  async remove(id: number) { plMust(await supabase.from('price_lists').delete().eq('id', id)); },
 };

@@ -3,7 +3,7 @@ import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Ta
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { docService, paymentService, catalogService, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
+import { docService, paymentService, catalogService, priceListService, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
 import { ContactDrawer } from './ContactsManager';
 import { ItemDrawer } from '../Catalog';
 import { companyFileService } from '../../../../services/finance';
@@ -14,7 +14,7 @@ import {
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
-import { priceFor, basisOf, costChanges, classOf, classLabel, piecePrice, kgText, type CatalogItem, type CustomerPrice, type WeightClass, type Piece } from '../../../../data/catalog';
+import { priceFor, basisOf, costChanges, classOf, classLabel, piecePrice, listPrice, kgText, type CatalogItem, type CustomerPrice, type WeightClass, type Piece, type PriceListRow } from '../../../../data/catalog';
 import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
@@ -114,8 +114,11 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   const weightOf = (l: DocLine) => l.weight ?? pieces.find(p => p.id === l.piece_id)?.weight ?? 0;
   const pieceSold = (id?: number | null) => !!id && soldOn.some(s => s.piece_id === id && s.document_id !== docId);
   // special prices for particular customers (Catalog → item → Customer prices)
-  const [custPrices, setCustPrices] = useState<CustomerPrice[]>([]);
-  useEffect(() => { if (sales) catalogService.prices(companyId).then(setCustPrices).catch(() => null); }, [companyId, sales]);
+  // Price lists (Catalog → Price lists): the customer buys at the prices of the list they are assigned to
+  const [plRows, setPlRows] = useState<PriceListRow[]>([]);
+  useEffect(() => { if (sales) priceListService.rows(companyId).then(setPlRows).catch(() => null); }, [companyId, sales]);
+  const custPrices = useMemo<CustomerPrice[]>(() => plRows.filter(r => !r.class_id).flatMap(r =>
+    contacts.filter(c => c.price_list_id === r.price_list_id).map(c => ({ item_id: r.item_id, contact_id: c.id, price: r.price }))), [plRows, contacts]);
   // Currencies: the company's own and those of its bank accounts. A document in another currency needs the
   // exchange rate it is booked at (1 USD = x HKD), starting at the latest rate used.
   // …plus the currency the customer / supplier bills or pays in (CRM), even without a bank account in it
@@ -177,6 +180,11 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     const cls = classOf(classes.filter(c => c.item_id === it.id), weight);
     const itemCur = !sales && it.purchase_currency ? it.purchase_currency : it.currency;
     const p = piecePrice(it, cls, weight, sales);
+    // a customer's price list can price each weight class
+    if (sales && cls) {
+      const lp = listPrice(plRows, contacts.find(c => c.id === doc.contact_id)?.price_list_id, it.id, cls.id ?? null);
+      if (lp != null) p.unit_price = lp;
+    }
     // the class goes in the Description (unless something else was typed there), so Qty stays readable
     const mine = classes.filter(c => c.item_id === it.id).map(c => classLabel(c));
     const desc = (lines[i]?.description || '').trim();

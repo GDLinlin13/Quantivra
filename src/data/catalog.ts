@@ -181,3 +181,15 @@ export function costChanges(lines: { item_id?: number | null; unit_price: number
   }
   return [...out.values()];
 }
+
+/** A named price list (migration 048): customers assigned to it buy at its prices. */
+export interface PriceList { id: number; company_id: number; name: string; notes: string | null; archived: boolean }
+/** One price on a list; for items stocked by weight class there is one row per class. */
+export interface PriceListRow { id?: number; price_list_id: number; item_id: number; class_id: number | null; price: number }
+
+/** The price a list gives an item (or one of its weight classes); undefined when the list says nothing about it. */
+export function listPrice(rows: PriceListRow[], listId: number | null | undefined, itemId: number, classId: number | null = null): number | undefined {
+  if (!listId) return undefined;
+  const r = rows.find(x => x.price_list_id === listId && x.item_id === itemId && (x.class_id ?? null) === (classId ?? null));
+  return r ? Number(r.price) : undefined;
+}
