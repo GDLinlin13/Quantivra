@@ -9,7 +9,7 @@ import dayjs from 'dayjs';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../utils/supabase';
 import { catalogService, accountService, financeSettingsService, loadLedgerInput, contactService } from '../../../services/finance';
-import { stockMoves, onHand, classLabel, classOf, piecesInStock, piecesCost, kgText, type CatalogItem, type StockAdjustment, type StockMode, type WeightClass, type Piece } from '../../../data/catalog';
+import { stockMoves, onHand, supplierPrices, classLabel, classOf, piecesInStock, piecesCost, kgText, type CatalogItem, type StockAdjustment, type StockMode, type WeightClass, type Piece } from '../../../data/catalog';
 import { DEFAULT_FINANCE_SETTINGS, contactCurrencies, type Account, type Contact, type FinanceSettings } from '../../../data/finance';
 import { currencyOptions } from '../../../utils/currencies';
 import { money } from '../../../data/documentLayouts';
@@ -61,6 +61,15 @@ export function CompanyCatalogPage() {
   }, [companyId]);
   useEffect(() => { load(); }, [load]);
 
+  // what things cost now: the latest price paid on any bill (Catalog → Supplier prices); older items fall back to their catalog cost
+  const latestCost = useMemo(() => {
+    const m = new Map<string, { price: number; date: string }>();
+    for (const p of supplierPrices(docs as any[], items, classes, pieces, currency)) {
+      const k = `${p.item_id}:${p.class_id ?? 0}`;
+      if (!m.has(k) || p.date >= m.get(k)!.date) m.set(k, { price: p.price, date: p.date });
+    }
+    return (itemId: number, classId: number | null = null) => m.get(`${itemId}:${classId ?? 0}`)?.price;
+  }, [docs, items, classes, pieces, currency]);
   const stock = useMemo(() => new Map(items.filter(i => i.track_stock).map(i => [i.id, onHand(stockMoves(i, docs, adjustments, pieces))])), [items, docs, adjustments, pieces]);
 
   if (!companyId) return null;
@@ -73,7 +82,7 @@ export function CompanyCatalogPage() {
         { key: 'items', label: 'Products & services', children: <ItemsTab companyId={companyId} items={items} stock={stock} accounts={accounts} settings={settings} currency={currency} reload={load} /> },
         { key: 'prices', label: 'Customer price lists', children: <PriceListsTab companyId={companyId} items={items} classes={classes} currency={currency} company={company} branding={branding} /> },
         { key: 'supplierPrices', label: 'Supplier prices', children: <SupplierPricesTab companyId={companyId} docs={docs as any[]} items={items} classes={classes} pieces={pieces} currency={currency} /> },
-        { key: 'stock', label: 'Stock', children: <StockTab companyId={companyId} items={items} stock={stock} docs={docs} adjustments={adjustments} pieces={pieces} classes={classes} currency={currency} reload={load} /> },
+        { key: 'stock', label: 'Stock', children: <StockTab companyId={companyId} items={items} stock={stock} docs={docs} adjustments={adjustments} pieces={pieces} classes={classes} currency={currency} latestCost={latestCost} reload={load} /> },
       ]} />
     </div>
   );
@@ -115,8 +124,6 @@ function ItemsTab({ companyId, items, stock, accounts, settings, currency, reloa
           { title: 'Type', key: 'k', width: 100, render: (_, i) => <Tag color={i.kind === 'product' ? 'blue' : 'purple'}>{i.kind === 'product' ? 'Product' : 'Service'}</Tag> },
           { title: 'Used for', key: 'u', width: 110, render: (_, i) => ({ sales: 'Sales', purchases: 'Purchases', both: 'Both' } as Record<string, string>)[i.used_for || 'both'] },
           { title: 'Category', dataIndex: 'category', render: (v: string | null) => v || '—' },
-          { title: 'Selling price', key: 's', align: 'right' as const, render: (_, i) => i.used_for === 'purchases' ? '—' : `${money(i.sale_price, i.currency || currency)}${i.unit ? ` / ${i.unit}` : ''}` },
-          { title: 'Cost', key: 'c', align: 'right' as const, render: (_, i) => (Number(i.purchase_price) ? money(i.purchase_price, i.purchase_currency || i.currency || currency) : '—') },
           {
             title: 'In stock', key: 'st', align: 'right' as const, render: (_, i) => {
               if (!i.track_stock) return <Text type="secondary">—</Text>;
@@ -241,8 +248,6 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
               <Select showSearch optionFilterProp="label" options={currencyGroups('suppliers', 'buy')} />
             </Form.Item>
           )}
-          {sells && <Form.Item name="sale_price" label="Selling price"><AmountInput min={0} precision={2} prefix={priceCur} style={{ width: '100%' }} /></Form.Item>}
-          {buys && <Form.Item name="purchase_price" label="Cost / buying price"><AmountInput min={0} precision={2} prefix={buyCur} style={{ width: '100%' }} /></Form.Item>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="category" label="Category">
@@ -276,7 +281,7 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
               {mode === 'pieces' && (
                 <div style={{ marginBottom: 12 }}>
                   <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                    Each piece has its own weight and is sold once. The weight decides the class and the price; buy them on a bill (one line per piece) or receive them in Stock → Pieces.
+                    Each piece has its own weight and is sold once. The weight decides the class and its price (set in Customer price lists; supplier prices come from your bills); buy them on a bill (one line per piece) or receive them in Stock → Pieces.
                   </Text>
                   <Space size={24} wrap align="start">
                     <Form.Item name="price_basis" label="Buying prices are">
@@ -286,16 +291,13 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
                       <Segmented options={[{ value: 'per_kg', label: 'Per KG' }, { value: 'per_piece', label: 'Per piece' }]} />
                     </Form.Item>
                   </Space>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 1.2fr auto', gap: 8, marginBottom: 4 }}>
-                    <Text type="secondary">From (kg)</Text><Text type="secondary">To (kg)</Text>
-                    <Text type="secondary">{saleBasis === 'per_kg' ? 'Selling / KG' : 'Selling / piece'}</Text><Text type="secondary">{basis === 'per_kg' ? 'Cost / KG' : 'Cost / piece'}</Text><span />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 4 }}>
+                    <Text type="secondary">From (kg)</Text><Text type="secondary">To (kg)</Text><span />
                   </div>
                   {classes.map((c, i) => (
-                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 1.2fr auto', gap: 8, marginBottom: 6 }}>
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 6 }}>
                       <InputNumber min={0} precision={3} style={{ width: '100%' }} value={c.min_kg} onChange={v => setClass(i, { min_kg: Number(v) || 0 })} />
                       <InputNumber min={0} precision={3} style={{ width: '100%' }} placeholder="no limit" value={c.max_kg ?? undefined} onChange={v => setClass(i, { max_kg: v == null ? null : Number(v) })} />
-                      <AmountInput min={0} precision={2} style={{ width: '100%' }} value={c.sale_price} onChange={v => setClass(i, { sale_price: Number(v) || 0 })} />
-                      <AmountInput min={0} precision={2} style={{ width: '100%' }} value={c.purchase_price} onChange={v => setClass(i, { purchase_price: Number(v) || 0 })} />
                       <Button icon={<DeleteOutlined />} onClick={() => setClasses(cs => cs.filter((_, j) => j !== i))} />
                     </div>
                   ))}
@@ -330,8 +332,8 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
   );
 }
 
-function StockTab({ companyId, items, stock, docs, adjustments, pieces, classes, currency, reload }: {
-  companyId: number; items: CatalogItem[]; stock: Map<number, number>; docs: Docs; adjustments: StockAdjustment[]; pieces: Piece[]; classes: WeightClass[]; currency: string; reload: () => void;
+function StockTab({ companyId, items, stock, docs, adjustments, pieces, classes, currency, latestCost, reload }: {
+  companyId: number; items: CatalogItem[]; stock: Map<number, number>; docs: Docs; adjustments: StockAdjustment[]; pieces: Piece[]; classes: WeightClass[]; currency: string; latestCost: (itemId: number, classId?: number | null) => number | undefined; reload: () => void;
 }) {
   const access = useCompanyAccess();
   const canWrite = access.canWrite('inventory'), canRemove = access.canRemove('inventory');
@@ -340,7 +342,9 @@ function StockTab({ companyId, items, stock, docs, adjustments, pieces, classes,
   const [adjusting, setAdjusting] = useState<CatalogItem | null>(null);
   const [piecesOf, setPiecesOf] = useState<CatalogItem | null>(null);
   const inStock = (i: CatalogItem) => piecesInStock(i.id, pieces, docs as any);
-  const costOf = (i: CatalogItem) => (i.stock_mode === 'pieces' ? piecesCost(i, inStock(i), classes.filter(c => c.item_id === i.id)) : Math.max(0, stock.get(i.id) ?? 0) * Number(i.purchase_price || 0));
+  const costOf = (i: CatalogItem) => (i.stock_mode === 'pieces'
+    ? piecesCost(i, inStock(i), classes.filter(c => c.item_id === i.id).map(c => ({ ...c, purchase_price: latestCost(i.id, c.id ?? null) ?? c.purchase_price })))
+    : Math.max(0, stock.get(i.id) ?? 0) * (latestCost(i.id) ?? (Number(i.purchase_price) || 0)));
   const value = tracked.reduce((s, i) => s + costOf(i), 0);
   const low = tracked.filter(i => i.reorder_level != null && (stock.get(i.id) ?? 0) <= Number(i.reorder_level));
   if (!tracked.length) return <Empty description="No products are tracking stock. Turn on “Track stock” on a product." />;

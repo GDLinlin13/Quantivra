@@ -14,7 +14,7 @@ import {
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
-import { priceFor, basisOf, costChanges, supplierPrices, classOf, classLabel, piecePrice, listPrice, kgText, type CatalogItem, type CustomerPrice, type WeightClass, type Piece, type PriceListRow } from '../../../../data/catalog';
+import { basisOf, costChanges, supplierPrices, classOf, classLabel, piecePrice, listPrice, kgText, type CatalogItem, type WeightClass, type Piece, type PriceListRow } from '../../../../data/catalog';
 import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
@@ -124,8 +124,14 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   // Price lists (Catalog → Price lists): the customer buys at the prices of the list they are assigned to
   const [plRows, setPlRows] = useState<PriceListRow[]>([]);
   useEffect(() => { if (sales) priceListService.rows(companyId).then(setPlRows).catch(() => null); }, [companyId, sales]);
-  const custPrices = useMemo<CustomerPrice[]>(() => plRows.filter(r => !r.class_id).flatMap(r =>
-    contacts.filter(c => c.price_list_id === r.price_list_id).map(c => ({ item_id: r.item_id, contact_id: c.id, price: r.price }))), [plRows, contacts]);
+  // customers with no list of their own buy at the Standard price list
+  const [stdId, setStdId] = useState<number | null>(null);
+  useEffect(() => { if (sales) priceListService.standardId(companyId).then(setStdId).catch(() => setStdId(null)); }, [companyId, sales]);
+  /** the price of an item (or one of its weight classes) for a customer: their list, then the Standard list, then what the item itself says */
+  const sellPrice = (it: CatalogItem, contactId: number | null | undefined, classId: number | null = null): number | undefined => {
+    const own = contacts.find(c => c.id === contactId)?.price_list_id;
+    return listPrice(plRows, own, it.id, classId) ?? listPrice(plRows, stdId, it.id, classId);
+  };
   // Currencies: the company's own and those of its bank accounts. A document in another currency needs the
   // exchange rate it is booked at (1 USD = x HKD), starting at the latest rate used.
   // …plus the currency the customer / supplier bills or pays in (CRM), even without a bank account in it
@@ -174,7 +180,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   const pickItem = (i: number, id: number | null, from: CatalogItem[] = items) => {
     const it = from.find(x => x.id === id);
     if (!it) { setLine(i, { item_id: null }); return; }
-    const price = sales ? priceFor(it, doc.contact_id, custPrices) : supplierPrice(it.id)?.price ?? (Number(it.purchase_price) || 0);
+    const price = sales ? (sellPrice(it, doc.contact_id) ?? (Number(it.sale_price) || 0)) : supplierPrice(it.id)?.price ?? (Number(it.purchase_price) || 0);
     // an item priced in another currency: a new document with nothing priced yet takes the item's currency
     // (a bought item can have its own buying currency, e.g. bought in MYR, sold in SGD)
     const itemCur = !sales && it.purchase_currency ? it.purchase_currency : it.currency;
@@ -197,7 +203,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     const p = piecePrice(it, cls, weight, sales);
     // a customer's price list can price each weight class
     if (cls) {
-      const lp = sales ? listPrice(plRows, contacts.find(c => c.id === doc.contact_id)?.price_list_id, it.id, cls.id ?? null) : supplierPrice(it.id, cls.id ?? null)?.price;
+      const lp = sales ? sellPrice(it, doc.contact_id, cls.id ?? null) : supplierPrice(it.id, cls.id ?? null)?.price;
       if (lp != null) p.unit_price = lp;
     }
     // the class goes in the Description (unless something else was typed there), so Qty stays readable
@@ -237,8 +243,8 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       let changed = 0;
       setLines(ls => ls.map(l => {
         const it = l.item_id ? items.find(x => x.id === l.item_id) : undefined;
-        if (!it || Math.abs(Number(l.unit_price) - priceFor(it, doc.contact_id, custPrices)) > 0.005) return l;
-        const p = priceFor(it, id, custPrices);
+        if (!it || it.stock_mode === 'pieces' || Math.abs(Number(l.unit_price) - (sellPrice(it, doc.contact_id) ?? (Number(it.sale_price) || 0))) > 0.005) return l;
+        const p = sellPrice(it, id) ?? (Number(it.sale_price) || 0);
         if (Math.abs(p - Number(l.unit_price)) > 0.005) changed++;
         return { ...l, unit_price: p };
       }));
@@ -268,27 +274,25 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines, { keepNumber: typedNumber });
       // pieces bought: one piece per line, with its weight
       if (!sales && lines.some(isPieces)) await catalogService.syncBillPieces(companyId, id, doc.issue_date!, lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes);
-      // a bill at a new price: offer to keep the catalog's cost up to date
+      // a bill at a different price from this supplier's last one: say so (their prices follow the bills by themselves)
       if (!sales) {
-        const changes = costChanges(lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes, docCur, currency, (i, c) => { const h = supplierPrice(i, c); return h ? { price: h.price, date: h.date, number: h.number } : undefined; });
-        if (changes.length && canCatalog) {
-          const yes = await new Promise<boolean>(resolve => Modal.confirm({
-            title: 'New buying prices', okText: 'Update the catalog cost', cancelText: 'No, keep the catalog as it is', width: 560,
+        const changes = costChanges(lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes, docCur, currency,
+          (i, c) => { const h = supplierPrice(i, c); return h ? { price: h.price, date: h.date, number: h.number } : undefined; }).filter(c => c.since);
+        if (changes.length) {
+          await new Promise<void>(resolve => Modal.info({
+            title: 'Prices changed from this supplier’s last bill', okText: 'OK', width: 560, onOk: () => resolve(), onCancel: () => resolve(),
             content: (
               <div>
-                <div style={{ marginBottom: 8 }}>The price changed. Update the cost in the catalog too?</div>
                 {changes.map((c, i) => (
                   <div key={i} style={{ fontSize: 13 }}>
-                    <b>{c.name}</b>{c.label ? ` (${c.label})` : ''}: {docCur} {c.old.toLocaleString(undefined, { maximumFractionDigits: 4 })} → <b>{c.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}</b>{c.since ? <span style={{ color: '#999' }}> (was on {c.since})</span> : <span style={{ color: '#999' }}> (catalog cost)</span>}
+                    <b>{c.name}</b>{c.label ? ` (${c.label})` : ''}: {docCur} {c.old.toLocaleString(undefined, { maximumFractionDigits: 4 })} → <b>{c.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}</b>
+                    <span style={{ color: '#999' }}> ({c.price > c.old ? '▲' : '▼'} {Math.abs(Math.round(((c.price - c.old) / c.old) * 1000) / 10)}% · was on {c.since})</span>
                   </div>
                 ))}
+                <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>Supplier prices follow the bills automatically (Catalog → Supplier prices).</div>
               </div>
             ),
-            onOk: () => resolve(true), onCancel: () => resolve(false),
           }));
-          if (yes) {
-            try { await catalogService.setCosts(changes); onItemsChanged?.(); message.success('Catalog costs updated'); } catch (e: any) { message.error(e.message); }
-          }
         }
       }
       // An expense paid on the spot (from a bank / cash account) is recorded as paid straight away.
