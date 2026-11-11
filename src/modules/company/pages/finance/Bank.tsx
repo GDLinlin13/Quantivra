@@ -680,12 +680,13 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   multi.sort((a, b) => a.issue_date.localeCompare(b.issue_date) || a.id - b.id);
   const multiDue = r2(multi.reduce((t, d) => t + balanceDue(d), 0));
   const multiAlloc = (() => { const a = allocatePayment(amt, multi.map(d => balanceDue(d))); return multi.map((d, i) => ({ doc: d, due: a.parts[i].due, part: a.parts[i].part })); })();
+  const multiMixed = new Set(multi.map(d => d.contact_id)).size > 1;     // several people's bills: the payment belongs to none of them
   const multiLeft = r2(amt - multiDue);                                // > 0: more money than bills
   const multiBooked = !inbound && multiLeft > 0.004 && diffAccount !== 'keep';
   const payMulti = () => run(async () => {
     const first = multi[0];
     const pid = await paymentService.record(data.companyId, {
-      direction: inbound ? 'in' : 'out', amount: amt, contact_id: first.contact_id, payment_date: txn.txn_date,
+      direction: inbound ? 'in' : 'out', amount: amt, contact_id: multiMixed ? null : first.contact_id, payment_date: txn.txn_date,
       method: 'Bank transfer', reference: txn.description || undefined, account_id: txn.account_id,
       ...(multiBooked ? { charges: multiLeft, charges_account_id: diffAccount as number } : {}),
     }, multiAlloc.filter(a => a.part > 0.004).map(a => ({ document_id: a.doc.id, amount: multiBooked ? a.due : a.part })));
@@ -741,10 +742,11 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
               {openDocs.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={inbound ? 'No unpaid invoices' : 'No unpaid bills or expenses'} /> : (
                 <Table rowKey="id" size="small" pagination={{ pageSize: 8, hideOnSinglePage: true }} dataSource={openDocs}
                   rowSelection={{ type: 'checkbox', selectedRowKeys: docIds, onChange: k => setDocIds(k.map(Number)),
-                    // several at once: the same contact, in the company's currency (a foreign one is cleared on its own)
+                    // several at once, whoever they belong to (one person paid for others, or collected for them);
+                    // a foreign-currency one is cleared on its own, because of its exchange rate
                     getCheckboxProps: (d: FinDocument) => {
                       const first = data.docs.find(x => x.id === docIds[0]);
-                      return { disabled: !!first && d.id !== first.id && (isForeignDoc(first, data.currency) || isForeignDoc(d, data.currency) || d.contact_id !== first.contact_id) };
+                      return { disabled: !!first && d.id !== first.id && (isForeignDoc(first, data.currency) || isForeignDoc(d, data.currency)) };
                     } }}
                   columns={[
                     { title: inbound ? 'Number' : 'Invoice no.', key: 'no', render: (_, d) => <span style={{ fontWeight: named(d) ? 700 : 400 }}>{docNo(d)}</span> },
@@ -758,17 +760,20 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                   <Table rowKey={(r: any) => r.doc.id} size="small" pagination={false} dataSource={multiAlloc}
                     columns={[
                       { title: 'Cleared', key: 'n', render: (_: any, r: any) => docNo(r.doc) },
+                      ...(multiMixed ? [{ title: inbound ? 'Customer' : 'Supplier', key: 'who', render: (_: any, r: any) => contact(r.doc.contact_id) }] : []),
                       { title: 'Still owed', key: 'd', align: 'right' as const, render: (_: any, r: any) => money(r.due, r.doc.currency || data.currency) },
                       { title: 'This payment pays', key: 'p', align: 'right' as const, render: (_: any, r: any) => <b>{money(multiBooked ? r.due : r.part, r.doc.currency || data.currency)}</b> },
                     ]} />
                   <div style={{ marginTop: 6 }}>
                     <Text type="secondary">{multi.length} documents, {money(multiDue, data.currency)} owed · this payment {money(amt, data.currency)}</Text>
-                    {multiLeft < -0.004 && <Text type="warning"> · {money(-multiLeft, data.currency)} stays owed on the last one(s)</Text>}
+                    {inbound && multiMixed && multiLeft > 0.004 && <div style={{ marginTop: 6 }}><Text type="warning">The money is {money(multiLeft, data.currency)} more than these invoices, which belong to different customers. Untick one, or match the rest another way.</Text></div>}
+                  {multiLeft < -0.004 && <Text type="warning"> · {money(-multiLeft, data.currency)} stays owed on the last one(s)</Text>}
                   </div>
                   {!inbound && multiLeft > 0.004 && (
                     <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <Text>Difference <b>{money(multiLeft, data.currency)}</b>:</Text>
-                      <Select style={{ minWidth: 340 }} showSearch optionFilterProp="label" value={diffAccount} onChange={v => setDiffTo(v)} options={diffOptions} />
+                      <Select style={{ minWidth: 340 }} showSearch optionFilterProp="label" value={diffAccount} onChange={v => setDiffTo(v)}
+                        options={multiMixed ? diffOptions.filter((o: any) => o.value !== 'keep') : diffOptions} />
                     </div>
                   )}
                 </div>
@@ -787,7 +792,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                   <Select style={{ minWidth: 340 }} showSearch optionFilterProp="label" value={diffAccount} onChange={v => setDiffTo(v)} options={diffOptions} />
                 </div>
               )}
-              <Button type="primary" disabled={!docIds.length || !ready} loading={busy} onClick={multi.length > 1 ? payMulti : payDoc} style={{ marginTop: 8 }}>Record payment and match</Button>
+              <Button type="primary" disabled={!docIds.length || !ready || (multiMixed && multiLeft > 0.004 && (inbound || diffAccount === 'keep'))} loading={busy} onClick={multi.length > 1 ? payMulti : payDoc} style={{ marginTop: 8 }}>Record payment and match</Button>
             </div>
           ),
         },

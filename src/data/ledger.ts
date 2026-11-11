@@ -231,7 +231,9 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
       if (worth <= 0 && x.cleared <= 0) continue;
       left = r2(left - worth);
       const ctl = settle(x.doc);
-      lines.push(inbound ? { account_id: ctl, debit: 0, credit: x.cleared, contact_id: p.contact_id } : { account_id: ctl, debit: x.cleared, credit: 0, contact_id: p.contact_id });
+      // one payment can clear the documents of several people: each line belongs to the document's own contact
+      const who = x.doc?.contact_id ?? p.contact_id;
+      lines.push(inbound ? { account_id: ctl, debit: 0, credit: x.cleared, contact_id: who } : { account_id: ctl, debit: x.cleared, credit: 0, contact_id: who });
       // more received than the invoice was booked at (or less paid than the bill): a gain; otherwise a loss
       const diff = r2(inbound ? worth - x.cleared : x.cleared - worth);
       if (diff) lines.push(diff > 0 ? { account_id: FX_GAIN, debit: 0, credit: diff, description: 'Exchange gain' } : { account_id: FX_LOSS, debit: -diff, credit: 0, description: 'Exchange loss' });
