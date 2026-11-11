@@ -215,7 +215,9 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
       <ConfigProvider componentDisabled={!canWrite}>
       <Form form={form} layout="vertical" initialValues={{ kind: 'product', used_for: 'both', ...item, tax_rate: item.tax_rate == null ? 'default' : Number(item.tax_rate),
           // an empty selling basis means "the same as the buying basis"; show it as chosen
-          price_basis: item.price_basis || 'per_kg', sale_basis: item.sale_basis || item.price_basis || 'per_kg' }}>
+          price_basis: item.price_basis || 'per_kg', sale_basis: item.sale_basis || item.price_basis || 'per_kg',
+          // stored empty when it is the company's own currency (or the same as the selling currency); show the real one
+          currency: item.currency || currency, purchase_currency: item.purchase_currency || item.currency || currency }}>
         <Space size={16} wrap style={{ marginBottom: 16 }}>
           <Form.Item name="kind" noStyle><Segmented options={[{ value: 'product', label: 'Product' }, { value: 'service', label: 'Service' }]} /></Form.Item>
           <Form.Item name="used_for" noStyle><Segmented options={[{ value: 'sales', label: 'Sales' }, { value: 'purchases', label: 'Purchases' }, { value: 'both', label: 'Both' }]} /></Form.Item>
@@ -228,11 +230,11 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
         {item.description && <Form.Item name="description" label="Extra text after the name on invoices"><Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} /></Form.Item>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="unit" label="Unit"><Input placeholder={kind === 'service' ? 'e.g. hour, project' : 'e.g. pc, box, kg'} /></Form.Item>
-          <Form.Item name="currency" label={sells && buys ? 'Selling currency' : 'Currency'} initialValue={item.currency || currency}>
+          <Form.Item name="currency" label={sells && buys ? 'Selling currency' : 'Currency'}>
             <Select showSearch optionFilterProp="label" options={currencyGroups(sells ? 'customers' : 'suppliers', 'item')} />
           </Form.Item>
           {sells && buys && (
-            <Form.Item name="purchase_currency" label="Buying currency" initialValue={item.purchase_currency || item.currency || currency}>
+            <Form.Item name="purchase_currency" label="Buying currency">
               <Select showSearch optionFilterProp="label" options={currencyGroups('suppliers', 'buy')} />
             </Form.Item>
           )}
