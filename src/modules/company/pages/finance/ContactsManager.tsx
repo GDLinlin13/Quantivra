@@ -105,9 +105,9 @@ export function ContactsManager({ companyId, kind, currency, onChanged }: { comp
   );
 }
 
-function ContactDrawer({ companyId, contact, word, currency, docs, onClose, onSaved }: {
+export function ContactDrawer({ companyId, contact, word, currency, docs, onClose, onSaved }: {
   companyId: number; contact: Partial<Contact>; word: string; currency: string; docs: FinDocument[];
-  onClose: () => void; onSaved: () => void;
+  onClose: () => void; onSaved: (id: number) => void;
 }) {
   const canWrite = useCompanyAccess().canWrite('crm');
   const [form] = Form.useForm();
@@ -126,9 +126,9 @@ function ContactDrawer({ companyId, contact, word, currency, docs, onClose, onSa
     if (!v.is_customer && !v.is_supplier) { message.error('Tick customer, supplier or both'); return; }
     setSaving(true);
     try {
-      await contactService.save(companyId, { ...contact, ...v, currency: (v.currency || []).join(',') || null }, people);
+      const savedId = await contactService.save(companyId, { ...contact, ...v, currency: (v.currency || []).join(',') || null }, people);
       message.success('Saved');
-      onSaved();
+      onSaved(savedId);
     } catch (e: any) { message.error(e.message); }
     setSaving(false);
   };
