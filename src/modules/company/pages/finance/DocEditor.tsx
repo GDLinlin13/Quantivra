@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Table, Divider, Typography, message, Switch, Popconfirm, Alert, Tag, Segmented, Upload, ConfigProvider, Modal } from 'antd';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
@@ -82,6 +82,13 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   const [typed, setTyped] = useState<Set<string>>(new Set());
   useEffect(() => { docService.typedNumbers(companyId).then(setTyped).catch(() => null); }, [companyId]);
   const typedNumber = sales && typed.has(DOC_NUMBER_ENTITY[docType]);
+  // lines are numbered and can be dragged into another place
+  const dragFrom = useRef<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+  const moveLine = (from: number, to: number) => {
+    if (from === to) return;
+    setLines(ls => { const next = [...ls]; const [x] = next.splice(from, 1); next.splice(to, 0, x); return next; });
+  };
   const setLine = (i: number, patch: Partial<DocLine>) => setLines(ls => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   const t = useMemo(() => docTotals(lines, discounts, !!doc.tax_inclusive), [lines, discounts, doc.tax_inclusive]);
   const M = (n: number) => money(n, doc.currency || currency);
@@ -387,9 +394,39 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
         {docId && doc.number && !typedNumber && <Text type="secondary" style={{ display: 'block', marginTop: -8, marginBottom: 8 }}>Number {doc.number}</Text>}
       </Form>
 
+      {/* Enter moves to the same box on the next line (a new line after the last one); Shift+Enter keeps a new line in a description */}
+      <div onKeyDown={e => {
+        const el = e.target as HTMLElement;
+        if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+        if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return;
+        if (el.getAttribute('aria-expanded') === 'true') return;           // choosing from an open dropdown
+        const td = el.closest('td'), tr = td?.parentElement as HTMLTableRowElement | null;
+        if (!td || !tr || !tr.closest('.ant-table-tbody')) return;
+        e.preventDefault();
+        const col = Array.from(tr.children).indexOf(td);
+        const focusIn = (row: Element | null) => {
+          const box = row?.children[col]?.querySelector<HTMLElement>('textarea, input:not([type=hidden]):not([disabled])');
+          if (box) { box.focus(); (box as HTMLInputElement).select?.(); return true; }
+          return false;
+        };
+        const next = tr.nextElementSibling;
+        if (next && !next.classList.contains('ant-table-placeholder') && focusIn(next)) return;
+        if (next) return;
+        setLines(ls => [...ls, blankLine(gstRate)]);
+        setTimeout(() => focusIn(tr.parentElement?.lastElementChild ?? null), 60);
+      }}>
       <Table rowKey="_row" size="small" pagination={false} dataSource={lines.map((l, i) => ({ ...l, _row: i }))}
+        onRow={(r: any) => ({
+          onDragOver: e => { if (dragFrom.current != null) { e.preventDefault(); setDragOver(r._row); } },
+          onDrop: e => { e.preventDefault(); if (dragFrom.current != null) moveLine(dragFrom.current, r._row); dragFrom.current = null; setDragOver(null); },
+          style: dragOver === r._row && dragFrom.current != null && dragFrom.current !== r._row ? { outline: '2px solid #c7ceea', outlineOffset: -2 } : undefined,
+        })}
         columns={[
-          { title: '', width: 24, render: () => <HolderOutlined style={{ color: '#666' }} /> },
+          { title: '#', width: 62, render: (_: any, __: DocLine, i: number) => (
+            <span draggable onDragStart={e => { dragFrom.current = i; e.dataTransfer.effectAllowed = 'move'; }} onDragEnd={() => { dragFrom.current = null; setDragOver(null); }}
+              title="Drag to move this line" style={{ cursor: 'grab', color: '#999', whiteSpace: 'nowrap', userSelect: 'none' }}>
+              <HolderOutlined style={{ color: '#666', marginRight: 4 }} />{i + 1}
+            </span>) },
           ...(catalog.length || access.canWrite('inventory') ? [{ title: 'Item', width: 240, render: (_: any, l: DocLine, i: number) => (
             <Select style={{ width: '100%' }} allowClear showSearch optionFilterProp="label" value={l.item_id ?? undefined} placeholder="From the catalog"
               onChange={v => pickItem(i, v ?? null)} onSearch={setItemSearch} onOpenChange={o => { if (!o) setItemSearch(''); }}
@@ -453,9 +490,19 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
             <Select style={{ width: '100%' }} value={Number(l.tax_rate)} onChange={v => setLine(i, { tax_rate: v })}
               options={[...new Set([0, gstRate, Number(l.tax_rate)])].map(r => ({ value: r, label: `${r}%` }))} />
           ) }] : []),
-          { title: 'Amount', width: 120, align: 'right' as const, render: (_, __, i) => M(t.lines[i] || 0) },
+          { title: 'Amount', width: 150, align: 'right' as const, render: (_: any, l: DocLine, i: number) => (
+            // typing the amount works the unit price out: amount / (qty after the line's discount)
+            <AmountInput style={{ width: '100%' }} precision={2} value={t.lines[i] || 0}
+              onChange={v => {
+                const amount = Number(v) || 0;
+                const keep = 1 - (Number(l.discount_pct) || 0) / 100;
+                const qty = Number(l.quantity) || 0;
+                if (qty > 0 && keep > 0) setLine(i, { unit_price: Math.round((amount / (qty * keep)) * 1e6) / 1e6 });
+                else if (keep > 0) setLine(i, { quantity: 1, unit_price: Math.round((amount / keep) * 1e6) / 1e6 });
+              }} />) },
           { title: '', width: 40, render: (_, __, i) => <Button size="small" icon={<DeleteOutlined />} onClick={() => setLines(ls => ls.length > 1 ? ls.filter((_, j) => j !== i) : [blankLine(gstRate)])} /> },
         ]} />
+      </div>
       <Button size="small" icon={<PlusOutlined />} style={{ marginTop: 8 }} onClick={() => setLines(ls => [...ls, blankLine(gstRate)])}>Add a line</Button>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 24, marginTop: 16 }}>
