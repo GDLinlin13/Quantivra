@@ -176,7 +176,11 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     const cls = classOf(classes.filter(c => c.item_id === it.id), weight);
     const itemCur = !sales && it.purchase_currency ? it.purchase_currency : it.currency;
     const p = piecePrice(it, cls, weight, sales);
-    setLine(i, { piece_id: pieceId, weight, quantity: p.quantity, unit_price: inDocCurrency(p.unit_price, itemCur) });
+    // the class goes in the Description (unless something else was typed there), so Qty stays readable
+    const mine = classes.filter(c => c.item_id === it.id).map(c => classLabel(c));
+    const desc = (lines[i]?.description || '').trim();
+    const autoDesc = !desc || mine.includes(desc) ? (cls ? classLabel(cls) : '') : desc;
+    setLine(i, { piece_id: pieceId, weight, quantity: p.quantity, unit_price: inDocCurrency(p.unit_price, itemCur), description: autoDesc });
     if (weight > 0 && !cls) message.warning(`No weight class for ${kgText(weight)} kg — add one in the catalog, or type the price`);
   };
   const payFrom = accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash'));
@@ -377,7 +381,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
             <Select style={{ width: '100%' }} showSearch optionFilterProp="label" value={l.account_id ?? undefined} onChange={v => setLine(i, { account_id: v })}
               options={accountOptions as any} placeholder="General expenses" />
           ) }] : []),
-          { title: 'Qty', width: items.some(x => x.stock_mode && x.stock_mode !== 'normal') ? 170 : 80, render: (_, l, i) => {
+          { title: 'Qty', width: items.some(x => x.stock_mode && x.stock_mode !== 'normal') ? 150 : 80, render: (_, l, i) => {
             const it = isPieces(l) ? items.find(x => x.id === l.item_id)! : null;
             if (it && sales && docType !== 'credit_note') {
               // sell a piece: only what is in stock, each piece once
@@ -385,16 +389,15 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
               const list = pieces.filter(p => p.item_id === it.id && (p.id === l.piece_id || (!pieceSold(p.id) && !taken.has(p.id))))
                 .sort((a, b) => a.weight - b.weight);
               return <Select style={{ width: '100%' }} showSearch optionFilterProp="label" placeholder="Choose a piece" value={l.piece_id ?? undefined}
-                options={list.map(p => { const c = classes.find(x => x.id === p.class_id); return { value: p.id, label: `${kgText(p.weight)} kg${c ? ` · ${classLabel(c)}` : ''}` }; })}
+                optionLabelProp="short" options={list.map(p => { const c = classes.find(x => x.id === p.class_id); return { value: p.id, short: `${kgText(p.weight)} kg`, label: `${kgText(p.weight)} kg${c ? ` · ${classLabel(c)}` : ''}` }; })}
                 notFoundContent="No pieces in stock"
                 onChange={v => { const p = pieces.find(x => x.id === v); if (p) priceByWeight(i, it, p.weight, p.id); }} />;
             }
             if (it && !sales) {
-              const cls = classOf(classes.filter(c => c.item_id === it.id), weightOf(l));
               return <Space.Compact style={{ width: '100%' }}>
                 <InputNumber style={{ width: '100%' }} min={0} precision={3} placeholder="Weight" value={weightOf(l) || undefined} disabled={pieceSold(l.piece_id)}
                   onChange={v => priceByWeight(i, it, Number(v) || 0, l.piece_id ?? null)} />
-                <Space.Addon>kg{cls ? ` · ${classLabel(cls)}` : ''}</Space.Addon>
+                <Space.Addon>kg</Space.Addon>
               </Space.Compact>;
             }
             const loose = l.item_id ? items.find(x => x.id === l.item_id) : null;
