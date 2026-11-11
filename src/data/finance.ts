@@ -212,7 +212,7 @@ export const RECOMMENDED_ACCOUNTS: Omit<Account, 'id' | 'company_id' | 'archived
   { code: '5000', name: 'Cost of Sales', type: 'expense', subtype: null, is_system: false },
   { code: '5010', name: 'Purchases and Raw Materials', type: 'expense', subtype: null, is_system: false },
   { code: '5020', name: 'Direct Labour and Subcontractor Costs', type: 'expense', subtype: null, is_system: false },
-  { code: '5030', name: 'Freight, Duties and Packaging', type: 'expense', subtype: null, is_system: false },
+  { code: '5030', name: 'Shipping, Freight and Delivery Charges', type: 'expense', subtype: null, is_system: false },
   { code: '5090', name: 'Other Direct Costs', type: 'expense', subtype: null, is_system: false },
   { code: '6000', name: 'Employee Salaries and Wages', type: 'expense', subtype: 'payroll', is_system: true },
   { code: '6005', name: "Director's Salary / Wages", type: 'expense', subtype: 'payroll_director', is_system: true },
