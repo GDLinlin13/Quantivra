@@ -374,7 +374,7 @@ export const docService = {
     const row: any = {
       company_id: companyId, doc_type: d.doc_type, status: d.status || 'draft',
       contact_id: d.contact_id || null, contact_person_id: d.contact_person_id || null,
-      issue_date: d.issue_date, due_date: d.due_date || null, reference: d.reference || null, currency: d.currency || 'SGD',
+      issue_date: d.issue_date, due_date: d.due_date || null, reference: (d.reference || '').trim() || null, currency: d.currency || 'SGD',
       tax_inclusive: !!d.tax_inclusive, discounts: d.discounts || [],
       subtotal: t.subtotal, discount_total: t.discount_total, tax_total: t.tax_total, total: t.total,
       notes: d.notes || null, terms: d.terms || null, source_id: d.source_id || null,

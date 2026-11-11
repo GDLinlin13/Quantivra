@@ -417,7 +417,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
           ) : (
             <Form.Item label={sales ? 'Reference / PO no.' : 'Invoice no.'}>
               <Input value={doc.reference || ''} onChange={e => set({ reference: e.target.value })}
-                onBlur={() => { if (!sales && doc.contact_id && (doc.reference || '').trim()) docService.duplicateReference(companyId, doc.contact_id, doc.reference || '', docId).then(d => { if (d) message.error(`Invoice number ${(doc.reference || '').trim()} is already recorded for this supplier (${d.number}).`); }).catch(() => null); }} />
+                onBlur={() => { if (doc.reference && doc.reference !== doc.reference.trim()) set({ reference: doc.reference.trim() }); if (!sales && doc.contact_id && (doc.reference || '').trim()) docService.duplicateReference(companyId, doc.contact_id, doc.reference || '', docId).then(d => { if (d) message.error(`Invoice number ${(doc.reference || '').trim()} is already recorded for this supplier (${d.number}).`); }).catch(() => null); }} />
             </Form.Item>
           )}
         </div>
