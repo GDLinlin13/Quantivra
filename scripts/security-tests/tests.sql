@@ -564,7 +564,18 @@ BEGIN
   BEGIN UPDATE companies SET name = 'Sneaky' WHERE id = 1;
     IF FOUND THEN RAISE EXCEPTION 'FAIL: staff changed company details'; END IF;
   END;
-  -- staff still apply for leave themselves, but cannot approve it
+  -- without a Leave tick they cannot apply
+  BEGIN PERFORM leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-02-02","end_date":"2026-02-02","days":1}');
+    RAISE EXCEPTION 'FAIL: staff without a Leave tick applied for leave';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+:as_service
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'leave', '*', 'view');
+:as_staff
+DO $$
+DECLARE v bigint;
+BEGIN
+  -- with Leave view, staff apply for leave themselves, but cannot approve it
   v := leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-02-02","end_date":"2026-02-02","days":1}');
   BEGIN PERFORM leave_decide(v, 'approved', 'ok', 5);
     RAISE EXCEPTION 'FAIL: staff without Leave approve approved leave';
@@ -594,6 +605,78 @@ BEGIN
   v := leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-02-03","end_date":"2026-02-03","days":1}');
   PERFORM leave_decide(v, 'approved', 'ok', 5);
   ASSERT (SELECT status FROM leave_requests WHERE id = v) = 'approved', 'FAIL: staff with Leave approve cannot approve';
+END $$;
+ROLLBACK;
+\echo '9l. claims: staff submit their own, approvers decide, nobody touches another company'
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;            -- Sam Staff is employee A2
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'claims', '*', 'view');
+:as_staff
+DO $$
+DECLARE v bigint; n int;
+BEGIN
+  INSERT INTO claims (company_id, employee_id, claim_date, category, amount, currency)
+    VALUES (1, 2, '2026-03-01', 'Transport', 25, 'SGD') RETURNING id INTO v;
+  INSERT INTO claim_receipts (company_id, claim_id, path, file_name) VALUES (1, v, '1/claims/' || v || '/taxi.jpg', 'taxi.jpg');
+  ASSERT (SELECT count(*) FROM claims) = 1, 'FAIL: staff cannot see own claim';
+  BEGIN INSERT INTO claims (company_id, employee_id, claim_date, category, amount, currency) VALUES (1, 1, '2026-03-01', 'Meals', 99, 'SGD');
+    RAISE EXCEPTION 'FAIL: staff claimed for a colleague';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO claims (company_id, employee_id, claim_date, category, amount, currency) VALUES (2, 3, '2026-03-01', 'Meals', 99, 'SGD');
+    RAISE EXCEPTION 'FAIL: staff claimed in another company';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN UPDATE claims SET status = 'approved' WHERE id = v;
+    RAISE EXCEPTION 'FAIL: staff approved own claim';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  UPDATE claims SET amount = 30 WHERE id = v;
+  ASSERT (SELECT amount FROM claims WHERE id = v) = 30, 'FAIL: staff cannot change own pending claim';
+END $$;
+:as_a
+DO $$
+DECLARE v bigint := (SELECT id FROM claims WHERE employee_id = 2);
+BEGIN
+  INSERT INTO claims (company_id, employee_id, claim_date, category, amount, currency) VALUES (1, 1, '2026-03-02', 'Meals', 40, 'SGD');
+  UPDATE claims SET status = 'approved' WHERE id = v;
+  ASSERT (SELECT decided_by FROM claims WHERE id = v) = 1, 'FAIL: decision not recorded';
+END $$;
+:as_staff
+DO $$
+DECLARE n int;
+BEGIN
+  ASSERT (SELECT count(*) FROM claims) = 1, 'FAIL: staff sees colleagues'' claims';
+  UPDATE claims SET amount = 999 WHERE employee_id = 2;
+  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: staff changed an approved claim';
+  DELETE FROM claims WHERE employee_id = 2;
+  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: staff deleted an approved claim';
+END $$;
+:as_b
+DO $$
+BEGIN
+  ASSERT (SELECT count(*) FROM claims) = 0 AND (SELECT count(*) FROM claim_receipts) = 0, 'FAIL: B sees A claims';
+END $$;
+ROLLBACK;
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;
+INSERT INTO claims (company_id, employee_id, claim_date, category, amount, currency) VALUES (1, 1, '2026-03-02', 'Meals', 40, 'SGD');
+:as_staff
+DO $$
+BEGIN
+  ASSERT (SELECT count(*) FROM claims) = 0, 'FAIL: staff without Claims ticks see colleagues'' claims';
+  BEGIN INSERT INTO claims (company_id, employee_id, claim_date, category, amount, currency) VALUES (1, 2, '2026-03-01', 'Transport', 25, 'SGD');
+    RAISE EXCEPTION 'FAIL: staff without the Claims view tick submitted a claim';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  UPDATE claims SET status = 'rejected';
+  ASSERT NOT FOUND, 'FAIL: staff without Claims ticks rejected a claim';
+END $$;
+ROLLBACK;
+BEGIN; :as_service
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'claims', '*', 'approve');
+INSERT INTO claims (company_id, employee_id, claim_date, category, amount, currency) VALUES (1, 1, '2026-03-02', 'Meals', 40, 'SGD');
+:as_staff
+DO $$
+BEGIN
+  UPDATE claims SET status = 'rejected', decision_note = 'no receipt';
+  ASSERT (SELECT status FROM claims) = 'rejected', 'FAIL: approver cannot reject';
 END $$;
 ROLLBACK;
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
