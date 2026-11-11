@@ -1,4 +1,4 @@
-import type { CatalogItem, StockAdjustment, CustomerPrice } from '../data/catalog';
+import { classOf, soldPieceIds, type CatalogItem, type StockAdjustment, type CustomerPrice, type WeightClass, type Piece } from '../data/catalog';
 import { message } from 'antd';
 import { shrinkFile, shrinkPdf } from '../utils/shrinkFile';
 import { supabase } from '../utils/supabase';
@@ -397,7 +397,7 @@ export const docService = {
     const rows = lines.filter(l => (l.description || '').trim() || Number(l.unit_price)).map((l, i) => ({
       company_id: companyId, document_id: id, position: i, description: l.description || '',
       quantity: Number(l.quantity) || 0, unit_price: Number(l.unit_price) || 0, discount_pct: Number(l.discount_pct) || 0,
-      tax_rate: Number(l.tax_rate) || 0, account_id: l.account_id || null, ...(l.item_id ? { item_id: l.item_id } : {}), amount: t.lines[lines.indexOf(l)],
+      tax_rate: Number(l.tax_rate) || 0, account_id: l.account_id || null, ...(l.item_id ? { item_id: l.item_id } : {}), ...(l.piece_id ? { piece_id: l.piece_id } : {}), amount: t.lines[lines.indexOf(l)],
     }));
     if (rows.length) must(await supabase.from('fin_document_lines').insert(rows));
     // keep paid status right if the total changed
@@ -415,6 +415,14 @@ export const docService = {
     // its attached files go too
     const files = await attachmentService.list(id);
     if (files.length) await supabase.storage.from(ATTACH_BUCKET).remove(files.map(f => f.path));
+    // pieces a bill brought in go with it, unless one is already sold on an invoice
+    const bought = (await supabase.from('catalog_pieces').select('id').eq('document_id', id)).data || [];
+    if (bought.length) {
+      const sold = await supabase.from('fin_document_lines').select('piece_id, fin_documents!inner(doc_type, status)').in('piece_id', bought.map((p: any) => p.id)).eq('fin_documents.doc_type', 'invoice').neq('fin_documents.status', 'void');
+      const soldIds = new Set((sold.data || []).map((x: any) => x.piece_id));
+      if (soldIds.size) throw new Error('Some pieces on this bill are already sold on an invoice, so it can’t be deleted.');
+      await supabase.from('catalog_pieces').delete().in('id', bought.map((p: any) => p.id));
+    }
     must(await supabase.from('fin_documents').delete().eq('id', id));
   },
   /** Turn a quotation into a new draft invoice (keeps the lines and discounts). */
@@ -858,6 +866,12 @@ export const catalogService = {
       ...(i.currency !== undefined ? { currency: i.currency || null } : {}),
       // the cost in another currency than the selling price (migration 045); left out when the item never had one
       ...(i.purchase_currency !== undefined ? { purchase_currency: i.purchase_currency || null } : {}),
+      // stock by weight (migration 046); left out until an item uses it
+      ...(i.stock_mode !== undefined ? {
+        stock_mode: i.stock_mode, price_basis: i.price_basis || 'per_kg',
+        loose_unit: i.stock_mode === 'loose' ? (i.loose_unit || '').trim() || null : null,
+        loose_factor: i.stock_mode === 'loose' ? Number(i.loose_factor) || null : null,
+      } : {}),
     };
     if (!row.name) throw new Error('Please enter a name');
     const fix = (e: any) => { if (e && /uq_catalog_items_code|duplicate/i.test(e.message)) throw new Error(`The code "${row.code}" is already used by another item`); return e; };
@@ -874,6 +888,74 @@ export const catalogService = {
   },
   async adjust(companyId: number, itemId: number, quantity: number, date: string, reason: string) {
     must(await supabase.from('catalog_stock_adjustments').insert({ company_id: companyId, item_id: itemId, quantity, adj_date: date, reason: reason || null }));
+  },
+  /** Weight classes of one item (empty until migration 046 is run). */
+  async classes(companyId: number): Promise<WeightClass[]> {
+    const r = await supabase.from('catalog_weight_classes').select('*').eq('company_id', companyId).order('min_kg');
+    return r.error ? [] : (r.data || []).map((c: any) => ({ ...c, min_kg: Number(c.min_kg), max_kg: c.max_kg == null ? null : Number(c.max_kg), sale_price: Number(c.sale_price), purchase_price: Number(c.purchase_price) }));
+  },
+  /** Replace the classes of an item; classes that pieces already use are updated, not recreated. */
+  async saveClasses(companyId: number, itemId: number, classes: WeightClass[]) {
+    const old = (await this.classes(companyId)).filter(c => c.item_id === itemId);
+    const keep = new Set(classes.filter(c => c.id).map(c => c.id));
+    const gone = old.filter(c => !keep.has(c.id)).map(c => c.id!);
+    if (gone.length) must(await supabase.from('catalog_weight_classes').delete().in('id', gone));
+    for (const c of classes) {
+      const row = { company_id: companyId, item_id: itemId, min_kg: Number(c.min_kg) || 0, max_kg: c.max_kg == null || (c.max_kg as any) === '' ? null : Number(c.max_kg), sale_price: Number(c.sale_price) || 0, purchase_price: Number(c.purchase_price) || 0 };
+      if (c.id) must(await supabase.from('catalog_weight_classes').update(row).eq('id', c.id));
+      else must(await supabase.from('catalog_weight_classes').insert(row));
+    }
+  },
+  async pieces(companyId: number): Promise<Piece[]> {
+    const r = await supabase.from('catalog_pieces').select('*').eq('company_id', companyId).order('id');
+    return r.error ? [] : (r.data || []).map((p: any) => ({ ...p, weight: Number(p.weight) }));
+  },
+  /** Pieces that are on an invoice (void ones free them), with the invoice they are on. */
+  async soldPieces(companyId: number): Promise<{ piece_id: number; document_id: number }[]> {
+    const r = await supabase.from('fin_document_lines').select('piece_id, document_id, fin_documents!inner(doc_type, status)')
+      .eq('company_id', companyId).not('piece_id', 'is', null).eq('fin_documents.doc_type', 'invoice').neq('fin_documents.status', 'void');
+    return r.error ? [] : (r.data || []).map((x: any) => ({ piece_id: x.piece_id, document_id: x.document_id }));
+  },
+  /** Pieces received by hand (not on a bill). */
+  async addPieces(companyId: number, itemId: number, weights: number[], date: string, classes: WeightClass[], note?: string) {
+    const cl = classes.filter(c => c.item_id === itemId);
+    const rows = weights.filter(w => w > 0).map(w => ({ company_id: companyId, item_id: itemId, weight: w, class_id: classOf(cl, w)?.id ?? null, received_date: date, note: note || null }));
+    if (rows.length) must(await supabase.from('catalog_pieces').insert(rows));
+  },
+  async removePiece(id: number) {
+    const r = await supabase.from('catalog_pieces').delete().eq('id', id);
+    if (r.error) throw new Error(r.error.message);
+  },
+  /**
+   * After a bill is saved: every bill line of a by-weight item becomes a piece (new weights add pieces, changed
+   * weights update them, removed lines remove them unless the piece is already on an invoice).
+   */
+  async syncBillPieces(companyId: number, docId: number, issueDate: string, lines: DocLine[], items: CatalogItem[], classes: WeightClass[]) {
+    const saved = must(await supabase.from('fin_document_lines').select('id, position').eq('document_id', docId).order('position')) || [];
+    const kept = lines.filter(l => (l.description || '').trim() || Number(l.unit_price));
+    const existing = (await this.pieces(companyId)).filter(p => p.document_id === docId);
+    const used = new Set<number>();
+    for (let i = 0; i < kept.length; i++) {
+      const l = kept[i];
+      const it = l.item_id ? items.find(x => x.id === l.item_id) : undefined;
+      if (!it || it.stock_mode !== 'pieces' || !saved[i]) continue;
+      const w = Number(l.weight) || 0;
+      if (!(w > 0)) throw new Error(`Enter the weight of each ${it.name} piece`);
+      const cls = classOf(classes.filter(c => c.item_id === it.id), w);
+      const row = { weight: w, class_id: cls?.id ?? null, received_date: issueDate };
+      let pid = l.piece_id || null;
+      if (pid && existing.some(p => p.id === pid)) must(await supabase.from('catalog_pieces').update(row).eq('id', pid));
+      else pid = must(await supabase.from('catalog_pieces').insert({ company_id: companyId, item_id: it.id, document_id: docId, ...row }).select('id').single()).id;
+      used.add(pid!);
+      must(await supabase.from('fin_document_lines').update({ piece_id: pid }).eq('id', saved[i].id));
+    }
+    const stale = existing.filter(p => !used.has(p.id)).map(p => p.id);
+    if (stale.length) {
+      const docs = (await loadLedgerInput(companyId)).docs;
+      const sold = soldPieceIds(docs as any);
+      const free = stale.filter(id => !sold.has(id));
+      if (free.length) must(await supabase.from('catalog_pieces').delete().in('id', free));
+    }
   },
   async removeAdjustment(id: number) { must(await supabase.from('catalog_stock_adjustments').delete().eq('id', id)); },
   /** Special prices for particular customers (empty until migration 027 is run). */

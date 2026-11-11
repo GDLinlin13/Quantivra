@@ -11,7 +11,62 @@ export interface CatalogItem {
   currency?: string | null;
   /** the currency of the cost / buying price when it differs from `currency` (migration 045) */
   purchase_currency?: string | null;
+  /** normal; pieces = each piece has its own weight and is sold once; loose = any amount of a small unit (migration 046) */
+  stock_mode?: StockMode;
+  /** pieces: class prices are per KG (x the piece's weight) or one price per piece */
+  price_basis?: 'per_kg' | 'per_piece';
+  /** loose: the small unit ("g") and how many make one item unit (1 kg = 1000 g) */
+  loose_unit?: string | null; loose_factor?: number | null;
 }
+export type StockMode = 'normal' | 'pieces' | 'loose';
+
+/** A weight class of an item, e.g. 2 – 2.99 kg, with its own prices (migration 046). */
+export interface WeightClass { id?: number; item_id?: number; min_kg: number; max_kg: number | null; sale_price: number; purchase_price: number }
+/** One piece bought: its own weight, sold once. `document_id` is the bill it came in on (empty = received by hand). */
+export interface Piece { id: number; item_id: number; weight: number; class_id: number | null; document_id: number | null; received_date: string; note: string | null }
+
+export const kgText = (n: number) => `${Math.round((Number(n) || 0) * 1000) / 1000}`;
+
+/** "2 – 2.99 kg", "10 kg and above" */
+export function classLabel(c: Pick<WeightClass, 'min_kg' | 'max_kg'>): string {
+  return c.max_kg == null ? `${kgText(c.min_kg)} kg and above` : `${kgText(c.min_kg)} – ${kgText(c.max_kg)} kg`;
+}
+
+/**
+ * The weight class a piece falls in: the highest class starting at or below its weight. Weights in the sliver
+ * between two classes (2.995 kg between 2 – 2.99 and 3 – 3.99) belong to the lower one; real gaps: none.
+ */
+export function classOf<T extends Pick<WeightClass, 'min_kg' | 'max_kg'>>(classes: T[], weight: number): T | null {
+  const w = Number(weight) || 0;
+  const sorted = [...classes].sort((a, b) => Number(a.min_kg) - Number(b.min_kg));
+  let hit: T | null = null, next: T | undefined;
+  sorted.forEach((c, i) => { if (Number(c.min_kg) <= w) { hit = c; next = sorted[i + 1]; } });
+  const h = hit as T | null;
+  if (!h) return null;
+  if (h.max_kg == null) return h;
+  // weights just above a limit (2.995 after 2.99) still belong to it, up to the next class
+  return w <= Number(h.max_kg) || (next && w < Number(next.min_kg) && w < Number(h.max_kg) + 0.01) ? h : null;
+}
+
+/** What a piece is priced at: the class price x its weight, or the class price as it stands. */
+export function piecePrice(item: Pick<CatalogItem, 'price_basis'>, cls: Pick<WeightClass, 'sale_price' | 'purchase_price'> | null, weight: number, sales: boolean): { quantity: number; unit_price: number } {
+  const price = cls ? Number(sales ? cls.sale_price : cls.purchase_price) || 0 : 0;
+  return item.price_basis === 'per_piece' ? { quantity: 1, unit_price: price } : { quantity: Number(weight) || 0, unit_price: price };
+}
+
+/** Pieces that are on an invoice (not void) are gone; quotations and bills don't take pieces away. */
+export function soldPieceIds(docs: { doc_type: string; status: string; lines: { piece_id?: number | null }[] }[], exceptDocId?: number): Set<number> {
+  const out = new Set<number>();
+  for (const d of docs) {
+    if (d.doc_type !== 'invoice' || d.status === 'void' || (d as any).id === exceptDocId) continue;
+    for (const l of d.lines) if (l.piece_id) out.add(l.piece_id);
+  }
+  return out;
+}
+
+/** The loose amount in the small unit ("250 g") as item units (0.25 kg), and back. */
+export const fromLoose = (amount: number, factor: number) => Math.round(((Number(amount) || 0) / (Number(factor) || 1)) * 1e6) / 1e6;
+export const toLoose = (qty: number, factor: number) => Math.round((Number(qty) || 0) * (Number(factor) || 1) * 1e4) / 1e4;
 /** A special selling price of one item for one customer (migration 027). */
 export interface CustomerPrice { id?: number; item_id: number; contact_id: number; price: number }
 
@@ -44,9 +99,27 @@ const r4 = (n: number) => Math.round((Number(n) || 0) * 10000) / 10000;
  * bills / expenses, plus manual adjustments. Drafts, quotations and void documents don't count.
  */
 export function stockMoves(item: CatalogItem,
-  docs: { id: number; doc_type: string; status: string; number: string; issue_date: string; lines: { item_id?: number | null; quantity: number }[] }[],
-  adjustments: StockAdjustment[]): StockMove[] {
+  docs: { id: number; doc_type: string; status: string; number: string; issue_date: string; lines: { item_id?: number | null; quantity: number; piece_id?: number | null }[] }[],
+  adjustments: StockAdjustment[], pieces: Piece[] = []): StockMove[] {
   const moves: StockMove[] = [];
+  if (item.stock_mode === 'pieces') {
+    // counted in pieces: one in for each piece bought, one out for each piece invoiced
+    const byId = new Map(pieces.filter(p => p.item_id === item.id).map(p => [p.id, p]));
+    const numberOf = new Map(docs.map(d => [d.id, d]));
+    for (const p of byId.values()) {
+      const d = p.document_id ? numberOf.get(p.document_id) : undefined;
+      if (d && (['draft', 'void'].includes(d.status))) continue;
+      moves.push({ date: d?.issue_date || p.received_date, ref: d?.number || 'Received', kind: 'bought', quantity: 1, note: `${kgText(p.weight)} kg` });
+    }
+    for (const d of docs) {
+      if (d.doc_type !== 'invoice' || d.status === 'void') continue;
+      for (const l of d.lines) {
+        const p = l.piece_id ? byId.get(l.piece_id) : undefined;
+        if (p) moves.push({ date: d.issue_date, ref: d.number, kind: 'sold', quantity: -1, note: `${kgText(p.weight)} kg` });
+      }
+    }
+    return moves.sort((a, b) => a.date.localeCompare(b.date));
+  }
   if (Number(item.opening_qty)) moves.push({ date: '', ref: 'Opening stock', kind: 'opening', quantity: r4(item.opening_qty) });
   for (const d of docs) {
     if (['draft', 'void'].includes(d.status) || d.doc_type === 'quote') continue;
@@ -63,3 +136,19 @@ export function stockMoves(item: CatalogItem,
 }
 
 export const onHand = (moves: StockMove[]) => r4(moves.reduce((s, m) => s + m.quantity, 0));
+
+/** The pieces of an item still in stock: not on an invoice (void invoices free them again). */
+export function piecesInStock(itemId: number, pieces: Piece[], docs: { id?: number; doc_type: string; status: string; lines: { piece_id?: number | null }[] }[]): Piece[] {
+  const sold = soldPieceIds(docs as any);
+  return pieces.filter(p => p.item_id === itemId && !sold.has(p.id)
+    // a piece on a draft / void bill hasn't arrived yet
+    && !(p.document_id && docs.some(d => (d as any).id === p.document_id && ['draft', 'void'].includes(d.status))));
+}
+
+/** What a set of pieces cost: class price x weight, or the class price as it stands. */
+export function piecesCost(item: Pick<CatalogItem, 'price_basis'>, pieces: Piece[], classes: WeightClass[]): number {
+  return Math.round(pieces.reduce((s, p) => {
+    const c = classes.find(x => x.id === p.class_id);
+    return s + (c ? (item.price_basis === 'per_piece' ? Number(c.purchase_price) : Number(c.purchase_price) * p.weight) : 0);
+  }, 0) * 100) / 100;
+}

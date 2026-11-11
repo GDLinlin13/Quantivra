@@ -14,7 +14,7 @@ import {
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
-import { priceFor, type CatalogItem, type CustomerPrice } from '../../../../data/catalog';
+import { priceFor, classOf, classLabel, piecePrice, kgText, type CatalogItem, type CustomerPrice, type WeightClass, type Piece } from '../../../../data/catalog';
 import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
@@ -98,6 +98,20 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       { label: 'Expenses', options: lineAccounts.filter(a => a.type === 'expense').map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
       { label: 'Things you own (assets)', options: lineAccounts.filter(a => a.type === 'asset').map(a => ({ value: a.id, label: `${a.code} ${a.name}` })) },
     ];
+  // items stocked by weight: their classes, the pieces, and which pieces are on an invoice already
+  const [classes, setClasses] = useState<WeightClass[]>([]);
+  const [pieces, setPieces] = useState<Piece[]>([]);
+  const [soldOn, setSoldOn] = useState<{ piece_id: number; document_id: number }[]>([]);
+  const byWeight = items.some(i => i.stock_mode === 'pieces');
+  useEffect(() => {
+    if (!byWeight) return;
+    catalogService.classes(companyId).then(setClasses).catch(() => null);
+    catalogService.pieces(companyId).then(setPieces).catch(() => null);
+    catalogService.soldPieces(companyId).then(setSoldOn).catch(() => null);
+  }, [companyId, byWeight]);
+  const isPieces = (l: DocLine) => !!l.item_id && items.find(x => x.id === l.item_id)?.stock_mode === 'pieces';
+  const weightOf = (l: DocLine) => l.weight ?? pieces.find(p => p.id === l.piece_id)?.weight ?? 0;
+  const pieceSold = (id?: number | null) => !!id && soldOn.some(s => s.piece_id === id && s.document_id !== docId);
   // special prices for particular customers (Catalog → item → Customer prices)
   const [custPrices, setCustPrices] = useState<CustomerPrice[]>([]);
   useEffect(() => { if (sales) catalogService.prices(companyId).then(setCustPrices).catch(() => null); }, [companyId, sales]);
@@ -150,11 +164,20 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       switchCurrency(itemCur, true).then(() => setLine(i, { unit_price: price }));
     } else if (itemCur && itemCur !== currency) rateFor(itemCur);
     setLine(i, {
+      ...(it.stock_mode === 'pieces' ? { piece_id: null, weight: undefined, quantity: 0, unit_price: 0 } : {}),
       item_id: it.id, description: it.description || '', // the name prints first; Description is anything extra
-      unit_price: itemCur && itemCur !== docCur && !(empty && currencies.includes(itemCur)) ? inDocCurrency(price, itemCur) : price,
+      ...(it.stock_mode === 'pieces' ? {} : { unit_price: itemCur && itemCur !== docCur && !(empty && currencies.includes(itemCur)) ? inDocCurrency(price, itemCur) : price }),
       tax_rate: settings.gstRegistered ? (it.tax_rate == null ? gstRate : Number(it.tax_rate)) : 0,
       account_id: (sales ? it.income_account_id : it.expense_account_id) || null,
     });
+  };
+  /** A by-weight line takes its price from the class the piece's weight falls in. */
+  const priceByWeight = (i: number, it: CatalogItem, weight: number, pieceId: number | null) => {
+    const cls = classOf(classes.filter(c => c.item_id === it.id), weight);
+    const itemCur = !sales && it.purchase_currency ? it.purchase_currency : it.currency;
+    const p = piecePrice(it, cls, weight, sales);
+    setLine(i, { piece_id: pieceId, weight, quantity: p.quantity, unit_price: inDocCurrency(p.unit_price, itemCur) });
+    if (weight > 0 && !cls) message.warning(`No weight class for ${kgText(weight)} kg — add one in the catalog, or type the price`);
   };
   const payFrom = accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash'));
   const banks = paymentAccounts(branding?.templates.invoice);
@@ -186,6 +209,12 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     if (docType !== 'expense' && !doc.contact_id) { message.error(sales ? 'Choose a customer' : 'Choose a supplier'); return; }
     if (!lines.some(l => (l.description || '').trim() || l.item_id || Number(l.unit_price))) { message.error('Add at least one line'); return; }
     if (typedNumber && !(doc.number || '').trim()) { message.error(`Enter the ${DOC_LABEL[docType].toLowerCase()} number`); return; }
+    for (const l of lines) {
+      if (!isPieces(l)) continue;
+      const nm = items.find(x => x.id === l.item_id)?.name;
+      if (sales && docType === 'invoice' && !l.piece_id) { message.error(`Choose the piece of ${nm} to sell`); return; }
+      if (!sales && !(weightOf(l) > 0)) { message.error(`Enter the weight of each ${nm} piece`); return; }
+    }
     // the books (in the company's currency) need a rate; none typed: the latest known, else today's market rate
     let fx = doc.fx_rate;
     if (foreign && !(Number(fx) > 0)) {
@@ -196,6 +225,8 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     setSaving(true);
     try {
       const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines, { keepNumber: typedNumber });
+      // pieces bought: one piece per line, with its weight
+      if (!sales && lines.some(isPieces)) await catalogService.syncBillPieces(companyId, id, doc.issue_date!, lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes);
       // An expense paid on the spot (from a bank / cash account) is recorded as paid straight away.
       if (docType === 'expense' && doc.paid_from_account_id && (status === 'approved' || doc.status === 'approved')) {
         const { doc: fresh } = await docService.get(id);
@@ -346,8 +377,42 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
             <Select style={{ width: '100%' }} showSearch optionFilterProp="label" value={l.account_id ?? undefined} onChange={v => setLine(i, { account_id: v })}
               options={accountOptions as any} placeholder="General expenses" />
           ) }] : []),
-          { title: 'Qty', width: 80, render: (_, l, i) => <InputNumber style={{ width: '100%' }} value={l.quantity} onChange={v => setLine(i, { quantity: Number(v) || 0 })} /> },
-          { title: 'Unit price', width: 120, render: (_, l, i) => <AmountInput style={{ width: '100%' }} precision={2} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} /> },
+          { title: 'Qty', width: items.some(x => x.stock_mode && x.stock_mode !== 'normal') ? 170 : 80, render: (_, l, i) => {
+            const it = isPieces(l) ? items.find(x => x.id === l.item_id)! : null;
+            if (it && sales && docType !== 'credit_note') {
+              // sell a piece: only what is in stock, each piece once
+              const taken = new Set(lines.filter((x, j) => j !== i && x.piece_id).map(x => x.piece_id));
+              const list = pieces.filter(p => p.item_id === it.id && (p.id === l.piece_id || (!pieceSold(p.id) && !taken.has(p.id))))
+                .sort((a, b) => a.weight - b.weight);
+              return <Select style={{ width: '100%' }} showSearch optionFilterProp="label" placeholder="Choose a piece" value={l.piece_id ?? undefined}
+                options={list.map(p => { const c = classes.find(x => x.id === p.class_id); return { value: p.id, label: `${kgText(p.weight)} kg${c ? ` · ${classLabel(c)}` : ''}` }; })}
+                notFoundContent="No pieces in stock"
+                onChange={v => { const p = pieces.find(x => x.id === v); if (p) priceByWeight(i, it, p.weight, p.id); }} />;
+            }
+            if (it && !sales) {
+              const cls = classOf(classes.filter(c => c.item_id === it.id), weightOf(l));
+              return <Space.Compact style={{ width: '100%' }}>
+                <InputNumber style={{ width: '100%' }} min={0} precision={3} placeholder="Weight" value={weightOf(l) || undefined} disabled={pieceSold(l.piece_id)}
+                  onChange={v => priceByWeight(i, it, Number(v) || 0, l.piece_id ?? null)} />
+                <Space.Addon>kg{cls ? ` · ${classLabel(cls)}` : ''}</Space.Addon>
+              </Space.Compact>;
+            }
+            const loose = l.item_id ? items.find(x => x.id === l.item_id) : null;
+            if (loose?.stock_mode === 'loose' && loose.loose_unit && Number(loose.loose_factor) > 0) {
+              // typed in the small unit (g); the line keeps the item's own unit (kg)
+              const f = Number(loose.loose_factor);
+              return <Space.Compact style={{ width: '100%' }}>
+                <InputNumber style={{ width: '100%' }} min={0} value={Math.round(Number(l.quantity) * f * 10000) / 10000} onChange={v => setLine(i, { quantity: Math.round(((Number(v) || 0) / f) * 1e6) / 1e6 })} />
+                <Space.Addon>{loose.loose_unit}</Space.Addon>
+              </Space.Compact>;
+            }
+            return <InputNumber style={{ width: '100%' }} value={l.quantity} onChange={v => setLine(i, { quantity: Number(v) || 0 })} />;
+          } },
+          { title: 'Unit price', width: 120, render: (_, l, i) => {
+            const it = l.item_id ? items.find(x => x.id === l.item_id) : null;
+            const per = it && (it.stock_mode === 'loose' || (it.stock_mode === 'pieces' && it.price_basis !== 'per_piece')) ? `/ ${it.stock_mode === 'pieces' ? 'kg' : it.unit || ''}` : undefined;
+            return <AmountInput style={{ width: '100%' }} precision={2} suffix={per} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} />;
+          } },
           { title: 'Disc %', width: 80, render: (_, l, i) => <InputNumber style={{ width: '100%' }} min={0} max={100} value={l.discount_pct} onChange={v => setLine(i, { discount_pct: Number(v) || 0 })} /> },
           ...(settings.gstRegistered ? [{ title: 'GST %', width: 90, render: (_: any, l: DocLine, i: number) => (
             <Select style={{ width: '100%' }} value={Number(l.tax_rate)} onChange={v => setLine(i, { tax_rate: v })}
