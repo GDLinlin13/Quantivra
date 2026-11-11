@@ -638,7 +638,7 @@ DO $$
 DECLARE v bigint := (SELECT id FROM claims WHERE employee_id = 2);
 BEGIN
   INSERT INTO claims (company_id, employee_id, claim_date, category, amount, currency) VALUES (1, 1, '2026-03-02', 'Meals', 40, 'SGD');
-  UPDATE claims SET status = 'approved' WHERE id = v;
+  PERFORM workflow_decide('claim', v, 'approved', NULL);
   ASSERT (SELECT decided_by FROM claims WHERE id = v) = 1, 'FAIL: decision not recorded';
 END $$;
 :as_staff
@@ -677,7 +677,7 @@ INSERT INTO claims (company_id, employee_id, claim_date, category, amount, curre
 :as_staff
 DO $$
 BEGIN
-  UPDATE claims SET status = 'rejected', decision_note = 'no receipt';
+  PERFORM workflow_decide('claim', (SELECT id FROM claims), 'rejected', 'no receipt');
   ASSERT (SELECT status FROM claims) = 'rejected', 'FAIL: approver cannot reject';
 END $$;
 ROLLBACK;
@@ -835,6 +835,122 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege OR not_null_violation THEN NULL; END;
   DELETE FROM projects WHERE id = v;
   GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: create-only staff deleted a project';
+END $$;
+ROLLBACK;
+\echo '9p. approval chains: steps in order, only the right person acts, nobody approves their own'
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;              -- Sam Staff is employee A2
+UPDATE employees SET manager_id = 2 WHERE id = 1;           -- A1 reports to Sam
+INSERT INTO approval_flows (company_id, kind) VALUES (1, 'leave');
+INSERT INTO approval_flow_steps (company_id, flow_id, position, approver, min_value)
+  VALUES (1, (SELECT id FROM approval_flows WHERE company_id = 1 AND kind = 'leave'), 1, '@manager', NULL),
+         (1, (SELECT id FROM approval_flows WHERE company_id = 1 AND kind = 'leave'), 2, 'Admin', 5);
+INSERT INTO leave_requests (company_id, employee_id, leave_type_id, start_date, end_date, days) VALUES
+  (1, 1, 1, '2026-06-01', '2026-06-01', 1),      -- one day: the manager alone decides
+  (1, 1, 1, '2026-06-08', '2026-06-15', 6),      -- six days: the manager, then an Admin
+  (1, 2, 1, '2026-06-22', '2026-06-22', 1);      -- Sam's own, no manager set
+SELECT set_config('test.six', (SELECT id::text FROM leave_requests WHERE start_date = '2026-06-08'), false);
+:as_staff
+DO $$
+DECLARE one bigint; six bigint; own bigint; res text;
+BEGIN
+  SELECT id INTO one FROM leave_requests WHERE start_date = '2026-06-01';
+  SELECT id INTO six FROM leave_requests WHERE start_date = '2026-06-08';
+  SELECT id INTO own FROM leave_requests WHERE start_date = '2026-06-22';
+  -- the manager, with no Leave tick at all, decides a short request
+  res := workflow_decide('leave', one, 'approved', 'ok');
+  ASSERT res = 'approved' AND (SELECT status FROM leave_requests WHERE id = one) = 'approved', 'FAIL: manager cannot approve a short request';
+  -- a long one only moves on
+  res := workflow_decide('leave', six, 'approved', NULL);
+  ASSERT res = 'pending' AND (SELECT status FROM leave_requests WHERE id = six) = 'pending', 'FAIL: long request did not wait for the second step';
+  BEGIN PERFORM workflow_decide('leave', six, 'approved', NULL);
+    RAISE EXCEPTION 'FAIL: the manager approved the second step too';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  -- nobody approves their own
+  BEGIN PERFORM workflow_decide('leave', own, 'approved', NULL);
+    RAISE EXCEPTION 'FAIL: staff approved their own leave';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  -- the table cannot be changed around the chain
+  BEGIN UPDATE leave_requests SET status = 'approved' WHERE id = six;
+    RAISE EXCEPTION 'FAIL: staff approved leave directly';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  -- and chains are not theirs to change without a Workflow tick
+  BEGIN INSERT INTO approval_flows (company_id, kind) VALUES (1, 'claim');
+    RAISE EXCEPTION 'FAIL: staff without a Workflow tick created a chain';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO approval_log (company_id, kind, request_id, decision) VALUES (1, 'leave', 1, 'approved');
+    RAISE EXCEPTION 'FAIL: staff wrote the approval log';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+:as_a
+DO $$
+DECLARE six bigint; res text;
+BEGIN
+  SELECT id INTO six FROM leave_requests WHERE start_date = '2026-06-08';
+  BEGIN UPDATE leave_requests SET status = 'approved' WHERE id = six;
+    RAISE EXCEPTION 'FAIL: admin approved leave directly, around the chain';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  res := workflow_decide('leave', six, 'approved', 'fine');
+  ASSERT res = 'approved' AND (SELECT status FROM leave_requests WHERE id = six) = 'approved', 'FAIL: admin cannot finish the chain';
+  ASSERT (SELECT count(*) FROM approval_log WHERE request_id = six AND kind = 'leave') = 2, 'FAIL: approvals not logged';
+END $$;
+:as_b
+DO $$ BEGIN
+  ASSERT (SELECT count(*) FROM approval_flows) = 0 AND (SELECT count(*) FROM approval_log) = 0, 'FAIL: B sees A chains or log';
+  BEGIN PERFORM workflow_decide('leave', current_setting('test.six')::bigint, 'approved', NULL);
+    RAISE EXCEPTION 'FAIL: B decided an A request';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;
+UPDATE employees SET manager_id = 2 WHERE id = 1;
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'workflow', '*', 'edit');
+:as_staff
+DO $$
+BEGIN
+  INSERT INTO approval_flows (company_id, kind) VALUES (1, 'claim');
+  INSERT INTO approval_flow_steps (company_id, flow_id, position, approver) VALUES (1, (SELECT id FROM approval_flows WHERE kind = 'claim'), 1, '@manager');
+  BEGIN INSERT INTO approval_flows (company_id, kind) VALUES (2, 'claim');
+    RAISE EXCEPTION 'FAIL: chain created for another company';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;
+UPDATE employees SET manager_id = 2 WHERE id = 1;
+INSERT INTO approval_flows (company_id, kind) VALUES (1, 'claim');
+INSERT INTO approval_flow_steps (company_id, flow_id, position, approver) VALUES (1, (SELECT id FROM approval_flows WHERE kind = 'claim'), 1, '@manager');
+INSERT INTO claims (company_id, employee_id, claim_date, category, amount, currency) VALUES (1, 1, '2026-06-01', 'Meals', 40, 'SGD'), (1, 1, '2026-06-02', 'Meals', 9, 'SGD');
+:as_staff
+DO $$
+DECLARE c1 bigint; c2 bigint; res text;
+BEGIN
+  -- the line manager reads their report's claims with no Claims tick, and decides them
+  ASSERT (SELECT count(*) FROM claims) = 2, 'FAIL: manager cannot read their report''s claims';
+  SELECT id INTO c1 FROM claims WHERE claim_date = '2026-06-01';
+  SELECT id INTO c2 FROM claims WHERE claim_date = '2026-06-02';
+  res := workflow_decide('claim', c1, 'approved', NULL);
+  ASSERT res = 'approved' AND (SELECT status FROM claims WHERE id = c1) = 'approved', 'FAIL: manager cannot approve a claim';
+  res := workflow_decide('claim', c2, 'rejected', 'no receipt');
+  ASSERT res = 'rejected' AND (SELECT decision_note FROM claims WHERE id = c2) = 'no receipt', 'FAIL: manager cannot reject a claim';
+  BEGIN UPDATE claims SET status = 'approved' WHERE id = c2; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  ASSERT (SELECT status FROM claims WHERE id = c2) = 'rejected', 'FAIL: a decided claim was changed directly';
+END $$;
+ROLLBACK;
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;           -- Sam is NOT A1's manager here
+INSERT INTO approval_flows (company_id, kind) VALUES (1, 'claim');
+INSERT INTO approval_flow_steps (company_id, flow_id, position, approver) VALUES (1, (SELECT id FROM approval_flows WHERE kind = 'claim'), 1, '@manager');
+INSERT INTO claims (company_id, employee_id, claim_date, category, amount, currency) VALUES (1, 1, '2026-06-01', 'Meals', 40, 'SGD');
+SELECT set_config('test.claim', (SELECT id::text FROM claims), false);
+:as_staff
+DO $$
+BEGIN
+  ASSERT (SELECT count(*) FROM claims) = 0, 'FAIL: a colleague who is not the manager sees the claim';
+  BEGIN PERFORM workflow_decide('claim', current_setting('test.claim')::bigint, 'approved', NULL);
+    RAISE EXCEPTION 'FAIL: a colleague who is not the manager approved the claim';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 ROLLBACK;
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'

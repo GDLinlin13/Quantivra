@@ -19,12 +19,13 @@ export function CompanyHRPage() {
   const canManageStaff = access.can('employees', 'edit');
   const canManageLeave = (canManageStaff || access.can('leave', 'edit')) && access.isOn('leave');
   const canPayroll = canViewPay && access.isOn('payroll');
-  const canApprove = access.can('leave', 'approve');
+  // by tick, or as a line manager / step approver in a Workflow chain
+  const canApprove = access.isOn('leave') && (access.can('leave', 'approve') || access.approves.includes('leave'));
   const canSeeStaff = canManageStaff || access.can('employees');
   const canClock = access.can('attendance');
   const canSeeAttendance = ['create', 'edit', 'delete'].some(a => access.can('attendance', a));
   const canClaim = ['view', 'create', 'edit'].some(a => access.can('claims', a));
-  const canSeeClaims = ['approve', 'create', 'edit', 'delete'].some(a => access.can('claims', a));
+  const canSeeClaims = ['approve', 'create', 'edit', 'delete'].some(a => access.can('claims', a)) || (access.isOn('claims') && access.approves.includes('claim'));
   if (!companyId) return <Alert type="error" message="No company context" />;
 
   return (

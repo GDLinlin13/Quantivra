@@ -1,4 +1,5 @@
 import { supabase } from '../utils/supabase';
+import { workflowService } from './workflow';
 import { ATTACH_BUCKET, contentTypeOf, readyToUpload, sending, uploadError, docService, latestRate } from './finance';
 
 // Staff expense claims (migration 040). Staff submit their own; Claims → approve decides; Finance turns
@@ -56,10 +57,9 @@ export const claimService = {
     if (files.length) await supabase.storage.from(ATTACH_BUCKET).remove(files.map(f => f.path));
     must(await supabase.from('claims').delete().eq('id', id));
   },
+  /** Through the approval chain, if the company set one. Returns 'pending' when it moved to the next step. */
   async decide(id: number, status: 'approved' | 'rejected', note?: string) {
-    const r = await supabase.from('claims').update({ status, decision_note: note || null }).eq('id', id).select('id');
-    if (r.error) throw new Error(r.error.message);
-    if (!r.data?.length) throw new Error('Your role cannot approve or reject claims');
+    return workflowService.decide('claim', id, status, note);
   },
 
   async receipts(claimIds: number[]): Promise<ClaimReceipt[]> {
