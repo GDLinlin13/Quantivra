@@ -27,7 +27,7 @@ export function documentData(doc: FinDocument, lines: DocLine[], contact: Contac
     invoice_no: doc.number, invoice_date: fmtDate(doc.issue_date), due_date: fmtDate(doc.due_date),
     payment_terms: termsDays != null ? (termsDays === 0 ? 'Due on receipt' : `${termsDays} days`) : '',
     reference: doc.reference || '', company_gst_no: settings.gstRegistered ? (settings.gstNumber || '') : '',
-    customer_name: contact?.name || '', customer_address: contact?.address || '',
+    customer_name: contact?.name || '', customer_address: contact?.address || '', delivery_address: doc.delivery_address || '', deliver_to: doc.delivery_address ? `Deliver to:\n${doc.delivery_address}` : '',
     customer_contact: person?.name || '', customer_phone: person?.phone || contact?.phone || '',
     customer_email: person?.email || contact?.email || '', customer_website: contact?.website || '',
     subtotal: M(t.subtotal), total_discount: M(t.discount_total), subtotal_after_discount: M(t.subtotal - t.discount_total),
@@ -78,6 +78,7 @@ export function DocumentView({ doc, lines, contact, person, company, branding, s
           <div style={{ color: '#666', fontSize: 12 }}>{doc.doc_type === 'quote' ? 'Prepared for' : 'Bill to'}</div>
           <b>{fields.customer_name}</b>{fields.customer_address ? `\n${fields.customer_address}` : ''}
           {fields.customer_contact && <div style={{ fontSize: 12, marginTop: 2 }}>Attn: {fields.customer_contact}{[fields.customer_phone, fields.customer_email].filter(Boolean).length ? ` · ${[fields.customer_phone, fields.customer_email].filter(Boolean).join(' · ')}` : ''}</div>}
+          {fields.delivery_address && <div style={{ marginTop: 8 }}><div style={{ color: '#666', fontSize: 12 }}>Deliver to</div>{fields.delivery_address}</div>}
           {fields.company_gst_no && <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>Our {taxRegLabel(company?.country)} {fields.company_gst_no}</div>}
         </div>
         <table style={{ width: '100%', fontSize: 13, color: '#111', borderCollapse: 'collapse' }}>

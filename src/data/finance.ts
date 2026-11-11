@@ -32,6 +32,9 @@ export interface Contact {
 export const contactCurrencies = (c?: { currency?: string | null } | null): string[] =>
   (c?.currency || '').split(/[\s,]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
 
+/** A saved delivery address of a customer (migration 053). */
+export interface ContactAddress { id?: number; company_id?: number; contact_id?: number; label?: string | null; address: string; is_default?: boolean }
+
 export interface ContactPerson {
   id?: number; company_id?: number; contact_id?: number; name: string; designation?: string | null;
   email?: string | null; phone?: string | null; is_primary?: boolean;
@@ -58,6 +61,8 @@ export interface FinDocument {
   notes: string | null; terms: string | null; source_id: number | null;
   paid_from_account_id?: number | null; employee_id?: number | null;
   payment_account_index?: number | null;
+  /** where the products go (printed on the invoice; a copy of one of the customer's addresses or typed in) */
+  delivery_address?: string | null;
   /** company currency per 1 unit of the document's currency; empty when the document is in the company's currency (migration 036) */
   fx_rate?: number | null;
   created_at?: string;

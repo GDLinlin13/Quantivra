@@ -4,7 +4,7 @@ import { currencyOptions } from '../../../../utils/currencies';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { contactService, docService, priceListService } from '../../../../services/finance';
 import type { PriceList } from '../../../../data/catalog';
-import { balanceDue, inBase, isSalesDoc, contactCurrencies, type Contact, type ContactPerson, type FinDocument } from '../../../../data/finance';
+import { balanceDue, inBase, isSalesDoc, contactCurrencies, type Contact, type ContactPerson, type ContactAddress, type FinDocument } from '../../../../data/finance';
 import { money } from '../../../../data/documentLayouts';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { fmtDate } from '../../../../utils/dateFormat';
@@ -116,6 +116,11 @@ export function ContactDrawer({ companyId, contact, word, currency, docs, onClos
   const [people, setPeople] = useState<ContactPerson[]>([]);
   const [saving, setSaving] = useState(false);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
+  // delivery addresses of a customer (migration 053)
+  const [addresses, setAddresses] = useState<ContactAddress[]>([]);
+  const [addrTouched, setAddrTouched] = useState(false);
+  useEffect(() => { if (contact.id) contactService.addressesOf(companyId).then(all => setAddresses(all.filter(a => a.contact_id === contact.id))).catch(() => setAddresses([])); }, [companyId, contact.id]);
+  const setAddr = (i: number, patch: Partial<ContactAddress>) => { setAddrTouched(true); setAddresses(as => as.map((a, j) => (j === i ? { ...a, ...patch } : a))); };
   useEffect(() => { priceListService.lists(companyId).then(l => setPriceLists(l.filter(x => !x.archived || x.id === contact.price_list_id || x.id === contact.purchase_price_list_id))).catch(() => setPriceLists([])); }, [companyId, contact.price_list_id, contact.purchase_price_list_id]);
   const isCustomer = Form.useWatch('is_customer', form);
   const isSupplier = Form.useWatch('is_supplier', form);
@@ -137,6 +142,7 @@ export function ContactDrawer({ companyId, contact, word, currency, docs, onClos
       const savedId = await contactService.save(companyId, { ...contact, ...rest, currency: (v.currency || []).join(',') || null,
         // the supplier's tax (migration 051): sent only for suppliers
         ...(v.is_supplier ? { tax_charged: tax_mode === 'yes' ? true : tax_mode === 'no' ? false : null } : {}) }, people);
+      if (v.is_customer && (addrTouched || addresses.length)) await contactService.saveAddresses(companyId, savedId, addresses);
       message.success('Saved');
       onSaved(savedId);
     } catch (e: any) { message.error(e.message); }
@@ -205,6 +211,22 @@ export function ContactDrawer({ companyId, contact, word, currency, docs, onClos
         </div>
       ))}
       <Button size="small" icon={<PlusOutlined />} onClick={() => setPeople(ps => [...ps, { name: '', is_primary: ps.length === 0 }])}>Add a person</Button>
+
+      {isCustomer !== false && (
+        <>
+          <Divider titlePlacement="start">Delivery addresses</Divider>
+          {addresses.map((a, i) => (
+            <div key={a.id ?? `n${i}`} style={{ display: 'grid', gridTemplateColumns: '32px 1fr 2.4fr 32px', gap: 6, marginBottom: 6, alignItems: 'start' }}>
+              <Button type="text" title="The address filled in by default" icon={a.is_default ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
+                onClick={() => { setAddrTouched(true); setAddresses(as => as.map((x, j) => ({ ...x, is_default: j === i ? !x.is_default : false }))); }} />
+              <Input placeholder="Name, e.g. Warehouse" value={a.label || ''} onChange={e => setAddr(i, { label: e.target.value })} />
+              <Input.TextArea autoSize={{ minRows: 1, maxRows: 5 }} placeholder="Address" value={a.address} onChange={e => setAddr(i, { address: e.target.value })} />
+              <Button icon={<DeleteOutlined />} onClick={() => { setAddrTouched(true); setAddresses(as => as.filter((_, j) => j !== i)); }} />
+            </div>
+          ))}
+          <Button size="small" icon={<PlusOutlined />} onClick={() => { setAddrTouched(true); setAddresses(as => [...as, { label: '', address: '', is_default: as.length === 0 }]); }}>Add a delivery address</Button>
+        </>
+      )}
 
       {contact.id && (
         <>

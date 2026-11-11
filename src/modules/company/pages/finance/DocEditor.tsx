@@ -3,14 +3,14 @@ import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Ta
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { docService, paymentService, catalogService, priceListService, supplierBills, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
+import { docService, paymentService, catalogService, priceListService, supplierBills, contactService as contactsApi, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
 import { ContactDrawer } from './ContactsManager';
 import { ItemDrawer } from '../Catalog';
 import { companyFileService } from '../../../../services/finance';
 import { FileViewer } from '../../../../components/FileViewer';
 import {
   docTotals, addDays, today, DOC_LABEL, DOC_NUMBER_ENTITY, contactCurrencies, STATUS_LABEL, STATUS_COLOR,
-  type DocType, type FinDocument, type DocLine, type DocDiscount, type Contact, type ContactPerson, type FinanceSettings, type Account,
+  type DocType, type FinDocument, type DocLine, type DocDiscount, type Contact, type ContactPerson, type ContactAddress, type FinanceSettings, type Account,
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
@@ -98,6 +98,19 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
 
   const contactList = contacts.filter(c => !c.archived && (sales ? c.is_customer : c.is_supplier) || c.id === doc.contact_id);
   const contactPeople = people.filter(p => p.contact_id === doc.contact_id);
+  // delivery address: for sales documents that have products; the customer can keep several (CRM), one is the default
+  const [addresses, setAddresses] = useState<ContactAddress[]>([]);
+  useEffect(() => { if (sales) contactsApi.addressesOf(companyId).then(setAddresses).catch(() => setAddresses([])); }, [companyId, sales]);
+  const hasProducts = lines.some(l => l.item_id && items.find(x => x.id === l.item_id)?.kind === 'product');
+  const wantsAddress = sales && docType !== 'credit_note' && !!doc.contact_id && hasProducts;
+  const myAddresses = addresses.filter(a => a.contact_id === doc.contact_id);
+  useEffect(() => {
+    // a new document takes the customer's default address as soon as it has a product
+    if (!wantsAddress || docId || doc.delivery_address) return;
+    const d = myAddresses.find(a => a.is_default);
+    if (d) set({ delivery_address: d.address });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantsAddress, doc.contact_id, addresses]);
   // What a line can be booked to: income for sales; for purchases, expenses plus the few asset accounts you can
   // buy into (prepayments, equipment) — never bank / cash / receivables, and not the payroll accounts payroll books itself.
   const AUTO = ['bank', 'cash', 'receivable', 'payroll', 'payroll_director', 'payroll_employer', 'payroll_employer_other', 'gratuity_expense'];
@@ -309,7 +322,9 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     }
     setSaving(true);
     try {
-      const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, toSave, { keepNumber: typedNumber });
+      const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}),
+        // the delivery address goes with a document that has products (migration 053)
+        ...(doc.delivery_address || 'delivery_address' in doc ? { delivery_address: wantsAddress ? doc.delivery_address || null : null } : {}) } as any, toSave, { keepNumber: typedNumber });
       // pieces bought: one piece per line, with its weight
       if (!sales && lines.some(isPieces)) await catalogService.syncBillPieces(companyId, id, doc.issue_date!, lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes);
       // An expense paid on the spot (from a bank / cash account) is recorded as paid straight away.
@@ -421,6 +436,30 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
             </Form.Item>
           )}
         </div>
+        {wantsAddress && (
+          <div style={{ marginBottom: 12 }}>
+            <Space wrap align="center" style={{ marginBottom: 6 }}>
+              <Text>Delivery address</Text>
+              {myAddresses.length > 0 && (
+                <Select allowClear style={{ width: 280 }} placeholder="Choose a saved address"
+                  value={myAddresses.find(a => a.address.trim() === (doc.delivery_address || '').trim())?.id}
+                  onChange={v => set({ delivery_address: myAddresses.find(a => a.id === v)?.address || '' })}
+                  options={myAddresses.map(a => ({ value: a.id, label: a.label || a.address.split('\n')[0] }))} />
+              )}
+              {(doc.delivery_address || '').trim() && !myAddresses.some(a => a.address.trim() === (doc.delivery_address || '').trim()) && access.canWrite('crm') && (
+                <Button size="small" onClick={async () => {
+                  try {
+                    const text = (doc.delivery_address || '').trim();
+                    await contactsApi.saveAddresses(companyId, doc.contact_id!, [...myAddresses, { label: text.split('\n')[0].slice(0, 40), address: text, is_default: !myAddresses.length }]);
+                    setAddresses(await contactsApi.addressesOf(companyId));
+                    message.success('Address saved to the customer');
+                  } catch (e: any) { message.error(e.message); }
+                }}>Save this address to the customer</Button>
+              )}
+            </Space>
+            <Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} placeholder="Where the products go" value={doc.delivery_address || ''} onChange={e => set({ delivery_address: e.target.value })} />
+          </div>
+        )}
         {currencies.length > 1 && (
           <Space wrap align="center" style={{ marginBottom: 12 }}>
             <Text>Currency</Text>
