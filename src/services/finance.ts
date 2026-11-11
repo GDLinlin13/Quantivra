@@ -1009,6 +1009,15 @@ const plMust = (r: { data: any; error: any }): any => {
   return r.data;
 };
 export const priceListService = {
+  /** The standard list: customers with no list of their own buy at its prices (null until one is set). */
+  async standardId(companyId: number): Promise<number | null> {
+    const r = await supabase.from('company_settings').select('value').eq('company_id', companyId).eq('category', 'company').eq('key', 'default_price_list').maybeSingle();
+    const id = Number((r.data as any)?.value?.id);
+    return id > 0 ? id : null;
+  },
+  async setStandard(companyId: number, id: number | null) {
+    plMust(await supabase.from('company_settings').upsert({ company_id: companyId, category: 'company', key: 'default_price_list', value: { id } }, { onConflict: 'company_id,category,key' }));
+  },
   async lists(companyId: number): Promise<PriceList[]> {
     const r = await supabase.from('price_lists').select('*').eq('company_id', companyId).order('name');
     return r.error ? [] : r.data || [];
