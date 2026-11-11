@@ -10,6 +10,7 @@ import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, payme
 import { CellValue } from '../../../components/GridDocument';
 import type { GridTemplate } from '../../../utils/gridTemplate';
 import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME, formatDocFileName, DOC_FILE_NAME_TOKENS, DEFAULT_DOC_FILE_NAME } from '../../../utils/payslipFiles';
+import { DEFAULT_STATEMENT_FILE_NAME } from './finance/Statements';
 import { nationalIdLabel, companyRegLabel } from '../../../data/countries';
 
 const { Title, Text } = Typography;
@@ -198,7 +199,7 @@ export function CompanyProfilePage() {
       <Space wrap>
         <div style={{ width: 520, maxWidth: '100%' }}>{amountSelect(kind)}</div>
         <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
-          How amounts appear on {kind === 'payslip' ? 'payslips' : 'invoices'}, e.g. {plainAmount(money(1234.5, cur, tpl[kind].amountFormat))}
+          How amounts appear on {kind === 'payslip' ? 'payslips' : kind === 'soa' ? 'statements' : 'invoices'}, e.g. {plainAmount(money(1234.5, cur, tpl[kind].amountFormat))}
         </Text>
       </Space>
     </Card>
@@ -248,6 +249,21 @@ export function CompanyProfilePage() {
   const setBank = (bi: number, patch: Partial<PaymentAccount>) => setBanks(banks.map((b, j) => (j === bi ? { ...b, ...patch } : b)));
   const setBankLine = (bi: number, li: number, patch: Partial<PaymentLine>) =>
     setBank(bi, { lines: banks[bi].lines.map((r, j) => (j === li ? { ...r, ...patch } : r)) });
+
+  const soaSettings = (
+    <Form layout="vertical" component={false}>
+      <Form.Item label="Amount format" style={{ marginTop: 8 }}>{amountSelect('soa')}</Form.Item>
+      <Form.Item label="Download file name" style={{ marginBottom: 12 }}>
+        <Input value={tpl.soa.fileName ?? ''} placeholder={DEFAULT_STATEMENT_FILE_NAME} onChange={e => setTplField('soa', 'fileName', e.target.value)} />
+        <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
+          e.g. {formatDocFileName(tpl.soa.fileName || DEFAULT_STATEMENT_FILE_NAME, { type: 'Statement of account', number: '', customer: 'Argos Solutions Limited', reference: '', date: '2026-08-31', company: v.legal_name || company.name })}
+        </Text>
+      </Form.Item>
+      <Form.Item label="Footer note" style={{ marginBottom: 0 }}>
+        <Input.TextArea rows={2} value={tpl.soa.footerNote} onChange={e => setTplField('soa', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Profile" />
+      </Form.Item>
+    </Form>
+  );
 
   const invoiceSettings = (
     <Form layout="vertical" component={false}>
@@ -310,6 +326,31 @@ export function CompanyProfilePage() {
         <Input.TextArea rows={2} value={tpl.invoice.footerNote} onChange={e => setTplField('invoice', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Profile" />
       </Form.Item>
     </Form>
+  );
+
+  // Statement of account: what it shows, and its settings. Bank details come from the Invoice Template.
+  const soaPrebuilt = twoCol(
+    <Card size="small" style={panel} title={<span style={{ color: '#f0ede6' }}>What the statement shows</span>}>
+      <TplToggle label="Logo" v={tpl.soa.showLogo} on={x => setTplField('soa', 'showLogo', x)} />
+      <TplToggle label="Company address block" v={tpl.soa.showCompanyBlock} on={x => setTplField('soa', 'showCompanyBlock', x)} />
+      {soaSettings}
+    </Card>,
+    previewBox('Preview (example figures)', (
+      <DocumentShell country={company.country} branding={previewBranding} companyName={company.name} title="STATEMENT OF ACCOUNT"
+        meta={<>As at 2026-08-31<br />1 Jul 2026 to 31 Aug 2026</>}
+        showLogo={tpl.soa.showLogo} showCompanyBlock={tpl.soa.showCompanyBlock} footerNote={tpl.soa.footerNote} forPrint>
+        <div style={{ fontSize: 12, color: '#111' }}>
+          <div style={{ color: '#666' }}>Statement for</div>
+          <b>Acme Trading Pte Ltd</b>
+          <table style={{ width: '100%', marginTop: 8, borderCollapse: 'collapse' }}><tbody>
+            {row('Balance brought forward', money(1200, cur, tpl.soa.amountFormat))}
+            {row('INV-0007', money(1800, cur, tpl.soa.amountFormat))}
+            {row('Payment received — INV-0005', money(-1200, cur, tpl.soa.amountFormat))}
+            {row('Amount due', money(2000, cur, tpl.soa.amountFormat), { bold: true, line: true })}
+          </tbody></table>
+        </div>
+      </DocumentShell>
+    )),
   );
 
   const invoicePrebuilt = twoCol(
@@ -413,6 +454,14 @@ export function CompanyProfilePage() {
                 <Input.TextArea rows={2} value={tpl.payslip.footerNote} onChange={e => setTplField('payslip', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Profile" />
               </Card>,
               <>{amountFormatCard('payslip')}{fileNamesCard}</>),
+          },
+          {
+            key: 'soa-template', label: 'Statement Template',
+            children: templateTab('soa', 'Statements', tpl.soa.layout?.enabled ? null : soaPrebuilt,
+              'The bank details printed on a statement are the ones in the Invoice Template.',
+              <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>Statement settings</span>}>
+                {soaSettings}
+              </Card>),
           },
           {
             key: 'invoice-template', label: 'Invoice Template',
