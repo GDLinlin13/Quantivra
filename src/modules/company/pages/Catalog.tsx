@@ -9,7 +9,7 @@ import dayjs from 'dayjs';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../utils/supabase';
 import { catalogService, accountService, financeSettingsService, loadLedgerInput, contactService } from '../../../services/finance';
-import { stockMoves, onHand, type CatalogItem, type StockAdjustment } from '../../../data/catalog';
+import { stockMoves, onHand, classLabel, classOf, piecesInStock, piecesCost, kgText, type CatalogItem, type StockAdjustment, type StockMode, type WeightClass, type Piece } from '../../../data/catalog';
 import { DEFAULT_FINANCE_SETTINGS, contactCurrencies, type Account, type Contact, type FinanceSettings } from '../../../data/finance';
 import { currencyOptions } from '../../../utils/currencies';
 import { money } from '../../../data/documentLayouts';
@@ -26,6 +26,8 @@ export function CompanyCatalogPage() {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [adjustments, setAdjustments] = useState<StockAdjustment[]>([]);
   const [docs, setDocs] = useState<Docs>([]);
+  const [classes, setClasses] = useState<WeightClass[]>([]);
+  const [pieces, setPieces] = useState<Piece[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [settings, setSettings] = useState<FinanceSettings>(DEFAULT_FINANCE_SETTINGS);
   const [currency, setCurrency] = useState('SGD');
@@ -36,11 +38,13 @@ export function CompanyCatalogPage() {
     if (!companyId) return;
     setLoading(true);
     try {
-      const [it, adj, input, s, co] = await Promise.all([
+      const [it, adj, input, s, co, cls, pcs] = await Promise.all([
         catalogService.list(companyId), catalogService.adjustments(companyId), loadLedgerInput(companyId),
         financeSettingsService.get(companyId).catch(() => DEFAULT_FINANCE_SETTINGS),
         supabase.from('companies').select('currency').eq('id', companyId).maybeSingle(),
+        catalogService.classes(companyId), catalogService.pieces(companyId),
       ]);
+      setClasses(cls); setPieces(pcs);
       setItems(it); setAdjustments(adj); setDocs(input.docs); setAccounts(input.accounts); setSettings(s);
       setCurrency(co.data?.currency || 'SGD'); setError(null);
     } catch (e: any) {
@@ -50,7 +54,7 @@ export function CompanyCatalogPage() {
   }, [companyId]);
   useEffect(() => { load(); }, [load]);
 
-  const stock = useMemo(() => new Map(items.filter(i => i.track_stock).map(i => [i.id, onHand(stockMoves(i, docs, adjustments))])), [items, docs, adjustments]);
+  const stock = useMemo(() => new Map(items.filter(i => i.track_stock).map(i => [i.id, onHand(stockMoves(i, docs, adjustments, pieces))])), [items, docs, adjustments, pieces]);
 
   if (!companyId) return null;
   if (error) return <div><Title level={4} style={{ color: '#f0ede6' }}>Catalog</Title><Alert type="warning" showIcon title={error} /></div>;
@@ -60,7 +64,7 @@ export function CompanyCatalogPage() {
       <Title level={4} style={{ color: '#f0ede6' }}>Catalog</Title>
       <Tabs items={[
         { key: 'items', label: 'Products & services', children: <ItemsTab companyId={companyId} items={items} stock={stock} accounts={accounts} settings={settings} currency={currency} reload={load} /> },
-        { key: 'stock', label: 'Stock', children: <StockTab companyId={companyId} items={items} stock={stock} docs={docs} adjustments={adjustments} currency={currency} reload={load} /> },
+        { key: 'stock', label: 'Stock', children: <StockTab companyId={companyId} items={items} stock={stock} docs={docs} adjustments={adjustments} pieces={pieces} classes={classes} currency={currency} reload={load} /> },
       ]} />
     </div>
   );
@@ -152,6 +156,13 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
   const [customers, setCustomers] = useState<Contact[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [custPrices, setCustPrices] = useState<{ contact_id: number | null; price: number | null }[]>([]);
+  const mode: StockMode = Form.useWatch('stock_mode', form) ?? item.stock_mode ?? 'normal';
+  const basis = Form.useWatch('price_basis', form) ?? item.price_basis ?? 'per_kg';
+  const [classes, setClasses] = useState<WeightClass[]>([]);
+  useEffect(() => {
+    if (item.id) catalogService.classes(companyId).then(cs => setClasses(cs.filter(c => c.item_id === item.id))).catch(() => null);
+  }, [companyId, item.id]);
+  const setClass = (i: number, patch: Partial<WeightClass>) => setClasses(cs => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
   useEffect(() => {
     contactService.list(companyId).then(cs => { setCustomers(cs.filter(c => c.is_customer && !c.archived)); setContacts(cs.filter(c => !c.archived)); }).catch(() => { setCustomers([]); setContacts([]); });
     if (item.id) catalogService.prices(companyId, item.id).then(ps => setCustPrices(ps.map(p => ({ contact_id: p.contact_id, price: p.price })))).catch(() => null);
@@ -176,11 +187,19 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
     setSaving(true);
     try {
       const { purchase_currency: _pc, ...rest } = { ...item, ...v } as any;
+      // stock by weight needs database update 046; items that don't use it never send it
+      if (rest.stock_mode === 'normal' && !('stock_mode' in item)) { delete rest.stock_mode; delete rest.price_basis; }
+      if (rest.stock_mode === 'pieces') {
+        if (!classes.length) throw new Error('Add at least one weight class');
+        if (classes.some(c => c.min_kg == null || (c.max_kg != null && Number(c.max_kg) < Number(c.min_kg)))) throw new Error('Check the weight classes: “to” must not be below “from”');
+      }
+      if (rest.stock_mode === 'loose' && (!(rest.loose_unit || '').trim() || !(Number(rest.loose_factor) > 0))) throw new Error('Enter the small unit and how many make one ' + (rest.unit || 'unit'));
       // bought in another currency than it is sold in: only when it is both bought and sold
       const buyIn = sells && buys && v.purchase_currency && v.purchase_currency !== (v.currency || currency) ? v.purchase_currency : null;
       const id = await catalogService.save(companyId, { ...rest, tax_rate: v.tax_rate === 'default' ? null : v.tax_rate,
         currency: v.currency && v.currency !== currency ? v.currency : null,
         ...(buyIn || 'purchase_currency' in item ? { purchase_currency: buyIn } : {}) });
+      if (rest.stock_mode === 'pieces') await catalogService.saveClasses(companyId, id, classes);
       await catalogService.setPrices(companyId, id, custPrices.filter(p => p.contact_id).map(p => ({ contact_id: p.contact_id!, price: Number(p.price) || 0 })));
       message.success('Saved'); onSaved(id);
     } catch (e: any) { message.error(e.message); }
@@ -254,12 +273,50 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
               <Switch checkedChildren="Track stock" unCheckedChildren="Don't track stock" />
             </Form.Item>
             {track && (
+              <>
+              <Form.Item name="stock_mode" label="How is it stocked?" initialValue="normal">
+                <Segmented options={[{ value: 'normal', label: 'Normal' }, { value: 'pieces', label: 'By weight class' }, { value: 'loose', label: 'Loose' }]} />
+              </Form.Item>
+              {mode === 'pieces' && (
+                <div style={{ marginBottom: 12 }}>
+                  <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                    Each piece has its own weight and is sold once. The weight decides the class and the price; buy them on a bill (one line per piece) or receive them in Stock → Pieces.
+                  </Text>
+                  <Form.Item name="price_basis" label="Class prices are" initialValue="per_kg">
+                    <Segmented options={[{ value: 'per_kg', label: 'Per KG (× the piece’s weight)' }, { value: 'per_piece', label: 'One price per piece' }]} />
+                  </Form.Item>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 1.2fr auto', gap: 8, marginBottom: 4 }}>
+                    <Text type="secondary">From (kg)</Text><Text type="secondary">To (kg)</Text>
+                    <Text type="secondary">{basis === 'per_kg' ? 'Selling / KG' : 'Selling / piece'}</Text><Text type="secondary">{basis === 'per_kg' ? 'Cost / KG' : 'Cost / piece'}</Text><span />
+                  </div>
+                  {classes.map((c, i) => (
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 1.2fr auto', gap: 8, marginBottom: 6 }}>
+                      <InputNumber min={0} precision={3} style={{ width: '100%' }} value={c.min_kg} onChange={v => setClass(i, { min_kg: Number(v) || 0 })} />
+                      <InputNumber min={0} precision={3} style={{ width: '100%' }} placeholder="no limit" value={c.max_kg ?? undefined} onChange={v => setClass(i, { max_kg: v == null ? null : Number(v) })} />
+                      <AmountInput min={0} precision={2} style={{ width: '100%' }} value={c.sale_price} onChange={v => setClass(i, { sale_price: Number(v) || 0 })} />
+                      <AmountInput min={0} precision={2} style={{ width: '100%' }} value={c.purchase_price} onChange={v => setClass(i, { purchase_price: Number(v) || 0 })} />
+                      <Button icon={<DeleteOutlined />} onClick={() => setClasses(cs => cs.filter((_, j) => j !== i))} />
+                    </div>
+                  ))}
+                  <Button size="small" icon={<PlusOutlined />} onClick={() => setClasses(cs => {
+                    const last = [...cs].sort((a, b) => Number(a.min_kg) - Number(b.min_kg)).pop();
+                    return [...cs, { min_kg: last ? (last.max_kg != null ? Math.floor(Number(last.max_kg)) + 1 : Number(last.min_kg) + 1) : 0, max_kg: null, sale_price: 0, purchase_price: 0 }];
+                  })}>Add a weight class</Button>
+                </div>
+              )}
+              {mode === 'loose' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
+                  <Form.Item name="loose_unit" label="Sold in a smaller unit"><Input placeholder="e.g. g" /></Form.Item>
+                  <Form.Item name="loose_factor" label={`How many make one ${form.getFieldValue('unit') || item.unit || 'unit'}`}><InputNumber min={0} style={{ width: '100%' }} placeholder="e.g. 1,000" /></Form.Item>
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
-                <Form.Item name="opening_qty" label="Stock when you started" tooltip="Bills add stock, invoices take it away, and you can adjust it on the Stock tab.">
+                {mode !== 'pieces' && <Form.Item name="opening_qty" label="Stock when you started" tooltip="Bills add stock, invoices take it away, and you can adjust it on the Stock tab.">
                   <InputNumber style={{ width: '100%' }} />
-                </Form.Item>
+                </Form.Item>}
                 <Form.Item name="reorder_level" label="Remind me to reorder at"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
               </div>
+              </>
             )}
           </Card>
         )}
@@ -272,15 +329,18 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
   );
 }
 
-function StockTab({ companyId, items, stock, docs, adjustments, currency, reload }: {
-  companyId: number; items: CatalogItem[]; stock: Map<number, number>; docs: Docs; adjustments: StockAdjustment[]; currency: string; reload: () => void;
+function StockTab({ companyId, items, stock, docs, adjustments, pieces, classes, currency, reload }: {
+  companyId: number; items: CatalogItem[]; stock: Map<number, number>; docs: Docs; adjustments: StockAdjustment[]; pieces: Piece[]; classes: WeightClass[]; currency: string; reload: () => void;
 }) {
   const access = useCompanyAccess();
   const canWrite = access.canWrite('inventory'), canRemove = access.canRemove('inventory');
   const tracked = items.filter(i => i.track_stock && !i.archived);
   const [history, setHistory] = useState<CatalogItem | null>(null);
   const [adjusting, setAdjusting] = useState<CatalogItem | null>(null);
-  const value = tracked.reduce((s, i) => s + Math.max(0, stock.get(i.id) ?? 0) * Number(i.purchase_price || 0), 0);
+  const [piecesOf, setPiecesOf] = useState<CatalogItem | null>(null);
+  const inStock = (i: CatalogItem) => piecesInStock(i.id, pieces, docs as any);
+  const costOf = (i: CatalogItem) => (i.stock_mode === 'pieces' ? piecesCost(i, inStock(i), classes.filter(c => c.item_id === i.id)) : Math.max(0, stock.get(i.id) ?? 0) * Number(i.purchase_price || 0));
+  const value = tracked.reduce((s, i) => s + costOf(i), 0);
   const low = tracked.filter(i => i.reorder_level != null && (stock.get(i.id) ?? 0) <= Number(i.reorder_level));
   if (!tracked.length) return <Empty description="No products are tracking stock. Turn on “Track stock” on a product." />;
   return (
@@ -293,17 +353,24 @@ function StockTab({ companyId, items, stock, docs, adjustments, currency, reload
         columns={[
           { title: 'Code', dataIndex: 'code', render: (v: string | null) => v || '—' },
           { title: 'Product', key: 'n', render: (_, i) => <a onClick={() => setHistory(i)}>{i.name}</a> },
-          { title: 'In stock', key: 'q', align: 'right' as const, render: (_, i) => { const q = stock.get(i.id) ?? 0; return <b style={{ color: q < 0 ? '#ff7875' : undefined }}>{q}{i.unit ? ` ${i.unit}` : ''}</b>; } },
+          { title: 'In stock', key: 'q', align: 'right' as const, render: (_, i) => {
+            if (i.stock_mode === 'pieces') { const ps = inStock(i); return <b>{ps.length} pcs · {kgText(ps.reduce((s, p) => s + p.weight, 0))} kg</b>; }
+            const q = stock.get(i.id) ?? 0;
+            return <b style={{ color: q < 0 ? '#ff7875' : undefined }}>{q}{i.unit ? ` ${i.unit}` : ''}{i.stock_mode === 'loose' && i.loose_unit && i.loose_factor ? ` (${Math.round(q * Number(i.loose_factor) * 100) / 100} ${i.loose_unit})` : ''}</b>;
+          } },
           { title: 'Reorder at', dataIndex: 'reorder_level', align: 'right' as const, render: (v: number | null) => (v == null ? '—' : v) },
-          { title: 'Value at cost', key: 'v', align: 'right' as const, render: (_, i) => money(Math.max(0, stock.get(i.id) ?? 0) * Number(i.purchase_price || 0), currency) },
-          { title: '', key: 'a', width: 120, render: (_, i) => canWrite && <Button size="small" icon={<SwapOutlined />} onClick={() => setAdjusting(i)}>Adjust</Button> },
+          { title: 'Value at cost', key: 'v', align: 'right' as const, render: (_, i) => money(costOf(i), currency) },
+          { title: '', key: 'a', width: 120, render: (_, i) => canWrite && (i.stock_mode === 'pieces'
+            ? <Button size="small" icon={<SwapOutlined />} onClick={() => setPiecesOf(i)}>Pieces</Button>
+            : <Button size="small" icon={<SwapOutlined />} onClick={() => setAdjusting(i)}>Adjust</Button>) },
         ]} />
+      {piecesOf && <PiecesDrawer companyId={companyId} item={piecesOf} pieces={inStock(piecesOf)} classes={classes.filter(c => c.item_id === piecesOf.id)} currency={currency} canWrite={canWrite} onClose={() => setPiecesOf(null)} onChanged={reload} />}
       {adjusting && <AdjustModal companyId={companyId} item={adjusting} current={stock.get(adjusting.id) ?? 0} onClose={() => setAdjusting(null)} onDone={() => { setAdjusting(null); reload(); }} />}
       {history && (
         <Drawer open onClose={() => setHistory(null)} size={720} title={`${history.name} — stock history`}>
           <Table rowKey={(_, i) => String(i)} size="small" pagination={false} dataSource={(() => {
             let run = 0;
-            return stockMoves(history, docs, adjustments).map(m => ({ ...m, balance: (run = Math.round((run + m.quantity) * 10000) / 10000) }));
+            return stockMoves(history, docs, adjustments, pieces).map(m => ({ ...m, balance: (run = Math.round((run + m.quantity) * 10000) / 10000) }));
           })()}
             columns={[
               { title: 'Date', dataIndex: 'date', render: (v: string) => v || '—' },
@@ -328,6 +395,45 @@ function StockTab({ companyId, items, stock, docs, adjustments, currency, reload
         </Drawer>
       )}
     </div>
+  );
+}
+
+function PiecesDrawer({ companyId, item, pieces, classes, currency, canWrite, onClose, onChanged }: {
+  companyId: number; item: CatalogItem; pieces: Piece[]; classes: WeightClass[]; currency: string; canWrite: boolean; onClose: () => void; onChanged: () => void;
+}) {
+  const [text, setText] = useState('');
+  const [date, setDate] = useState(dayjs());
+  const [busy, setBusy] = useState(false);
+  const add = async () => {
+    const weights = text.split(/[\s,;]+/).map(x => Number(x)).filter(x => x > 0);
+    if (!weights.length) { message.error('Type the weights in kg, e.g. 2.3, 2.6, 3.1'); return; }
+    setBusy(true);
+    try { await catalogService.addPieces(companyId, item.id, weights, date.format('YYYY-MM-DD'), classes.map(c => ({ ...c, item_id: item.id })), 'Received'); setText(''); message.success(`${weights.length} piece${weights.length > 1 ? 's' : ''} added`); onChanged(); }
+    catch (e: any) { message.error(e.message); }
+    setBusy(false);
+  };
+  return (
+    <Drawer open onClose={onClose} size={640} title={`${item.name} — pieces in stock`}>
+      <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>Pieces bought on a bill appear here by themselves. Add pieces that did not come on a bill (opening stock, a delivery you have not billed yet).</Text>
+      {canWrite && (
+        <Space wrap style={{ marginBottom: 16 }}>
+          <Input style={{ width: 280 }} placeholder="Weights in kg, e.g. 2.3, 2.6, 3.1" value={text} onChange={e => setText(e.target.value)} onPressEnter={add} />
+          <DatePicker allowClear={false} value={date} onChange={d => d && setDate(d)} />
+          <Button type="primary" loading={busy} onClick={add}>Add pieces</Button>
+        </Space>
+      )}
+      <Table rowKey="id" size="small" pagination={false} dataSource={[...pieces].sort((a, b) => a.weight - b.weight)} locale={{ emptyText: 'No pieces in stock' }}
+        columns={[
+          { title: 'Weight', dataIndex: 'weight', render: (w: number) => `${kgText(w)} kg` },
+          { title: 'Class', key: 'c', render: (_, p) => { const c = classes.find(x => x.id === p.class_id) || classOf(classes, p.weight); return c ? classLabel(c) : <Text type="warning">No class</Text>; } },
+          { title: 'Cost', key: 'cost', align: 'right' as const, render: (_, p) => { const c = classes.find(x => x.id === p.class_id); return c ? money(piecesCost(item, [p], classes), currency) : '—'; } },
+          { title: 'From', key: 'f', render: (_, p) => (p.document_id ? 'A bill' : `Received ${p.received_date}`) },
+          { title: '', key: 'x', width: 60, render: (_, p) => canWrite && !p.document_id && (
+            <Popconfirm title="Remove this piece?" onConfirm={async () => { try { await catalogService.removePiece(p.id); onChanged(); } catch (e: any) { message.error(e.message); } }}>
+              <Button size="small" danger icon={<DeleteOutlined />} />
+            </Popconfirm>) },
+        ]} />
+    </Drawer>
   );
 }
 

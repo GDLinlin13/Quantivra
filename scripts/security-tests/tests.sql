@@ -1081,6 +1081,44 @@ DO $$ BEGIN
   ASSERT (SELECT count(*) FROM toil_credits) = 0 AND (SELECT count(*) FROM leave_policy) = 0, 'FAIL: B sees A leave policy data';
 END $$;
 ROLLBACK;
+\echo '9r. stock by weight: classes and pieces stay inside their company, a piece is sold once'
+BEGIN; :as_a
+DO $$
+DECLARE v_i bigint; v_c bigint; v_p bigint; v_d1 bigint; v_d2 bigint;
+BEGIN
+  INSERT INTO catalog_items (company_id, name, track_stock, stock_mode, price_basis) VALUES (1, 'Patin', true, 'pieces', 'per_kg') RETURNING id INTO v_i;
+  INSERT INTO catalog_weight_classes (company_id, item_id, min_kg, max_kg, sale_price, purchase_price) VALUES (1, v_i, 2, 2.99, 260, 200) RETURNING id INTO v_c;
+  INSERT INTO catalog_pieces (company_id, item_id, weight, class_id) VALUES (1, v_i, 2.5, v_c) RETURNING id INTO v_p;
+  PERFORM set_config('qv.alpha_item', v_i::text, false);
+  BEGIN INSERT INTO catalog_pieces (company_id, item_id, weight) VALUES (2, v_i, 1); RAISE EXCEPTION 'FAIL: A added a piece to B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  -- the same piece on two invoices is refused
+  INSERT INTO fin_documents (company_id, doc_type, number, status, issue_date) VALUES (1, 'invoice', 'PC-1', 'approved', current_date) RETURNING id INTO v_d1;
+  INSERT INTO fin_documents (company_id, doc_type, number, status, issue_date) VALUES (1, 'invoice', 'PC-2', 'approved', current_date) RETURNING id INTO v_d2;
+  INSERT INTO fin_document_lines (company_id, document_id, description, quantity, unit_price, item_id, piece_id) VALUES (1, v_d1, 'Patin', 2.5, 260, v_i, v_p);
+  BEGIN INSERT INTO fin_document_lines (company_id, document_id, description, quantity, unit_price, item_id, piece_id) VALUES (1, v_d2, 'Patin', 2.5, 260, v_i, v_p);
+    RAISE EXCEPTION 'FAIL: a piece went on two invoices';
+  EXCEPTION WHEN unique_violation THEN NULL; END;
+  -- a void invoice frees it
+  UPDATE fin_documents SET status = 'void' WHERE id = v_d1;
+  INSERT INTO fin_document_lines (company_id, document_id, description, quantity, unit_price, item_id, piece_id) VALUES (1, v_d2, 'Patin', 2.5, 260, v_i, v_p);
+END $$;
+COMMIT;
+BEGIN; :as_b
+DO $$
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM catalog_weight_classes WHERE company_id = 1), 'FAIL: B sees A weight classes';
+  ASSERT NOT EXISTS (SELECT 1 FROM catalog_pieces WHERE company_id = 1), 'FAIL: B sees A pieces';
+  BEGIN INSERT INTO catalog_weight_classes (company_id, item_id, min_kg) VALUES (2, current_setting('qv.alpha_item')::bigint, 1);
+    RAISE EXCEPTION 'FAIL: B added a class to an A item';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_a
+DELETE FROM fin_documents WHERE number IN ('PC-1', 'PC-2');
+DELETE FROM catalog_items WHERE name = 'Patin';
+COMMIT;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;
