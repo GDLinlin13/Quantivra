@@ -10,7 +10,8 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../utils/supabase';
 import { catalogService, accountService, financeSettingsService, loadLedgerInput, contactService } from '../../../services/finance';
 import { stockMoves, onHand, type CatalogItem, type StockAdjustment } from '../../../data/catalog';
-import { DEFAULT_FINANCE_SETTINGS, type Account, type Contact, type FinanceSettings } from '../../../data/finance';
+import { DEFAULT_FINANCE_SETTINGS, contactCurrencies, type Account, type Contact, type FinanceSettings } from '../../../data/finance';
+import { currencyOptions } from '../../../utils/currencies';
 import { money } from '../../../data/documentLayouts';
 import { AmountInput } from '../../../components/AmountInput';
 import { useCompanyAccess } from '../../../contexts/CompanyAccess';
@@ -102,7 +103,7 @@ function ItemsTab({ companyId, items, stock, accounts, settings, currency, reloa
           { title: 'Used for', key: 'u', width: 110, render: (_, i) => ({ sales: 'Sales', purchases: 'Purchases', both: 'Both' } as Record<string, string>)[i.used_for || 'both'] },
           { title: 'Category', dataIndex: 'category', render: (v: string | null) => v || '—' },
           { title: 'Selling price', key: 's', align: 'right' as const, render: (_, i) => i.used_for === 'purchases' ? '—' : `${money(i.sale_price, i.currency || currency)}${i.unit ? ` / ${i.unit}` : ''}` },
-          { title: 'Cost', key: 'c', align: 'right' as const, render: (_, i) => (Number(i.purchase_price) ? money(i.purchase_price, i.currency || currency) : '—') },
+          { title: 'Cost', key: 'c', align: 'right' as const, render: (_, i) => (Number(i.purchase_price) ? money(i.purchase_price, i.purchase_currency || i.currency || currency) : '—') },
           {
             title: 'In stock', key: 'st', align: 'right' as const, render: (_, i) => {
               if (!i.track_stock) return <Text type="secondary">—</Text>;
@@ -143,24 +144,42 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
   // sold, bought, or both: only the matching prices and accounts are asked for
   const usedFor = Form.useWatch('used_for', form) ?? item.used_for ?? 'both';
   const sells = usedFor !== 'purchases', buys = usedFor !== 'sales';
-  // prices in the company's currency or one it has a bank account in
-  const currencies = [...new Set([currency, ...accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash') && a.currency).map(a => a.currency!), ...(item.currency ? [item.currency] : [])])];
+  // prices in any currency: the ones your suppliers (or customers) use come first, then your own, then the rest
   const priceCur = Form.useWatch('currency', form) || item.currency || currency;
+  const buyCur = (sells && buys ? Form.useWatch('purchase_currency', form) : null) || priceCur;
   // special prices for particular customers
   const [customers, setCustomers] = useState<Contact[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [custPrices, setCustPrices] = useState<{ contact_id: number | null; price: number | null }[]>([]);
   useEffect(() => {
-    contactService.list(companyId).then(cs => setCustomers(cs.filter(c => c.is_customer && !c.archived))).catch(() => setCustomers([]));
+    contactService.list(companyId).then(cs => { setCustomers(cs.filter(c => c.is_customer && !c.archived)); setContacts(cs.filter(c => !c.archived)); }).catch(() => { setCustomers([]); setContacts([]); });
     if (item.id) catalogService.prices(companyId, item.id).then(ps => setCustPrices(ps.map(p => ({ contact_id: p.contact_id, price: p.price })))).catch(() => null);
   }, [companyId, item.id]);
+  const allCur = useMemo(() => currencyOptions(), []);
+  const currencyGroups = (kind: 'suppliers' | 'customers', _for: string) => {
+    const used = (flag: 'is_supplier' | 'is_customer') => [...new Set(contacts.filter(c => c[flag]).flatMap(c => contactCurrencies(c)))];
+    const theirs = used(kind === 'suppliers' ? 'is_supplier' : 'is_customer');
+    const mine = [...new Set([currency, ...accounts.filter(x => !x.archived && (x.subtype === 'bank' || x.subtype === 'cash') && x.currency).map(x => x.currency!), ...(item.currency ? [item.currency] : []), ...(item.purchase_currency ? [item.purchase_currency] : [])])].filter(c => !theirs.includes(c));
+    const label = (c: string) => allCur.find(o => o.value === c)?.label || c;
+    const rest = allCur.filter(o => !theirs.includes(o.value) && !mine.includes(o.value));
+    return [
+      ...(theirs.length ? [{ label: kind === 'suppliers' ? 'Your suppliers use' : 'Your customers use', options: theirs.map(c => ({ value: c, label: label(c) })) }] : []),
+      { label: 'Your company and bank accounts', options: mine.map(c => ({ value: c, label: label(c) })) },
+      { label: 'All currencies', options: rest },
+    ];
+  };
   const income = accounts.filter(a => a.type === 'income' && !a.archived);
   const costs = accounts.filter(a => (a.type === 'expense' || a.type === 'asset') && !a.archived && !['bank', 'cash', 'receivable'].includes(a.subtype || ''));
   const submit = async () => {
     const v = await form.validateFields();
     setSaving(true);
     try {
-      const id = await catalogService.save(companyId, { ...item, ...v, tax_rate: v.tax_rate === 'default' ? null : v.tax_rate,
-        ...(currencies.length > 1 ? { currency: v.currency && v.currency !== currency ? v.currency : null } : {}) });
+      const { purchase_currency: _pc, ...rest } = { ...item, ...v } as any;
+      // bought in another currency than it is sold in: only when it is both bought and sold
+      const buyIn = sells && buys && v.purchase_currency && v.purchase_currency !== (v.currency || currency) ? v.purchase_currency : null;
+      const id = await catalogService.save(companyId, { ...rest, tax_rate: v.tax_rate === 'default' ? null : v.tax_rate,
+        currency: v.currency && v.currency !== currency ? v.currency : null,
+        ...(buyIn || 'purchase_currency' in item ? { purchase_currency: buyIn } : {}) });
       await catalogService.setPrices(companyId, id, custPrices.filter(p => p.contact_id).map(p => ({ contact_id: p.contact_id!, price: Number(p.price) || 0 })));
       message.success('Saved'); onSaved(id);
     } catch (e: any) { message.error(e.message); }
@@ -183,11 +202,18 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
         </div>
         {/* the name is what goes on invoices; an older extra description can still be edited or cleared */}
         {item.description && <Form.Item name="description" label="Extra text after the name on invoices"><Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} /></Form.Item>}
-        <div style={{ display: 'grid', gridTemplateColumns: currencies.length > 1 ? '1fr 0.6fr 1fr 1fr' : '1fr 1fr 1fr', gap: 12, alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="unit" label="Unit"><Input placeholder={kind === 'service' ? 'e.g. hour, project' : 'e.g. pc, box, kg'} /></Form.Item>
-          {currencies.length > 1 && <Form.Item name="currency" label="Currency" initialValue={item.currency || currency}><Select options={currencies.map(c => ({ value: c, label: c }))} /></Form.Item>}
+          <Form.Item name="currency" label={sells && buys ? 'Selling currency' : 'Currency'} initialValue={item.currency || currency}>
+            <Select showSearch optionFilterProp="label" options={currencyGroups(sells ? 'customers' : 'suppliers', 'item')} />
+          </Form.Item>
+          {sells && buys && (
+            <Form.Item name="purchase_currency" label="Buying currency" initialValue={item.purchase_currency || item.currency || currency}>
+              <Select showSearch optionFilterProp="label" options={currencyGroups('suppliers', 'buy')} />
+            </Form.Item>
+          )}
           {sells && <Form.Item name="sale_price" label="Selling price"><AmountInput min={0} precision={2} prefix={priceCur} style={{ width: '100%' }} /></Form.Item>}
-          {buys && <Form.Item name="purchase_price" label="Cost / buying price"><AmountInput min={0} precision={2} prefix={priceCur} style={{ width: '100%' }} /></Form.Item>}
+          {buys && <Form.Item name="purchase_price" label="Cost / buying price"><AmountInput min={0} precision={2} prefix={buyCur} style={{ width: '100%' }} /></Form.Item>}
         </div>
         {sells && <Card size="small" style={{ background: 'transparent', marginBottom: 16 }} title="Customer prices"
           extra={<Button size="small" icon={<PlusOutlined />} onClick={() => setCustPrices(ps => [...ps, { contact_id: null, price: Number(form.getFieldValue('sale_price')) || 0 }])}>Customer</Button>}>

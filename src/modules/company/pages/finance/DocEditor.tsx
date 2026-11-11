@@ -143,13 +143,15 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     if (!it) { setLine(i, { item_id: null }); return; }
     const price = sales ? priceFor(it, doc.contact_id, custPrices) : Number(it.purchase_price) || 0;
     // an item priced in another currency: a new document with nothing priced yet takes the item's currency
+    // (a bought item can have its own buying currency, e.g. bought in MYR, sold in SGD)
+    const itemCur = !sales && it.purchase_currency ? it.purchase_currency : it.currency;
     const empty = !lines.some((l, j) => j !== i && Number(l.unit_price));
-    if (it.currency && it.currency !== docCur && empty && !Number(doc.amount_paid) && currencies.includes(it.currency)) {
-      switchCurrency(it.currency, true).then(() => setLine(i, { unit_price: price }));
-    } else if (it.currency && it.currency !== currency) rateFor(it.currency);
+    if (itemCur && itemCur !== docCur && empty && !Number(doc.amount_paid) && currencies.includes(itemCur)) {
+      switchCurrency(itemCur, true).then(() => setLine(i, { unit_price: price }));
+    } else if (itemCur && itemCur !== currency) rateFor(itemCur);
     setLine(i, {
       item_id: it.id, description: it.description || '', // the name prints first; Description is anything extra
-      unit_price: it.currency && it.currency !== docCur && !(empty && currencies.includes(it.currency)) ? inDocCurrency(price, it.currency) : price,
+      unit_price: itemCur && itemCur !== docCur && !(empty && currencies.includes(itemCur)) ? inDocCurrency(price, itemCur) : price,
       tax_rate: settings.gstRegistered ? (it.tax_rate == null ? gstRate : Number(it.tax_rate)) : 0,
       account_id: (sales ? it.income_account_id : it.expense_account_id) || null,
     });
