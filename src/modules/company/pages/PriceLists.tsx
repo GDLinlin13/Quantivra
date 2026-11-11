@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Table, Button, Space, Input, Select, Drawer, Modal, Popconfirm, Tag, Typography, Empty, message } from 'antd';
+import { Table, Button, Space, Input, Select, Drawer, Modal, Popconfirm, Tag, Typography, Empty, Segmented, message } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, DownloadOutlined } from '@ant-design/icons';
 import { priceListService, contactService } from '../../../services/finance';
 import { classLabel, type CatalogItem, type PriceList, type PriceListRow, type WeightClass } from '../../../data/catalog';
@@ -20,17 +20,21 @@ const { Text } = Typography;
 interface Line { key: string; item: CatalogItem; cls: WeightClass | null; normal: number }
 
 /** The lines a list can price: everything sold, with one line per weight class for items stocked by weight. */
-function linesFor(items: CatalogItem[], classes: WeightClass[]): Line[] {
+type Kind = 'sales' | 'purchase';
+function linesFor(items: CatalogItem[], classes: WeightClass[], kind: Kind = 'sales'): Line[] {
   const out: Line[] = [];
-  for (const it of items.filter(i => !i.archived && (i.used_for || 'both') !== 'purchases').sort((a, b) => a.name.localeCompare(b.name))) {
+  const buy = kind === 'purchase';
+  for (const it of items.filter(i => !i.archived && (i.used_for || 'both') !== (buy ? 'sales' : 'purchases')).sort((a, b) => a.name.localeCompare(b.name))) {
     if (it.stock_mode === 'pieces') {
-      for (const c of classes.filter(x => x.item_id === it.id).sort((a, b) => a.min_kg - b.min_kg)) out.push({ key: `${it.id}:${c.id}`, item: it, cls: c, normal: c.sale_price });
-    } else out.push({ key: `${it.id}:0`, item: it, cls: null, normal: Number(it.sale_price) || 0 });
+      for (const c of classes.filter(x => x.item_id === it.id).sort((a, b) => a.min_kg - b.min_kg)) out.push({ key: `${it.id}:${c.id}`, item: it, cls: c, normal: buy ? c.purchase_price : c.sale_price });
+    } else out.push({ key: `${it.id}:0`, item: it, cls: null, normal: Number(buy ? it.purchase_price : it.sale_price) || 0 });
   }
   return out;
 }
+/** the currency an item's list price is in */
+const curOf = (it: CatalogItem, kind: Kind, company: string) => (kind === 'purchase' ? it.purchase_currency || it.currency : it.currency) || company;
 const unitOf = (l: Line, perPiece: boolean) => (l.item.stock_mode === 'pieces' ? (perPiece ? 'per piece' : 'per kg') : l.item.stock_mode === 'loose' ? `per ${l.item.unit || 'unit'}` : l.item.unit ? `per ${l.item.unit}` : '');
-const perPiece = (it: CatalogItem) => ((it.sale_basis || it.price_basis) === 'per_piece');
+const perPiece = (it: CatalogItem, kind: Kind = 'sales') => ((kind === 'purchase' ? it.price_basis : it.sale_basis || it.price_basis) === 'per_piece');
 
 /** Catalog → Price lists: named lists of prices; customers assigned to a list buy at its prices. */
 export function PriceListsTab({ companyId, items, classes, currency, company, branding }: {
@@ -41,6 +45,7 @@ export function PriceListsTab({ companyId, items, classes, currency, company, br
   const [lists, setLists] = useState<PriceList[]>([]);
   const [rows, setRows] = useState<PriceListRow[]>([]);
   const [customers, setCustomers] = useState<Contact[]>([]);
+  const [kind, setKind] = useState<Kind>('sales');
   const [editing, setEditing] = useState<Partial<PriceList> | null>(null);
   const [printing, setPrinting] = useState<PriceList | null>(null);
   const [needs, setNeeds] = useState(false);
@@ -48,51 +53,58 @@ export function PriceListsTab({ companyId, items, classes, currency, company, br
   const load = useCallback(async () => {
     try {
       const [l, r, c] = await Promise.all([priceListService.lists(companyId), priceListService.rows(companyId), contactService.list(companyId)]);
-      setLists(l); setRows(r); setCustomers(c.filter(x => x.is_customer)); setNeeds(false);
+      setLists(l); setRows(r); setCustomers(c); setNeeds(false);
       // migration 048 not run: reading the table fails quietly, so ask for a probe
       if (!l.length && c.length && c[0].price_list_id === undefined) setNeeds(true);
     } catch (e: any) { message.error(e.message); }
   }, [companyId]);
   useEffect(() => { load(); }, [load]);
 
-  const usedBy = (id: number) => customers.filter(c => c.price_list_id === id);
+  const shownLists = lists.filter(l => (l.kind || 'sales') === kind);
+  const usedBy = (id: number, k: Kind = kind) => customers.filter(c => (k === 'purchase' ? c.purchase_price_list_id : c.price_list_id) === id);
   return (
     <div>
+      <Segmented value={kind} onChange={v => setKind(v as Kind)} style={{ marginBottom: 12 }}
+        options={[{ value: 'sales', label: 'Customers (selling prices)' }, { value: 'purchase', label: 'Suppliers (buying prices)' }]} />
       <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-        A price list gives items their own prices. Assign a list to customers and their invoices pick those prices automatically; items not on the list keep the normal selling price.
+        {kind === 'sales'
+          ? 'A price list gives items their own selling prices. Assign a list to customers and their invoices pick those prices automatically; items not on the list keep the normal selling price.'
+          : 'Different suppliers charge different prices. Assign a list to a supplier and their bills pick those prices automatically; items not on the list keep the catalog cost. When a bill comes in at a new price, you are asked whether to update the supplier’s list.'}
       </Text>
       {needs && <Text type="warning" style={{ display: 'block', marginBottom: 12 }}>Price lists need database update 048 — ask your administrator to run it in Supabase.</Text>}
-      {canWrite && <Button type="primary" icon={<PlusOutlined />} style={{ marginBottom: 12 }} onClick={() => setEditing({ name: '' })}>New price list</Button>}
-      <Table rowKey="id" size="small" pagination={false} dataSource={lists} locale={{ emptyText: <Empty description="No price lists yet" /> }}
+      {canWrite && <Button type="primary" icon={<PlusOutlined />} style={{ marginBottom: 12 }} onClick={() => setEditing({ name: '', kind })}>New price list</Button>}
+      <Table rowKey="id" size="small" pagination={false} dataSource={shownLists} locale={{ emptyText: <Empty description="No price lists yet" /> }}
         columns={[
           { title: 'Price list', dataIndex: 'name', render: (v: string, l: PriceList) => <a onClick={() => setEditing(l)}>{v}{l.archived ? <Tag style={{ marginLeft: 8 }}>archived</Tag> : null}</a> },
           { title: 'Prices', key: 'n', width: 90, align: 'right' as const, render: (_, l) => rows.filter(r => r.price_list_id === l.id).length },
-          { title: 'Customers', key: 'c', render: (_, l) => { const u = usedBy(l.id); return u.length ? u.map(c => <Tag key={c.id}>{c.name}</Tag>) : <Text type="secondary">none yet</Text>; } },
+          { title: kind === 'sales' ? 'Customers' : 'Suppliers', key: 'c', render: (_, l) => { const u = usedBy(l.id); return u.length ? u.map(c => <Tag key={c.id}>{c.name}</Tag>) : <Text type="secondary">none yet</Text>; } },
           { title: '', key: 'a', width: 220, render: (_, l) => (
             <Space size={4}>
-              <Button size="small" icon={<PrinterOutlined />} onClick={() => setPrinting(l)}>Print / PDF</Button>
+              {kind === 'sales' && <Button size="small" icon={<PrinterOutlined />} onClick={() => setPrinting(l)}>Print / PDF</Button>}
               {canWrite && <Button size="small" icon={<EditOutlined />} onClick={() => setEditing(l)} />}
               {canRemove && <Popconfirm title="Delete this price list? Its customers go back to the normal prices." onConfirm={async () => { try { await priceListService.remove(l.id); load(); } catch (e: any) { message.error(e.message); } }}>
                 <Button size="small" danger icon={<DeleteOutlined />} />
               </Popconfirm>}
             </Space>) },
         ]} />
-      {editing && <PriceListDrawer companyId={companyId} list={editing} items={items} classes={classes} rows={rows} customers={customers} canWrite={canWrite}
+      {editing && <PriceListDrawer companyId={companyId} list={editing} kind={(editing.kind as Kind) || kind} company={currency} items={items} classes={classes} rows={rows} customers={customers} canWrite={canWrite}
         onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
-      {printing && <PriceListView list={printing} items={items} classes={classes} rows={rows.filter(r => r.price_list_id === printing.id)} customers={usedBy(printing.id)}
+      {printing && <PriceListView list={printing} items={items} classes={classes} rows={rows.filter(r => r.price_list_id === printing.id)} customers={usedBy(printing.id, 'sales')}
         currency={currency} company={company} branding={branding} onClose={() => setPrinting(null)} />}
     </div>
   );
 }
 
-function PriceListDrawer({ companyId, list, items, classes, rows, customers, canWrite, onClose, onSaved }: {
-  companyId: number; list: Partial<PriceList>; items: CatalogItem[]; classes: WeightClass[]; rows: PriceListRow[]; customers: Contact[]; canWrite: boolean;
+function PriceListDrawer({ companyId, list, kind, company, items, classes, rows, customers, canWrite, onClose, onSaved }: {
+  companyId: number; list: Partial<PriceList>; kind: Kind; company: string; items: CatalogItem[]; classes: WeightClass[]; rows: PriceListRow[]; customers: Contact[]; canWrite: boolean;
   onClose: () => void; onSaved: () => void;
 }) {
-  const lines = useMemo(() => linesFor(items, classes), [items, classes]);
+  const lines = useMemo(() => linesFor(items, classes, kind), [items, classes, kind]);
+  const col = kind === 'purchase' ? 'purchase_price_list_id' : 'price_list_id';
+  const people = customers.filter(c => (kind === 'purchase' ? c.is_supplier : c.is_customer) || (c as any)[col] === list.id);
   const [name, setName] = useState(list.name || '');
   const [notes, setNotes] = useState(list.notes || '');
-  const [who, setWho] = useState<number[]>(() => customers.filter(c => list.id && c.price_list_id === list.id).map(c => c.id));
+  const [who, setWho] = useState<number[]>(() => customers.filter(c => list.id && (c as any)[col] === list.id).map(c => c.id));
   const [prices, setPrices] = useState<Record<string, number | null>>(() => {
     const m: Record<string, number | null> = {};
     for (const r of rows.filter(x => x.price_list_id === list.id)) m[`${r.item_id}:${r.class_id ?? 0}`] = r.price;
@@ -107,7 +119,7 @@ function PriceListDrawer({ companyId, list, items, classes, rows, customers, can
     setSaving(true);
     try {
       const out = lines.filter(l => prices[l.key] != null).map(l => ({ item_id: l.item.id, class_id: l.cls?.id ?? null, price: Number(prices[l.key]) || 0 }));
-      await priceListService.save(companyId, { ...list, name, notes }, out, who);
+      await priceListService.save(companyId, { ...list, name, notes, kind }, out, who);
       message.success('Price list saved'); onSaved();
     } catch (e: any) { message.error(e.message); }
     setSaving(false);
@@ -117,20 +129,20 @@ function PriceListDrawer({ companyId, list, items, classes, rows, customers, can
       extra={canWrite && <Button type="primary" loading={saving} onClick={save}>Save</Button>}>
       <Space direction="vertical" size={12} style={{ width: '100%' }}>
         <Input placeholder="Name, e.g. Restaurants" value={name} onChange={e => setName(e.target.value)} disabled={!canWrite} />
-        <Select mode="multiple" style={{ width: '100%' }} placeholder="Customers on this list" optionFilterProp="label" disabled={!canWrite}
+        <Select mode="multiple" style={{ width: '100%' }} placeholder={kind === 'purchase' ? 'Suppliers on this list' : 'Customers on this list'} optionFilterProp="label" disabled={!canWrite}
           value={who} onChange={setWho}
-          options={customers.filter(c => !c.archived || who.includes(c.id)).map(c => ({ value: c.id, label: c.price_list_id && c.price_list_id !== list.id && !who.includes(c.id) ? `${c.name} (on another list)` : c.name }))} />
-        <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} placeholder="Note shown on the printed list, e.g. prices valid until 31 Dec" value={notes} onChange={e => setNotes(e.target.value)} disabled={!canWrite} />
+          options={people.filter(c => !c.archived || who.includes(c.id)).map(c => ({ value: c.id, label: (c as any)[col] && (c as any)[col] !== list.id && !who.includes(c.id) ? `${c.name} (on another list)` : c.name }))} />
+        <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} placeholder={kind === 'purchase' ? 'Note, e.g. prices valid until 31 Dec' : 'Note shown on the printed list, e.g. prices valid until 31 Dec'} value={notes} onChange={e => setNotes(e.target.value)} disabled={!canWrite} />
         <Space wrap>
           <Input allowClear placeholder="Find an item" style={{ width: 240 }} value={search} onChange={e => setSearch(e.target.value)} />
-          {canWrite && <Button size="small" onClick={() => setPrices(p => { const m = { ...p }; for (const l of lines) if (m[l.key] == null) m[l.key] = l.normal; return m; })}>Fill the rest with normal prices</Button>}
+          {canWrite && <Button size="small" onClick={() => setPrices(p => { const m = { ...p }; for (const l of lines) if (m[l.key] == null) m[l.key] = l.normal; return m; })}>{kind === 'purchase' ? 'Fill the rest with catalog costs' : 'Fill the rest with normal prices'}</Button>}
           {canWrite && <Button size="small" onClick={() => setPrices({})}>Clear all</Button>}
-          <Text type="secondary">{priced} price{priced === 1 ? '' : 's'} on this list. A blank price means the normal selling price.</Text>
+          <Text type="secondary">{priced} price{priced === 1 ? '' : 's'} on this list. A blank price means the {kind === 'purchase' ? 'catalog cost' : 'normal selling price'}.</Text>
         </Space>
         <Table rowKey="key" size="small" pagination={false} dataSource={shown}
           columns={[
             { title: 'Item', key: 'i', render: (_, l: Line) => <>{l.item.code ? <Text type="secondary">{l.item.code} · </Text> : null}{l.item.name}{l.cls ? <Text type="secondary"> — {classLabel(l.cls)}</Text> : null}</> },
-            { title: 'Normal price', key: 'n', align: 'right' as const, width: 150, render: (_, l: Line) => <Text type="secondary">{l.item.currency ? `${l.item.currency} ` : ''}{l.normal.toLocaleString(undefined, { maximumFractionDigits: 2 })} {unitOf(l, perPiece(l.item))}</Text> },
+            { title: kind === 'purchase' ? 'Catalog cost' : 'Normal price', key: 'n', align: 'right' as const, width: 150, render: (_, l: Line) => <Text type="secondary">{curOf(l.item, kind, company)} {l.normal.toLocaleString(undefined, { maximumFractionDigits: 2 })} {unitOf(l, perPiece(l.item, kind))}</Text> },
             { title: 'List price', key: 'p', width: 170, render: (_, l: Line) => (
               <AmountInput min={0} precision={2} style={{ width: '100%' }} placeholder="normal" disabled={!canWrite} value={prices[l.key] ?? undefined}
                 onChange={v => setPrices(p => ({ ...p, [l.key]: v == null || (v as any) === '' ? null : Number(v) }))} />) },

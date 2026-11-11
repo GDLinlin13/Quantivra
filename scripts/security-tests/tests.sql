@@ -1130,6 +1130,12 @@ BEGIN
   INSERT INTO contacts (company_id, name, is_customer, price_list_id) VALUES (1, 'Pl customer', true, v_l) RETURNING id INTO v_c;
   PERFORM set_config('qv.alpha_list', v_l::text, false);
   PERFORM set_config('qv.alpha_item', v_i::text, false);
+  -- a supplier's price list (migration 049): same name allowed once per kind
+  INSERT INTO price_lists (company_id, name, kind) VALUES (1, 'Restaurants', 'purchase');
+  BEGIN INSERT INTO price_lists (company_id, name, kind) VALUES (1, 'restaurants', 'purchase'); RAISE EXCEPTION 'FAIL: duplicate supplier list name allowed';
+  EXCEPTION WHEN unique_violation THEN NULL; END;
+  BEGIN INSERT INTO price_lists (company_id, name, kind) VALUES (1, 'Odd', 'banana'); RAISE EXCEPTION 'FAIL: unknown price list kind allowed';
+  EXCEPTION WHEN check_violation THEN NULL; END;
   BEGIN INSERT INTO price_lists (company_id, name) VALUES (2, 'Planted'); RAISE EXCEPTION 'FAIL: A added a price list to B';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   BEGIN INSERT INTO price_lists (company_id, name) VALUES (1, 'restaurants'); RAISE EXCEPTION 'FAIL: duplicate list name allowed';
@@ -1145,6 +1151,9 @@ BEGIN
   ASSERT NOT EXISTS (SELECT 1 FROM price_lists WHERE company_id = 1), 'FAIL: B sees A price lists';
   ASSERT NOT EXISTS (SELECT 1 FROM price_list_items WHERE company_id = 1), 'FAIL: B sees A prices';
   INSERT INTO contacts (company_id, name, is_customer) VALUES (2, 'Beta buyer 2', true) RETURNING id INTO v_c;
+  BEGIN UPDATE contacts SET purchase_price_list_id = current_setting('qv.alpha_list')::bigint WHERE id = v_c;
+    RAISE EXCEPTION 'FAIL: B put a supplier on an A price list';
+  EXCEPTION WHEN insufficient_privilege OR foreign_key_violation OR check_violation THEN NULL; END;
   BEGIN UPDATE contacts SET price_list_id = current_setting('qv.alpha_list')::bigint WHERE id = v_c;
     RAISE EXCEPTION 'FAIL: B put a customer on an A price list';
   EXCEPTION WHEN insufficient_privilege OR foreign_key_violation OR check_violation THEN NULL; END;

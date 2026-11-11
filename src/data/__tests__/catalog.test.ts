@@ -145,3 +145,13 @@ describe('price lists', () => {
     expect(listPrice(rows as any, null, 5)).toBeUndefined();
   });
 });
+
+describe('supplier prices on a bill', () => {
+  const items = [{ id: 1, name: 'Delivery', purchase_price: 200, currency: 'MYR' }] as any[];
+  it("compares with the supplier's own price when they have a list", () => {
+    const list = (i: number) => (i === 1 ? 230 : undefined);
+    expect(costChanges([{ item_id: 1, unit_price: 230 }], items, [], 'MYR', 'SGD', list)).toEqual([]);     // as their list says
+    expect(costChanges([{ item_id: 1, unit_price: 250 }], items, [], 'MYR', 'SGD', list).map(c => [c.old, c.price])).toEqual([[230, 250]]);
+    expect(costChanges([{ item_id: 1, unit_price: 230 }], items, [], 'MYR', 'SGD').map(c => [c.old, c.price])).toEqual([[200, 230]]);
+  });
+});

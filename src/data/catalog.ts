@@ -163,7 +163,7 @@ export interface CostChange { item_id: number; class_id: number | null; name: st
  * the buying price of the class the piece falls in. Only lines in the item's own buying currency are compared.
  */
 export function costChanges(lines: { item_id?: number | null; unit_price: number; weight?: number }[], items: CatalogItem[], classes: WeightClass[],
-  docCurrency: string, companyCurrency: string): CostChange[] {
+  docCurrency: string, companyCurrency: string, listOf?: (itemId: number, classId: number | null) => number | undefined): CostChange[] {
   const out = new Map<string, CostChange>();
   for (const l of lines) {
     const it = l.item_id ? items.find(x => x.id === l.item_id) : undefined;
@@ -175,7 +175,8 @@ export function costChanges(lines: { item_id?: number | null; unit_price: number
       cls = classOf(classes.filter(c => c.item_id === it.id), Number(l.weight) || 0);
       if (!cls) continue;
     }
-    const old = Number(cls ? cls.purchase_price : it.purchase_price) || 0;
+    // what it costs now: the supplier's own price when they have a list, else the catalog's
+    const old = listOf?.(it.id, cls?.id ?? null) ?? (Number(cls ? cls.purchase_price : it.purchase_price) || 0);
     if (Math.abs(old - price) < 0.005) continue;
     out.set(`${it.id}:${cls?.id ?? 0}`, { item_id: it.id, class_id: cls?.id ?? null, name: it.name, label: cls ? classLabel(cls) : '', old, price });
   }
@@ -183,7 +184,7 @@ export function costChanges(lines: { item_id?: number | null; unit_price: number
 }
 
 /** A named price list (migration 048): customers assigned to it buy at its prices. */
-export interface PriceList { id: number; company_id: number; name: string; notes: string | null; archived: boolean }
+export interface PriceList { id: number; company_id: number; name: string; notes: string | null; archived: boolean; kind?: 'sales' | 'purchase' }
 /** One price on a list; for items stocked by weight class there is one row per class. */
 export interface PriceListRow { id?: number; price_list_id: number; item_id: number; class_id: number | null; price: number }
 

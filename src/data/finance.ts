@@ -23,6 +23,8 @@ export interface Contact {
   address?: string | null; currency?: string | null; payment_terms_days?: number | null; notes?: string | null; archived?: boolean;
   /** the price list this customer buys at (migration 048) */
   price_list_id?: number | null;
+  /** the price list a supplier's prices come from (migration 049) */
+  purchase_price_list_id?: number | null;
 }
 /** The currencies a customer / supplier bills or pays in (stored as "USD,EUR"); the first is the default. */
 export const contactCurrencies = (c?: { currency?: string | null } | null): string[] =>
