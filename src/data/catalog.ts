@@ -181,7 +181,8 @@ export function supplierPrices(docs: BillLike[], items: Pick<CatalogItem, 'id' |
       if (!l.item_id || !(price > 0)) continue;
       const it = items.find(x => x.id === l.item_id);
       let classId: number | null = null;
-      if (it?.stock_mode === 'pieces') {
+      if (it?.stock_mode === 'pieces' && classes.some(x => x.item_id === l.item_id)) {
+        // with weight classes the price belongs to the class of the piece; with none it is one price per KG
         const w = pieces.find(p => p.id === l.piece_id)?.weight;
         const c = w ? classOf(classes.filter(x => x.item_id === l.item_id), w) : null;
         if (!c) continue;
@@ -214,7 +215,7 @@ export function costChanges(lines: { item_id?: number | null; unit_price: number
     const price = Number(l.unit_price) || 0;
     if (!it || !(price > 0)) continue;
     let cls: WeightClass | null = null;
-    if (it.stock_mode === 'pieces') {
+    if (it.stock_mode === 'pieces' && classes.some(c => c.item_id === it.id)) {
       cls = classOf(classes.filter(c => c.item_id === it.id), Number(l.weight) || 0);
       if (!cls) continue;
     }

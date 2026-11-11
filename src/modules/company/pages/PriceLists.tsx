@@ -25,7 +25,7 @@ function linesFor(items: CatalogItem[], classes: WeightClass[], kind: Kind = 'sa
   const out: Line[] = [];
   const buy = kind === 'purchase';
   for (const it of items.filter(i => !i.archived && (i.used_for || 'both') !== (buy ? 'sales' : 'purchases')).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (it.stock_mode === 'pieces') {
+    if (it.stock_mode === 'pieces' && classes.some(x => x.item_id === it.id)) {
       for (const c of classes.filter(x => x.item_id === it.id).sort((a, b) => a.min_kg - b.min_kg)) out.push({ key: `${it.id}:${c.id}`, item: it, cls: c, normal: buy ? c.purchase_price : c.sale_price });
     } else out.push({ key: `${it.id}:0`, item: it, cls: null, normal: Number(buy ? it.purchase_price : it.sale_price) || 0 });
   }
