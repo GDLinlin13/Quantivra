@@ -121,6 +121,15 @@ describe('the recommended chart of accounts', () => {
   const rec = defaultAccountsFor('SG');
   const legacy = defaultAccountsFor('SG', 'legacy').map((a, i) => ({ ...a, id: i + 1, archived: false }));
 
+  it('has the simplified accounts: one IT account, one Other Income, no exceptional items, merged fees', () => {
+    const codes = new Set(rec.map(a => a.code));
+    for (const gone of ['6610', '6620', '7010', '7020', '7030', '7040', '7120', '8100', '8110', '8120', '6830', '6910']) expect(codes.has(gone), gone).toBe(false);
+    const name = (c: string) => rec.find(a => a.code === c)!;
+    expect([name('6600').name, name('7000').name, name('8000').name, name('6820').name, name('6850').name, name('6900').name, name('6920').name, name('6930').name, name('6700').name])
+      .toEqual(['IT Expenses', 'Other Income', 'Corporate Income Tax Expense', 'Accounting and Audit Fees', 'Tax and Filing Fees', 'Bank and Payment Gateway Charges', 'Foreign Exchange Gains / Losses', 'Depreciation Expenses', 'Insurance Expenses']);
+    expect([name('7000').type, name('8010').name]).toEqual(['income', 'Deferred Tax Expense']);
+  });
+
   it('follows the numbering: 1xxx assets … 8xxx taxation', () => {
     const kind: Record<string, string> = { '1': 'asset', '2': 'liability', '3': 'equity', '4': 'income', '5': 'expense', '6': 'expense', '8': 'expense' };
     for (const a of rec) {
@@ -134,7 +143,7 @@ describe('the recommended chart of accounts', () => {
 
   it('has every account Quantivra posts to by itself, once', () => {
     const roles = ['bank', 'cash', 'receivable', 'payable', 'tax', 'payroll_payable', 'statutory_payable', 'cpf_employer_payable', 'other_payroll_payable',
-      'claims_payable', 'dividends_payable', 'retained', 'dividends', 'sales', 'payroll', 'payroll_director', 'payroll_employer', 'payroll_employer_other', 'general', 'fx_gain', 'fx_loss'];
+      'claims_payable', 'dividends_payable', 'retained', 'dividends', 'sales', 'payroll', 'payroll_director', 'payroll_employer', 'payroll_employer_other', 'general', 'fx_gain_loss'];
     for (const r of roles) expect(rec.filter(a => a.subtype === r), r).toHaveLength(1);
     expect(rec.some(a => a.subtype === 'gratuity_provision')).toBe(false);          // Gulf states only
     expect(defaultAccountsFor('AE').some(a => a.subtype === 'gratuity_provision')).toBe(true);
@@ -164,11 +173,13 @@ describe('the recommended chart of accounts', () => {
     expect(new Set(after.map(a => a.code)).size).toBe(after.length);                        // no code twice
     const at = (sub: string) => after.filter(a => a.subtype === sub).map(a => a.code);
     expect([at('cash'), at('receivable'), at('payable'), at('tax'), at('payroll_payable'), at('sales'), at('retained'), at('fx_gain_loss')])
-      .toEqual([['1000'], ['1100'], ['2000'], ['2050'], ['2030'], ['4000'], ['3100'], ['7030']]);
+      .toEqual([['1000'], ['1100'], ['2000'], ['2050'], ['2030'], ['4000'], ['3100'], ['6920']]);
     expect(at('bank').sort()).toEqual(['1010', '1021']);                                      // the SGD bank, then the USD one
     expect(after.find(a => a.id === 501)!.code).toBe('1300');                                 // a company's own account keeps its code
     expect(plan.skipped.map(s => s.code)).toContain('1300');                                  // so the recommended 1300 is not added
     expect(after.find(a => a.code === '6110')!.name).toBe('Utilities');
+    expect(after.find(a => a.code === '6600')!.name).toBe('IT Expenses');                       // software and subscriptions became IT Expenses
+    expect(after.find(a => a.code === '7000')!.name).toBe('Other Income');                      // and Other income moved to 7000
     expect(after.find(a => a.code === '1130')!.name).toBe('Prepaid Expenses');
     expect(after.find(a => a.name === 'Equipment and furniture' || a.name === 'Office Equipment')!.code).toBe('1320');
     // nothing more to do afterwards

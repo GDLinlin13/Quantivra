@@ -256,43 +256,31 @@ export const RECOMMENDED_ACCOUNTS: Omit<Account, 'id' | 'company_id' | 'archived
   { code: '6500', name: 'Marketing and Advertising', type: 'expense', subtype: null, is_system: false },
   { code: '6510', name: 'Public Relations', type: 'expense', subtype: null, is_system: false },
   { code: '6520', name: 'Promotional Expenses', type: 'expense', subtype: null, is_system: false },
-  { code: '6600', name: 'Software and Subscriptions', type: 'expense', subtype: null, is_system: false },
-  { code: '6610', name: 'IT and Cloud Services', type: 'expense', subtype: null, is_system: false },
-  { code: '6620', name: 'Website and Hosting', type: 'expense', subtype: null, is_system: false },
-  { code: '6700', name: 'Insurance', type: 'expense', subtype: null, is_system: false },
+  { code: '6600', name: 'IT Expenses', type: 'expense', subtype: null, is_system: false },
+  { code: '6700', name: 'Insurance Expenses', type: 'expense', subtype: null, is_system: false },
   { code: '6800', name: 'Professional Fees', type: 'expense', subtype: null, is_system: false },
   { code: '6810', name: 'Legal Fees', type: 'expense', subtype: null, is_system: false },
-  { code: '6820', name: 'Accounting Fees', type: 'expense', subtype: 'fees_accounting', is_system: false },
-  { code: '6830', name: 'Audit Fees', type: 'expense', subtype: null, is_system: false },
+  { code: '6820', name: 'Accounting and Audit Fees', type: 'expense', subtype: 'fees_accounting', is_system: false },
   { code: '6840', name: 'Corporate Secretarial Fees', type: 'expense', subtype: 'fees_secretarial', is_system: false },
-  { code: '6850', name: 'Tax Advisory and Filing Fees', type: 'expense', subtype: 'fees_tax_agent', is_system: false },
+  { code: '6850', name: 'Tax and Filing Fees', type: 'expense', subtype: 'fees_tax_agent', is_system: false },
   { code: '6860', name: 'Company Registration Fees', type: 'expense', subtype: null, is_system: false },
   { code: '6870', name: 'Licences and Permits', type: 'expense', subtype: null, is_system: false },
   { code: '6880', name: 'Consultancy Fees', type: 'expense', subtype: null, is_system: false },
-  { code: '6900', name: 'Bank Charges', type: 'expense', subtype: null, is_system: false },
-  { code: '6910', name: 'Payment Gateway Fees', type: 'expense', subtype: null, is_system: false },
-  { code: '6920', name: 'Foreign Exchange Losses', type: 'expense', subtype: null, is_system: false },
-  { code: '6930', name: 'Depreciation', type: 'expense', subtype: null, is_system: false },
+  { code: '6900', name: 'Bank and Payment Gateway Charges', type: 'expense', subtype: null, is_system: false },
+  { code: '6920', name: 'Foreign Exchange Gains / Losses', type: 'expense', subtype: 'fx_gain_loss', is_system: true },
+  { code: '6930', name: 'Depreciation Expenses', type: 'expense', subtype: null, is_system: false },
   { code: '6940', name: 'Amortisation', type: 'expense', subtype: null, is_system: false },
   { code: '6950', name: 'Bad Debt Expenses', type: 'expense', subtype: null, is_system: false },
   { code: '6990', name: 'General Administrative Expenses', type: 'expense', subtype: 'general', is_system: true },
-  { code: '7000', name: 'Interest Income', type: 'income', subtype: null, is_system: false },
-  { code: '7010', name: 'Dividend Income', type: 'income', subtype: null, is_system: false },
-  { code: '7020', name: 'Rental Income – Non-operating', type: 'income', subtype: null, is_system: false },
-  { code: '7030', name: 'Foreign Exchange Gains', type: 'income', subtype: 'fx_gain', is_system: true },
-  { code: '7040', name: 'Gain on Disposal of Assets', type: 'income', subtype: null, is_system: false },
+  { code: '7000', name: 'Other Income', type: 'income', subtype: null, is_system: false },
   { code: '7100', name: 'Interest Expenses', type: 'expense', subtype: null, is_system: false },
   { code: '7110', name: 'Loan Finance Charges', type: 'expense', subtype: null, is_system: false },
-  { code: '7120', name: 'Foreign Exchange Losses', type: 'expense', subtype: 'fx_loss', is_system: true },
   { code: '7130', name: 'Loss on Disposal of Assets', type: 'expense', subtype: null, is_system: false },
   { code: '7140', name: 'Impairment Losses', type: 'expense', subtype: null, is_system: false },
-  { code: '8000', name: 'Corporate Income Tax', type: 'expense', subtype: null, is_system: false },
+  { code: '8000', name: 'Corporate Income Tax Expense', type: 'expense', subtype: null, is_system: false },
   { code: '8010', name: 'Deferred Tax Expense', type: 'expense', subtype: null, is_system: false },
   { code: '8020', name: 'Other Business Taxes', type: 'expense', subtype: null, is_system: false },
   { code: '8030', name: 'Tax Adjustments', type: 'expense', subtype: null, is_system: false },
-  { code: '8100', name: 'Exceptional Expenses', type: 'expense', subtype: null, is_system: false },
-  { code: '8110', name: 'Restructuring Expenses', type: 'expense', subtype: null, is_system: false },
-  { code: '8120', name: 'Non-recurring Expenses', type: 'expense', subtype: null, is_system: false },
 ];
 
 /** The older, simpler chart of accounts that companies set up before the recommended one still use (until they switch). */
@@ -489,7 +477,7 @@ const LEGACY_TO_RECOMMENDED: Record<string, { name: RegExp; code: string; to: st
   '1200': { name: /^prepayments and deposits$/i, code: '1130', to: 'Prepaid Expenses' },
   '1500': { name: /^equipment and furniture$/i, code: '1320', to: 'Office Equipment' },
   '3000': { name: /^share capital$/i, code: '3000', to: 'Share Capital' },
-  '4100': { name: /^other income$/i, code: '4080', to: 'Other Operating Income' },
+  '4100': { name: /^other income$/i, code: '7000', to: 'Other Income' },
   '5000': { name: /^cost of sales$/i, code: '5000', to: 'Cost of Sales' },
   '6100': { name: /^rent$/i, code: '6100', to: 'Rent' },
   '6200': { name: /^utilities$/i, code: '6110', to: 'Utilities' },
@@ -497,9 +485,9 @@ const LEGACY_TO_RECOMMENDED: Record<string, { name: RegExp; code: string; to: st
   '6400': { name: /^travel and transport$/i, code: '6300', to: 'Travel and Accommodation' },
   '6500': { name: /^meals and entertainment$/i, code: '6400', to: 'Meals and Entertainment' },
   '6600': { name: /^marketing and advertising$/i, code: '6500', to: 'Marketing and Advertising' },
-  '6700': { name: /^software and subscriptions$/i, code: '6600', to: 'Software and Subscriptions' },
+  '6700': { name: /^software and subscriptions$/i, code: '6600', to: 'IT Expenses' },
   '6800': { name: /^professional fees$/i, code: '6800', to: 'Professional Fees' },
-  '6900': { name: /^bank charges$/i, code: '6900', to: 'Bank Charges' },
+  '6900': { name: /^bank charges$/i, code: '6900', to: 'Bank and Payment Gateway Charges' },
 };
 
 export interface ChartMove { id: number; from: string; to: string; fromName: string; name?: string }
@@ -515,14 +503,12 @@ export function recommendedChartPlan(rows: Pick<Account, 'id' | 'code' | 'name' 
   const target = defaultAccountsFor(country, 'recommended');
   // roles Quantivra posts to by itself: one account each (several fixed-asset accounts share a role, so they are not one)
   const bySub = new Map(target.filter(t => t.subtype && t.subtype !== 'bank' && target.filter(x => x.subtype === t.subtype).length === 1).map(t => [t.subtype!, t]));
-  const FX_TARGET = target.find(t => t.subtype === 'fx_gain')!;
 
   const want = new Map<number, { to: string; name?: string }>();
   const sorted = [...rows].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }) || a.id - b.id);
   const seenSub = new Set<string>();
   for (const r of sorted) {
     const st = r.subtype || '';
-    if (st === 'fx_gain_loss') { want.set(r.id, { to: FX_TARGET.code, name: /^foreign exchange gain \/ \(loss\)$/i.test(r.name) ? 'Foreign Exchange Gains / (Losses)' : undefined }); continue; }
     const t = st && bySub.get(st);
     if (t && !seenSub.has(st)) {
       seenSub.add(st);
@@ -567,7 +553,6 @@ export function recommendedChartPlan(rows: Pick<Account, 'id' | 'code' | 'name' 
   for (const t of target) {
     if (t.subtype === 'bank') continue;
     if (t.subtype && target.filter(x => x.subtype === t.subtype).length === 1 && subs.has(t.subtype)) continue;   // a role the company already has (several fixed-asset accounts are fine)
-    if ((t.subtype === 'fx_gain' || t.subtype === 'fx_loss') && subs.has('fx_gain_loss')) continue;
     if (codes.has(t.code)) { if (moved.some(r => r.code === t.code && r.name.toLowerCase() === t.name.toLowerCase())) continue; skipped.push({ code: t.code, name: t.name }); continue; }
     add.push(t);
   }
