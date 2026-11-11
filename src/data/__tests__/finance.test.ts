@@ -126,8 +126,16 @@ describe('the recommended chart of accounts', () => {
     for (const gone of ['6610', '6620', '7010', '7020', '7030', '7040', '7120', '8100', '8110', '8120', '6830', '6910']) expect(codes.has(gone), gone).toBe(false);
     const name = (c: string) => rec.find(a => a.code === c)!;
     expect([name('6600').name, name('7000').name, name('8000').name, name('6820').name, name('6850').name, name('6900').name, name('6920').name, name('6930').name, name('6700').name])
-      .toEqual(['IT Expenses', 'Other Income', 'Corporate Income Tax Expense', 'Accounting and Audit Fees', 'Tax and Filing Fees', 'Bank and Payment Gateway Charges', 'Foreign Exchange Gains / Losses', 'Depreciation Expenses', 'Insurance Expenses']);
+      .toEqual(['IT Expenses', 'Other Income', 'Corporate Income Tax Expense', 'Accounting and Audit Fees', 'Tax and Filing Fees', 'Bank and Payment Gateway Charges', 'Foreign Exchange Gains / Losses', 'Depreciation and Amortisation', 'Insurance Expenses']);
     expect([name('7000').type, name('8010').name]).toEqual(['income', 'Deferred Tax Expense']);
+  });
+
+  it('stays between 60 and 90 accounts, without the merged-away ones', () => {
+    expect(rec.length).toBeGreaterThanOrEqual(60);
+    expect(rec.length).toBeLessThanOrEqual(90);
+    const codes = new Set(rec.map(a => a.code));
+    for (const gone of ['1120', '1140', '1210', '1220', '1230', '1340', '1410', '1500', '2020', '2060', '2110', '2220', '2400', '3020', '3110', '3200', '3210',
+      '5020', '5060', '5070', '5080', '6020', '6050', '6130', '6210', '6220', '6310', '6510', '6520', '6860', '6880', '6940', '7110', '7130', '7140', '8020', '8030']) expect(codes.has(gone), gone).toBe(false);
   });
 
   it('follows the numbering: 1xxx assets … 8xxx taxation', () => {
@@ -180,8 +188,8 @@ describe('the recommended chart of accounts', () => {
     expect(after.find(a => a.code === '6110')!.name).toBe('Utilities');
     expect(after.find(a => a.code === '6600')!.name).toBe('IT Expenses');                       // software and subscriptions became IT Expenses
     expect(after.find(a => a.code === '7000')!.name).toBe('Other Income');                      // and Other income moved to 7000
-    expect(after.find(a => a.code === '1130')!.name).toBe('Prepaid Expenses');
-    expect(after.find(a => a.name === 'Equipment and furniture' || a.name === 'Office Equipment')!.code).toBe('1320');
+    expect(after.find(a => a.code === '1130')!.name).toBe('Prepayments and Deposits');
+    expect(after.find(a => a.name === 'Equipment and furniture' || a.name === 'Office Equipment and Furniture')!.code).toBe('1320');
     // nothing more to do afterwards
     expect(recommendedChartPlan(after as any, 'SG', 'SGD').moves).toEqual([]);
   });
