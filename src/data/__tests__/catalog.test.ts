@@ -107,3 +107,22 @@ describe('stock by weight', () => {
     expect(piecesCost({ price_basis: 'per_piece' }, [pieces[0]], cls)).toBe(200);
   });
 });
+
+import { costChanges } from '../catalog';
+describe('new buying prices on a bill', () => {
+  const items = [
+    { id: 1, name: 'Delivery', purchase_price: 200, currency: 'MYR' },
+    { id: 2, name: 'Patin', stock_mode: 'pieces', price_basis: 'per_kg', purchase_price: 0, currency: 'MYR' },
+    { id: 3, name: 'Local', purchase_price: 10, currency: null },
+  ] as any[];
+  const classes = [{ id: 9, item_id: 2, min_kg: 2, max_kg: 2.99, sale_price: 460, purchase_price: 380 }] as any[];
+  it('finds prices that differ from the catalog cost', () => {
+    const c = costChanges([{ item_id: 1, unit_price: 230 }, { item_id: 2, unit_price: 390, weight: 2.61 }, { item_id: 3, unit_price: 10 }], items, classes, 'MYR', 'SGD');
+    expect(c.map(x => [x.item_id, x.class_id, x.old, x.price])).toEqual([[1, null, 200, 230], [2, 9, 380, 390]]);
+  });
+  it('ignores the same price, a price in another currency, and a weight with no class', () => {
+    expect(costChanges([{ item_id: 1, unit_price: 200 }], items, classes, 'MYR', 'SGD')).toEqual([]);
+    expect(costChanges([{ item_id: 1, unit_price: 230 }], items, classes, 'USD', 'SGD')).toEqual([]);
+    expect(costChanges([{ item_id: 2, unit_price: 390, weight: 1.2 }], items, classes, 'MYR', 'SGD')).toEqual([]);
+  });
+});
