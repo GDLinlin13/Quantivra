@@ -9,6 +9,8 @@ export interface CatalogItem {
   used_for?: 'sales' | 'purchases' | 'both';
   /** the currency of the item's prices; empty = the company's currency (migration 036) */
   currency?: string | null;
+  /** the currency of the cost / buying price when it differs from `currency` (migration 045) */
+  purchase_currency?: string | null;
 }
 /** A special selling price of one item for one customer (migration 027). */
 export interface CustomerPrice { id?: number; item_id: number; contact_id: number; price: number }

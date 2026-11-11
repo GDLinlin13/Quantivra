@@ -856,6 +856,8 @@ export const catalogService = {
       category: i.category || null, archived: !!i.archived, used_for: i.used_for || 'both', updated_at: new Date().toISOString(),
       // prices in another currency (migration 036); left out when the item has never had one
       ...(i.currency !== undefined ? { currency: i.currency || null } : {}),
+      // the cost in another currency than the selling price (migration 045); left out when the item never had one
+      ...(i.purchase_currency !== undefined ? { purchase_currency: i.purchase_currency || null } : {}),
     };
     if (!row.name) throw new Error('Please enter a name');
     const fix = (e: any) => { if (e && /uq_catalog_items_code|duplicate/i.test(e.message)) throw new Error(`The code "${row.code}" is already used by another item`); return e; };
