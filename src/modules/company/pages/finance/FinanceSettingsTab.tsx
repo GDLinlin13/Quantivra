@@ -21,7 +21,7 @@ export function FinanceSettingsTab({ companyId, country, settings, onSaved }: { 
   };
   return (
     <Card size="small" style={{ maxWidth: 640, background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)' }}>
-      <Form layout="vertical">
+      <Form layout="vertical" disabled={!access.canWrite('finance')}>
         <Form.Item label="GST registered">
           <Switch checked={s.gstRegistered} onChange={v => setS({ ...s, gstRegistered: v })} />
           <Text type="secondary" style={{ marginLeft: 10 }}>{s.gstRegistered ? 'Invoices and bills add GST' : 'No GST on invoices'}</Text>
