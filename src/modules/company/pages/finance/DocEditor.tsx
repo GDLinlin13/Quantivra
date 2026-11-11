@@ -198,34 +198,23 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   };
   /** A by-weight line takes its price from the class the piece's weight falls in. */
   const priceByWeight = (i: number, it: CatalogItem, weight: number, pieceId: number | null) => {
-    const cls = classOf(classes.filter(c => c.item_id === it.id), weight);
+    const own = classes.filter(c => c.item_id === it.id);
+    const cls = classOf(own, weight);
     const itemCur = !sales && it.purchase_currency ? it.purchase_currency : it.currency;
     const p = piecePrice(it, cls, weight, sales);
-    // a customer's price list can price each weight class
-    if (cls) {
-      const lp = sales ? sellPrice(it, doc.contact_id, cls.id ?? null) : supplierPrice(it.id, cls.id ?? null)?.price;
+    // a price per class (the customer's list, the Standard list, or the supplier's last bill); with no classes, one price per KG
+    if (cls || !own.length) {
+      const lp = sales ? sellPrice(it, doc.contact_id, cls?.id ?? null) : supplierPrice(it.id, cls?.id ?? null)?.price;
       if (lp != null) p.unit_price = lp;
+      else if (!cls) p.unit_price = Number(sales ? it.sale_price : it.purchase_price) || 0;
     }
     // the class goes in the Description (unless something else was typed there), so Qty stays readable
-    const mine = classes.filter(c => c.item_id === it.id).map(c => classLabel(c));
+    const mine = own.map(c => classLabel(c));
     const desc = (lines[i]?.description || '').trim();
     const autoDesc = !desc || mine.includes(desc) ? (cls ? classLabel(cls) : '') : desc;
     setLine(i, { piece_id: pieceId, weight, quantity: p.quantity, unit_price: inDocCurrency(p.unit_price, itemCur), description: autoDesc });
-    if (weight > 0 && !cls) message.warning(`No weight class for ${kgText(weight)} kg — add one in the catalog, or type the price`);
+    if (weight > 0 && !cls && own.length) message.warning(`No weight class for ${kgText(weight)} kg — add one in the catalog, or type the price`);
   };
-  // a new bill: items still at the catalog cost take the price this supplier charged last time
-  useEffect(() => {
-    if (sales || docId || !supplierHist.length) return;
-    let moved = 0;
-    setLines(ls => ls.map(l => {
-      const it = l.item_id ? items.find(x => x.id === l.item_id) : undefined;
-      const h = it && it.stock_mode !== 'pieces' ? supplierPrice(it.id) : undefined;
-      if (!it || !h || Math.abs((Number(l.unit_price) || 0) - (Number(it.purchase_price) || 0)) > 0.005 || Math.abs(h.price - (Number(l.unit_price) || 0)) < 0.005) return l;
-      moved++; return { ...l, unit_price: h.price };
-    }));
-    setTimeout(() => { if (moved) message.info('Prices updated to what this supplier charged last time'); });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supplierHist]);
   const payFrom = accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash'));
   const banks = paymentAccounts(branding?.templates.invoice);
 

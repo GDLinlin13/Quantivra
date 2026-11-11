@@ -180,3 +180,17 @@ describe('supplier prices from their bills', () => {
     expect(costChanges([{ item_id: 1, unit_price: 230 }], items, classes, 'USD', 'SGD')).toEqual([]);                           // another currency: no catalog comparison
   });
 });
+
+describe('weighed pieces without weight classes', () => {
+  const items = [{ id: 2, name: 'Patin', stock_mode: 'pieces', price_basis: 'per_kg', purchase_price: 0, currency: 'MYR' }] as any[];
+  const pieces = [{ id: 31, item_id: 2, weight: 2.6, class_id: null, document_id: 12, received_date: '2026-02-01', note: null }] as any[];
+  const docs = [{ id: 12, doc_type: 'bill', status: 'approved', number: 'B-12', issue_date: '2026-02-01', contact_id: 7, currency: 'MYR', lines: [{ item_id: 2, unit_price: 115, piece_id: 31 }] }];
+  it('prices per KG for every piece: one supplier price, no class', () => {
+    const p = supplierPrices(docs as any, items, [], pieces, 'MYR');
+    expect([p.length, p[0].class_id, p[0].price]).toEqual([1, null, 115]);
+  });
+  it('asks about a changed price without needing a class', () => {
+    const prior = () => ({ price: 115, date: '2026-02-01', number: 'B-12' });
+    expect(costChanges([{ item_id: 2, unit_price: 120, weight: 2.1 }], items, [], 'MYR', 'SGD', prior).map(c => [c.class_id, c.old, c.price])).toEqual([[null, 115, 120]]);
+  });
+});

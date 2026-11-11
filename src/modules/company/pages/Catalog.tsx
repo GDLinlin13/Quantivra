@@ -24,6 +24,13 @@ const { Title, Text } = Typography;
 
 type Docs = Awaited<ReturnType<typeof loadLedgerInput>>['docs'];
 
+/** Units to pick from (the value is what prints on documents); other units can be typed in. */
+const UNITS = [
+  { value: 'kg', label: 'Kilogram (kg)' }, { value: 'g', label: 'Gram (g)' }, { value: 'pkt', label: 'Packet (pkt)' }, { value: 'pc', label: 'Piece (pc)' },
+  { value: 'box', label: 'Box' }, { value: 'bag', label: 'Bag' }, { value: 'carton', label: 'Carton' }, { value: 'litre', label: 'Litre' }, { value: 'ml', label: 'Millilitre (ml)' },
+  { value: 'hour', label: 'Hour' }, { value: 'day', label: 'Day' }, { value: 'project', label: 'Project' },
+];
+
 /** Catalog: the products and services the company sells and buys, with stock for products. */
 export function CompanyCatalogPage() {
   const { companyId } = useAuth();
@@ -200,13 +207,14 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
     setSaving(true);
     try {
       const { purchase_currency: _pc, ...rest } = { ...item, ...v } as any;
-      // stock by weight needs database update 046; items that don't use it never send it
-      if (rest.stock_mode === 'normal' && !('stock_mode' in item)) { delete rest.stock_mode; delete rest.price_basis; delete rest.sale_basis; }
+      // sold in a smaller unit as well (kg and g): stocked "loose"; stock by weight needs database update 046, so plain items never send it
+      const small = (rest.loose_unit || '').trim(), factor = Number(rest.loose_factor) || 0;
+      if ((rest.stock_mode ?? 'normal') !== 'pieces') rest.stock_mode = kind === 'product' && small && factor > 0 ? 'loose' : 'normal';
+      if (small && !(factor > 0)) throw new Error('Enter how many ' + small + ' make one ' + (rest.unit || 'unit'));
+      if (rest.stock_mode === 'normal' && !('stock_mode' in item)) { delete rest.stock_mode; delete rest.price_basis; delete rest.sale_basis; delete rest.loose_unit; delete rest.loose_factor; }
       if (rest.stock_mode === 'pieces') {
-        if (!classes.length) throw new Error('Add at least one weight class');
         if (classes.some(c => c.min_kg == null || (c.max_kg != null && Number(c.max_kg) < Number(c.min_kg)))) throw new Error('Check the weight classes: “to” must not be below “from”');
       }
-      if (rest.stock_mode === 'loose' && (!(rest.loose_unit || '').trim() || !(Number(rest.loose_factor) > 0))) throw new Error('Enter the small unit and how many make one ' + (rest.unit || 'unit'));
       // bought in another currency than it is sold in: only when it is both bought and sold
       const buyIn = sells && buys && v.purchase_currency && v.purchase_currency !== (v.currency || currency) ? v.purchase_currency : null;
       const id = await catalogService.save(companyId, { ...rest, tax_rate: v.tax_rate === 'default' ? null : v.tax_rate,
@@ -225,6 +233,7 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
       <ConfigProvider componentDisabled={!canWrite}>
       <Form form={form} layout="vertical" initialValues={{ kind: 'product', used_for: 'both', ...item, tax_rate: item.tax_rate == null ? 'default' : Number(item.tax_rate),
           // an empty selling basis means "the same as the buying basis"; show it as chosen
+          stock_mode: item.stock_mode === 'loose' ? 'normal' : item.stock_mode || 'normal',
           price_basis: item.price_basis || 'per_kg', sale_basis: item.sale_basis || item.price_basis || 'per_kg',
           // stored empty when it is the company's own currency (or the same as the selling currency); show the real one
           currency: item.currency || currency, purchase_currency: item.purchase_currency || item.currency || currency }}>
@@ -239,7 +248,12 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
         {/* the name is what goes on invoices; an older extra description can still be edited or cleared */}
         {item.description && <Form.Item name="description" label="Extra text after the name on invoices"><Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} /></Form.Item>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, alignItems: 'end' }}>
-          <Form.Item name="unit" label="Unit"><Input placeholder={kind === 'service' ? 'e.g. hour, project' : 'e.g. pc, box, kg'} /></Form.Item>
+          <Form.Item name="unit" label="Unit">
+            <Select allowClear showSearch optionFilterProp="label" placeholder="Choose a unit"
+              options={[...UNITS, ...(item.unit && !UNITS.some(u => u.value === item.unit) ? [{ value: item.unit, label: item.unit }] : [])]}
+              popupRender={menu => <>{menu}<div style={{ padding: 6 }}><Input size="small" placeholder="Another unit — press Enter"
+                onPressEnter={e => { const v = (e.target as HTMLInputElement).value.trim(); if (v) form.setFieldValue('unit', v); }} /></div></>} />
+          </Form.Item>
           <Form.Item name="currency" label={sells && buys ? 'Selling currency' : 'Currency'}>
             <Select showSearch optionFilterProp="label" options={currencyGroups(sells ? 'customers' : 'suppliers', 'item')} />
           </Form.Item>
@@ -249,6 +263,16 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
             </Form.Item>
           )}
         </div>
+        {kind === 'product' && mode !== 'pieces' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
+            <Form.Item name="loose_unit" label="Also sold in a smaller unit (optional)">
+              <Select allowClear showSearch optionFilterProp="label" placeholder="e.g. Gram (g)" options={UNITS} />
+            </Form.Item>
+            <Form.Item name="loose_factor" label={`How many make one ${form.getFieldValue('unit') || item.unit || 'unit'}`}>
+              <InputNumber min={0} style={{ width: '100%' }} placeholder="e.g. 1,000" />
+            </Form.Item>
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
           <Form.Item name="category" label="Category">
             <Select allowClear showSearch mode={undefined} options={categories.map(c => ({ value: c, label: c }))}
@@ -276,12 +300,12 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
             {track && (
               <>
               <Form.Item name="stock_mode" label="How is it stocked?" initialValue="normal">
-                <Segmented options={[{ value: 'normal', label: 'Normal' }, { value: 'pieces', label: 'By weight class' }, { value: 'loose', label: 'Loose' }]} />
+                <Segmented options={[{ value: 'normal', label: 'Normal (by the unit)' }, { value: 'pieces', label: 'Each piece weighed' }]} />
               </Form.Item>
               {mode === 'pieces' && (
                 <div style={{ marginBottom: 12 }}>
                   <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                    Each piece has its own weight and is sold once. The weight decides the class and its price (set in Customer price lists; supplier prices come from your bills); buy them on a bill (one line per piece) or receive them in Stock → Pieces.
+                    Each piece has its own weight and is sold once. Add weight classes when the price depends on the weight (set in Customer price lists; supplier prices come from your bills); with no classes, one price per KG applies to every piece. Buy them on a bill (one line per piece) or receive them in Stock → Pieces.
                   </Text>
                   <Space size={24} wrap align="start">
                     <Form.Item name="price_basis" label="Buying prices are">
@@ -305,12 +329,6 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
                     const last = [...cs].sort((a, b) => Number(a.min_kg) - Number(b.min_kg)).pop();
                     return [...cs, { min_kg: last ? (last.max_kg != null ? Math.floor(Number(last.max_kg)) + 1 : Number(last.min_kg) + 1) : 0, max_kg: null, sale_price: 0, purchase_price: 0 }];
                   })}>Add a weight class</Button>
-                </div>
-              )}
-              {mode === 'loose' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
-                  <Form.Item name="loose_unit" label="Sold in a smaller unit"><Input placeholder="e.g. g" /></Form.Item>
-                  <Form.Item name="loose_factor" label={`How many make one ${form.getFieldValue('unit') || item.unit || 'unit'}`}><InputNumber min={0} style={{ width: '100%' }} placeholder="e.g. 1,000" /></Form.Item>
                 </div>
               )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
@@ -343,7 +361,10 @@ function StockTab({ companyId, items, stock, docs, adjustments, pieces, classes,
   const [piecesOf, setPiecesOf] = useState<CatalogItem | null>(null);
   const inStock = (i: CatalogItem) => piecesInStock(i.id, pieces, docs as any);
   const costOf = (i: CatalogItem) => (i.stock_mode === 'pieces'
-    ? piecesCost(i, inStock(i), classes.filter(c => c.item_id === i.id).map(c => ({ ...c, purchase_price: latestCost(i.id, c.id ?? null) ?? c.purchase_price })))
+    ? (classes.some(c => c.item_id === i.id)
+      ? piecesCost(i, inStock(i), classes.filter(c => c.item_id === i.id).map(c => ({ ...c, purchase_price: latestCost(i.id, c.id ?? null) ?? c.purchase_price })))
+      // no weight classes: one price per KG (or per piece) for every piece
+      : (latestCost(i.id) ?? (Number(i.purchase_price) || 0)) * (i.price_basis === 'per_piece' ? inStock(i).length : inStock(i).reduce((t, p) => t + p.weight, 0)))
     : Math.max(0, stock.get(i.id) ?? 0) * (latestCost(i.id) ?? (Number(i.purchase_price) || 0)));
   const value = tracked.reduce((s, i) => s + costOf(i), 0);
   const low = tracked.filter(i => i.reorder_level != null && (stock.get(i.id) ?? 0) <= Number(i.reorder_level));
