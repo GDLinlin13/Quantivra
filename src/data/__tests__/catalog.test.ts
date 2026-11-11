@@ -46,6 +46,7 @@ describe('invoice file names', () => {
     const ctx = { type: 'Invoice', number: 'CCSG2606001', customer: 'Sample Customer Limited', reference: '', date: '2026-06-01', company: 'CC' };
     expect(formatDocFileName(undefined, ctx)).toBe('Invoice CCSG2606001 - Sample Customer Limited.pdf');
     expect(formatDocFileName('{customer}_{number}_{month} {year}', ctx)).toBe('Sample Customer Limited_CCSG2606001_June 2026.pdf');
+    expect(formatDocFileName('{yy}{mm}{dd} {mon} {YY} - {number}', ctx)).toBe('260601 Jun 26 - CCSG2606001.pdf');
     expect(formatDocFileName('{number} - {reference} - {customer}', ctx)).toBe('CCSG2606001 - Sample Customer Limited.pdf');
   });
 });
