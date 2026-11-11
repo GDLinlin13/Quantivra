@@ -136,7 +136,9 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
   const BANK = [...accounts].filter(a => a.subtype === 'bank').sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }) || a.id - b.id)[0]?.id || acc('bank', 'asset');
   const CLAIMS = acc('claims_payable', 'liability') || AP;
   const RETAINED = acc('retained', 'equity');
+  // the recommended chart has an account for exchange gains and one for losses; older charts have one account for both
   const FX = acc('fx_gain_loss') || acc('general', 'expense');
+  const FX_GAIN = acc('fx_gain') || FX, FX_LOSS = acc('fx_loss') || FX;
   const entries: LedgerEntry[] = [];
   const docById = new Map(input.docs.map(d => [d.id, d]));
 
@@ -232,7 +234,7 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
       lines.push(inbound ? { account_id: ctl, debit: 0, credit: x.cleared, contact_id: p.contact_id } : { account_id: ctl, debit: x.cleared, credit: 0, contact_id: p.contact_id });
       // more received than the invoice was booked at (or less paid than the bill): a gain; otherwise a loss
       const diff = r2(inbound ? worth - x.cleared : x.cleared - worth);
-      if (diff) lines.push(diff > 0 ? { account_id: FX, debit: 0, credit: diff, description: 'Exchange gain' } : { account_id: FX, debit: -diff, credit: 0, description: 'Exchange loss' });
+      if (diff) lines.push(diff > 0 ? { account_id: FX_GAIN, debit: 0, credit: diff, description: 'Exchange gain' } : { account_id: FX_LOSS, debit: -diff, credit: 0, description: 'Exchange loss' });
     }
     if (left > 0) lines.push(inbound ? { account_id: AR, debit: 0, credit: left, contact_id: p.contact_id } : { account_id: AP, debit: left, credit: 0, contact_id: p.contact_id });
     if (extraAcc) lines.push({ account_id: extraAcc, debit: extra, credit: 0, description: inbound ? 'Kept by the bank' : 'Paid with this payment' });

@@ -9,7 +9,7 @@ const DEFAULT_DOC_FORMATS: Record<string, string> = {
   invoice: 'INV-{YYYY}-{0000}', quotation: 'QUO-{YYYY}-{0000}', credit_note: 'CN-{YYYY}-{0000}', bill: 'BILL-{YYYY}-{0000}', claim: 'EXP-{YYYY}-{0000}',
 };
 import {
-  docTotals, statusAfterPayment, numberYearDiffers, isSalesDoc, bankCodePlan, chartUpgrade, defaultAccountsFor, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
+  docTotals, statusAfterPayment, numberYearDiffers, isSalesDoc, bankCodePlan, chartUpgrade, defaultAccountsFor, recommendedChartPlan, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
   type Contact, type ContactPerson, type FinDocument, type DocLine, type DocType, type FinanceSettings, type Account,
 } from '../data/finance';
 import { splitByShare, payrollSplit } from '../data/ledger';
@@ -225,9 +225,10 @@ export const accountService = {
   async list(companyId: number): Promise<Account[]> {
     const [acc, co] = await Promise.all([
       supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code'),
-      supabase.from('companies').select('country').eq('id', companyId).maybeSingle(),
+      supabase.from('companies').select('country, currency').eq('id', companyId).maybeSingle(),
     ]);
     let rows: Account[] = must(acc) || [];
+    const companyCurrency = (co.data as any)?.currency || undefined;
     // some account names follow the country (CPF in Singapore, EPF in Malaysia, GST / VAT…)
     const country = (co.data as any)?.country || 'SG';
     if (!rows.length) {
@@ -245,20 +246,41 @@ export const accountService = {
         rows = must(await supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code')) || [];
       } catch { /* no edit rights: keep the accounts as they are */ }
     }
-    if (bankCodePlan(rows).length) {
+    if (bankCodePlan(rows, companyCurrency).length) {
       try {
-        await this.renumberBanks(rows);
+        await this.renumberBanks(rows, companyCurrency);
         rows = must(await supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code')) || [];
       } catch { /* no edit rights: keep the codes as they are */ }
     }
     return rows;
   },
   /** Close gaps in bank codes so the first bank is 1000 (e.g. after a bank is deleted). Links use ids, so nothing else changes. */
-  async renumberBanks(rows: Account[]) {
-    const plan = bankCodePlan(rows);
+  async renumberBanks(rows: Account[], companyCurrency?: string) {
+    const plan = bankCodePlan(rows, companyCurrency);
     // move them out of the way first so two banks never hold the same code at once
     for (const p of plan) must(await supabase.from('fin_accounts').update({ code: `tmp-${p.id}` }).eq('id', p.id));
     for (const p of plan) must(await supabase.from('fin_accounts').update({ code: p.code }).eq('id', p.id));
+  },
+  /** What switching a company to the recommended chart of accounts would change (nothing is changed here). */
+  async recommendedPlan(companyId: number) {
+    const [acc, co] = await Promise.all([
+      supabase.from('fin_accounts').select('*').eq('company_id', companyId).order('code'),
+      supabase.from('companies').select('country, currency').eq('id', companyId).maybeSingle(),
+    ]);
+    const rows: Account[] = must(acc) || [];
+    const plan = recommendedChartPlan(rows, (co.data as any)?.country || 'SG', (co.data as any)?.currency || undefined);
+    return { ...plan, rows };
+  },
+  /**
+   * Switch the company to the recommended chart: accounts take their new codes (and names where nobody renamed them), the
+   * recommended accounts the company lacks are added. Journals, invoices and payments point at accounts by id, so none of
+   * them changes.
+   */
+  async applyRecommendedPlan(companyId: number, plan: { moves: { id: number; to: string; name?: string }[]; add: Omit<Account, 'id' | 'company_id' | 'archived'>[] }) {
+    // park them on temporary codes first so two accounts never hold one code at the same time
+    for (const m of plan.moves) must(await supabase.from('fin_accounts').update({ code: `tmp-${m.id}` }).eq('id', m.id));
+    for (const m of plan.moves) must(await supabase.from('fin_accounts').update({ code: m.to, ...(m.name ? { name: m.name } : {}) }).eq('id', m.id));
+    if (plan.add.length) must(await supabase.from('fin_accounts').insert(plan.add.map(a => ({ ...a, company_id: companyId }))));
   },
   async save(companyId: number, a: Partial<Account>): Promise<number> {
     const row = {

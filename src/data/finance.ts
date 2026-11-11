@@ -154,7 +154,148 @@ export const ACCOUNT_TYPE_LABEL: Record<AccountType, string> = {
   asset: 'Asset', liability: 'Liability', equity: 'Equity', income: 'Income', expense: 'Expense',
 };
 
-/** A simple Singapore-style chart of accounts every company starts with. */
+/**
+ * The recommended chart of accounts every new company starts with: 1xxx assets, 2xxx liabilities, 3xxx equity, 4xxx revenue,
+ * 5xxx cost of sales, 6xxx operating expenses, 7xxx other income and expenses, 8xxx taxation and special items.
+ * Accounts with a subtype are the ones Quantivra posts to by itself (bank, receivables, payroll, tax, exchange differences…).
+ */
+export const RECOMMENDED_ACCOUNTS: Omit<Account, 'id' | 'company_id' | 'archived'>[] = [
+  { code: '1000', name: 'Cash on Hand', type: 'asset', subtype: 'cash', is_system: false },
+  { code: '1010', name: 'Bank Accounts', type: 'asset', subtype: 'bank', is_system: true },
+  { code: '1020', name: 'Foreign Currency Bank Accounts', type: 'asset', subtype: null, is_system: false },
+  { code: '1100', name: 'Accounts Receivable', type: 'asset', subtype: 'receivable', is_system: true },
+  { code: '1110', name: 'Other Receivables', type: 'asset', subtype: null, is_system: false },
+  { code: '1120', name: 'Employee Advances', type: 'asset', subtype: null, is_system: false },
+  { code: '1130', name: 'Prepaid Expenses', type: 'asset', subtype: null, is_system: false },
+  { code: '1140', name: 'Security Deposits', type: 'asset', subtype: null, is_system: false },
+  { code: '1200', name: 'Inventory', type: 'asset', subtype: null, is_system: false },
+  { code: '1210', name: 'Raw Materials', type: 'asset', subtype: null, is_system: false },
+  { code: '1220', name: 'Work in Progress', type: 'asset', subtype: null, is_system: false },
+  { code: '1230', name: 'Finished Goods', type: 'asset', subtype: null, is_system: false },
+  { code: '1300', name: 'Property and Buildings', type: 'asset', subtype: 'fixed', is_system: false },
+  { code: '1310', name: 'Machinery and Equipment', type: 'asset', subtype: 'fixed', is_system: false },
+  { code: '1320', name: 'Office Equipment', type: 'asset', subtype: 'fixed', is_system: false },
+  { code: '1330', name: 'Computer Equipment', type: 'asset', subtype: 'fixed', is_system: false },
+  { code: '1340', name: 'Furniture and Fixtures', type: 'asset', subtype: 'fixed', is_system: false },
+  { code: '1350', name: 'Vehicles', type: 'asset', subtype: 'fixed', is_system: false },
+  { code: '1390', name: 'Accumulated Depreciation', type: 'asset', subtype: null, is_system: false },
+  { code: '1400', name: 'Intangible Assets', type: 'asset', subtype: null, is_system: false },
+  { code: '1410', name: 'Goodwill', type: 'asset', subtype: null, is_system: false },
+  { code: '1490', name: 'Accumulated Amortisation', type: 'asset', subtype: null, is_system: false },
+  { code: '1500', name: 'Deferred Tax Assets', type: 'asset', subtype: null, is_system: false },
+  { code: '2000', name: 'Accounts Payable', type: 'liability', subtype: 'payable', is_system: true },
+  { code: '2010', name: 'Other Payables', type: 'liability', subtype: null, is_system: false },
+  { code: '2020', name: 'Accrued Expenses', type: 'liability', subtype: null, is_system: false },
+  { code: '2030', name: 'Salaries Payable', type: 'liability', subtype: 'payroll_payable', is_system: true },
+  { code: '2031', name: "Employee's CPF contribution payable", type: 'liability', subtype: 'statutory_payable', is_system: true },
+  { code: '2032', name: "Employer's CPF contribution payable", type: 'liability', subtype: 'cpf_employer_payable', is_system: true },
+  { code: '2033', name: 'SDL, CDAC/SINDA/MBMF/ECF and other deductions payable', type: 'liability', subtype: 'other_payroll_payable', is_system: true },
+  { code: '2034', name: 'End-of-service gratuity provision', type: 'liability', subtype: 'gratuity_provision', is_system: true },
+  { code: '2040', name: 'Taxes Payable', type: 'liability', subtype: null, is_system: false },
+  { code: '2050', name: 'Sales Tax / VAT / GST Payable', type: 'liability', subtype: 'tax', is_system: true },
+  { code: '2060', name: 'Withholding Tax Payable', type: 'liability', subtype: null, is_system: false },
+  { code: '2100', name: 'Customer Deposits', type: 'liability', subtype: null, is_system: false },
+  { code: '2110', name: 'Unearned Revenue', type: 'liability', subtype: null, is_system: false },
+  { code: '2120', name: 'Staff Claims Payable', type: 'liability', subtype: 'claims_payable', is_system: true },
+  { code: '2200', name: 'Short-term Loans', type: 'liability', subtype: null, is_system: false },
+  { code: '2210', name: 'Long-term Loans', type: 'liability', subtype: null, is_system: false },
+  { code: '2220', name: 'Lease Liabilities', type: 'liability', subtype: null, is_system: false },
+  { code: '2300', name: 'Related Party Payables', type: 'liability', subtype: null, is_system: false },
+  { code: '2310', name: 'Dividends Payable', type: 'liability', subtype: 'dividends_payable', is_system: false },
+  { code: '2400', name: 'Deferred Tax Liabilities', type: 'liability', subtype: null, is_system: false },
+  { code: '3000', name: 'Share Capital', type: 'equity', subtype: null, is_system: false },
+  { code: '3010', name: 'Additional Paid-in Capital', type: 'equity', subtype: null, is_system: false },
+  { code: '3020', name: 'Share Premium', type: 'equity', subtype: null, is_system: false },
+  { code: '3100', name: 'Retained Earnings', type: 'equity', subtype: 'retained', is_system: true },
+  { code: '3110', name: 'Current Year Earnings', type: 'equity', subtype: null, is_system: false },
+  { code: '3200', name: 'General Reserves', type: 'equity', subtype: null, is_system: false },
+  { code: '3210', name: 'Foreign Currency Translation Reserve', type: 'equity', subtype: null, is_system: false },
+  { code: '3300', name: 'Dividends / Distributions', type: 'equity', subtype: 'dividends', is_system: false },
+  { code: '4000', name: 'Sales Revenue', type: 'income', subtype: 'sales', is_system: true },
+  { code: '4010', name: 'Product Sales', type: 'income', subtype: null, is_system: false },
+  { code: '4020', name: 'Service Revenue', type: 'income', subtype: null, is_system: false },
+  { code: '4030', name: 'Consulting Revenue', type: 'income', subtype: null, is_system: false },
+  { code: '4040', name: 'Project Revenue', type: 'income', subtype: null, is_system: false },
+  { code: '4050', name: 'Commission Income', type: 'income', subtype: null, is_system: false },
+  { code: '4060', name: 'Subscription Revenue', type: 'income', subtype: null, is_system: false },
+  { code: '4070', name: 'Rental Income', type: 'income', subtype: null, is_system: false },
+  { code: '4080', name: 'Other Operating Income', type: 'income', subtype: null, is_system: false },
+  { code: '4090', name: 'Sales Returns and Allowances', type: 'income', subtype: null, is_system: false },
+  { code: '4100', name: 'Sales Discounts', type: 'income', subtype: null, is_system: false },
+  { code: '5000', name: 'Cost of Sales', type: 'expense', subtype: null, is_system: false },
+  { code: '5010', name: 'Purchases', type: 'expense', subtype: null, is_system: false },
+  { code: '5020', name: 'Raw Materials', type: 'expense', subtype: null, is_system: false },
+  { code: '5030', name: 'Direct Labour', type: 'expense', subtype: null, is_system: false },
+  { code: '5040', name: 'Subcontractor Costs', type: 'expense', subtype: null, is_system: false },
+  { code: '5050', name: 'Freight and Shipping', type: 'expense', subtype: null, is_system: false },
+  { code: '5060', name: 'Import Duties', type: 'expense', subtype: null, is_system: false },
+  { code: '5070', name: 'Packaging Materials', type: 'expense', subtype: null, is_system: false },
+  { code: '5080', name: 'Inventory Write-offs', type: 'expense', subtype: null, is_system: false },
+  { code: '5090', name: 'Other Direct Costs', type: 'expense', subtype: null, is_system: false },
+  { code: '6000', name: 'Employee Salaries and Wages', type: 'expense', subtype: 'payroll', is_system: true },
+  { code: '6005', name: "Director's Salary", type: 'expense', subtype: 'payroll_director', is_system: true },
+  { code: '6008', name: "Director's Fees", type: 'expense', subtype: 'director_fees', is_system: false },
+  { code: '6010', name: 'Employer Payroll Contributions', type: 'expense', subtype: 'payroll_employer', is_system: true },
+  { code: '6015', name: 'SDL and other employer contributions', type: 'expense', subtype: 'payroll_employer_other', is_system: true },
+  { code: '6020', name: 'Employee Bonuses', type: 'expense', subtype: null, is_system: false },
+  { code: '6025', name: 'End-of-service Gratuity', type: 'expense', subtype: 'gratuity_expense', is_system: true },
+  { code: '6030', name: 'Employee Benefits', type: 'expense', subtype: null, is_system: false },
+  { code: '6040', name: 'Staff Training', type: 'expense', subtype: null, is_system: false },
+  { code: '6050', name: 'Recruitment Expenses', type: 'expense', subtype: null, is_system: false },
+  { code: '6100', name: 'Rent', type: 'expense', subtype: null, is_system: false },
+  { code: '6110', name: 'Utilities', type: 'expense', subtype: null, is_system: false },
+  { code: '6120', name: 'Repairs and Maintenance', type: 'expense', subtype: null, is_system: false },
+  { code: '6130', name: 'Cleaning Expenses', type: 'expense', subtype: null, is_system: false },
+  { code: '6200', name: 'Office Supplies', type: 'expense', subtype: null, is_system: false },
+  { code: '6210', name: 'Printing and Stationery', type: 'expense', subtype: null, is_system: false },
+  { code: '6220', name: 'Postage and Courier', type: 'expense', subtype: null, is_system: false },
+  { code: '6300', name: 'Travel and Accommodation', type: 'expense', subtype: null, is_system: false },
+  { code: '6310', name: 'Local Transportation', type: 'expense', subtype: null, is_system: false },
+  { code: '6320', name: 'Vehicle Expenses', type: 'expense', subtype: null, is_system: false },
+  { code: '6400', name: 'Meals and Entertainment', type: 'expense', subtype: null, is_system: false },
+  { code: '6500', name: 'Marketing and Advertising', type: 'expense', subtype: null, is_system: false },
+  { code: '6510', name: 'Public Relations', type: 'expense', subtype: null, is_system: false },
+  { code: '6520', name: 'Promotional Expenses', type: 'expense', subtype: null, is_system: false },
+  { code: '6600', name: 'Software and Subscriptions', type: 'expense', subtype: null, is_system: false },
+  { code: '6610', name: 'IT and Cloud Services', type: 'expense', subtype: null, is_system: false },
+  { code: '6620', name: 'Website and Hosting', type: 'expense', subtype: null, is_system: false },
+  { code: '6700', name: 'Insurance', type: 'expense', subtype: null, is_system: false },
+  { code: '6800', name: 'Professional Fees', type: 'expense', subtype: null, is_system: false },
+  { code: '6810', name: 'Legal Fees', type: 'expense', subtype: null, is_system: false },
+  { code: '6820', name: 'Accounting Fees', type: 'expense', subtype: 'fees_accounting', is_system: false },
+  { code: '6830', name: 'Audit Fees', type: 'expense', subtype: null, is_system: false },
+  { code: '6840', name: 'Corporate Secretarial Fees', type: 'expense', subtype: 'fees_secretarial', is_system: false },
+  { code: '6850', name: 'Tax Advisory and Filing Fees', type: 'expense', subtype: 'fees_tax_agent', is_system: false },
+  { code: '6860', name: 'Company Registration Fees', type: 'expense', subtype: null, is_system: false },
+  { code: '6870', name: 'Licences and Permits', type: 'expense', subtype: null, is_system: false },
+  { code: '6880', name: 'Consultancy Fees', type: 'expense', subtype: null, is_system: false },
+  { code: '6900', name: 'Bank Charges', type: 'expense', subtype: null, is_system: false },
+  { code: '6910', name: 'Payment Gateway Fees', type: 'expense', subtype: null, is_system: false },
+  { code: '6920', name: 'Foreign Exchange Losses', type: 'expense', subtype: null, is_system: false },
+  { code: '6930', name: 'Depreciation', type: 'expense', subtype: null, is_system: false },
+  { code: '6940', name: 'Amortisation', type: 'expense', subtype: null, is_system: false },
+  { code: '6950', name: 'Bad Debt Expenses', type: 'expense', subtype: null, is_system: false },
+  { code: '6990', name: 'General Administrative Expenses', type: 'expense', subtype: 'general', is_system: true },
+  { code: '7000', name: 'Interest Income', type: 'income', subtype: null, is_system: false },
+  { code: '7010', name: 'Dividend Income', type: 'income', subtype: null, is_system: false },
+  { code: '7020', name: 'Rental Income – Non-operating', type: 'income', subtype: null, is_system: false },
+  { code: '7030', name: 'Foreign Exchange Gains', type: 'income', subtype: 'fx_gain', is_system: true },
+  { code: '7040', name: 'Gain on Disposal of Assets', type: 'income', subtype: null, is_system: false },
+  { code: '7100', name: 'Interest Expenses', type: 'expense', subtype: null, is_system: false },
+  { code: '7110', name: 'Loan Finance Charges', type: 'expense', subtype: null, is_system: false },
+  { code: '7120', name: 'Foreign Exchange Losses', type: 'expense', subtype: 'fx_loss', is_system: true },
+  { code: '7130', name: 'Loss on Disposal of Assets', type: 'expense', subtype: null, is_system: false },
+  { code: '7140', name: 'Impairment Losses', type: 'expense', subtype: null, is_system: false },
+  { code: '8000', name: 'Corporate Income Tax', type: 'expense', subtype: null, is_system: false },
+  { code: '8010', name: 'Deferred Tax Expense', type: 'expense', subtype: null, is_system: false },
+  { code: '8020', name: 'Other Business Taxes', type: 'expense', subtype: null, is_system: false },
+  { code: '8030', name: 'Tax Adjustments', type: 'expense', subtype: null, is_system: false },
+  { code: '8100', name: 'Exceptional Expenses', type: 'expense', subtype: null, is_system: false },
+  { code: '8110', name: 'Restructuring Expenses', type: 'expense', subtype: null, is_system: false },
+  { code: '8120', name: 'Non-recurring Expenses', type: 'expense', subtype: null, is_system: false },
+];
+
+/** The older, simpler chart of accounts that companies set up before the recommended one still use (until they switch). */
 export const DEFAULT_ACCOUNTS: Omit<Account, 'id' | 'company_id' | 'archived'>[] = [
   { code: '1000', name: 'Bank', type: 'asset', subtype: 'bank', is_system: true },
   { code: '1010', name: 'Petty cash', type: 'asset', subtype: 'cash', is_system: false },
@@ -244,11 +385,21 @@ export function localAccountNames(country?: string | null): Record<string, strin
 /** Countries where employers set aside an end-of-service gratuity each month (Gulf states). */
 export const GRATUITY_COUNTRIES = ['AE', 'SA', 'QA', 'KW', 'BH', 'OM'];
 const GRATUITY = ['gratuity_provision', 'gratuity_expense'];
-export function defaultAccountsFor(country?: string | null) {
+export type ChartStyle = 'recommended' | 'legacy';
+/** Which chart a company has: the recommended one has Cash on Hand at 1000; the older one has the bank there. */
+export function chartStyleOf(rows: Pick<Account, 'code' | 'subtype'>[]): ChartStyle {
+  return rows.some(r => r.code === '1000' && r.subtype === 'cash') ? 'recommended' : 'legacy';
+}
+export function defaultAccountsFor(country?: string | null, style: ChartStyle = 'recommended') {
   const names = localAccountNames(country);
   const gulf = GRATUITY_COUNTRIES.includes((country || 'SG').toUpperCase());
-  return DEFAULT_ACCOUNTS.filter(a => gulf || !GRATUITY.includes(a.subtype || ''))
-    .map(a => (a.subtype && names[a.subtype] ? { ...a, name: names[a.subtype] } : a));
+  const base = style === 'recommended' ? RECOMMENDED_ACCOUNTS : DEFAULT_ACCOUNTS;
+  return base.filter(a => gulf || !GRATUITY.includes(a.subtype || ''))
+    .map(a => {
+      if (!a.subtype || !names[a.subtype]) return a;
+      // the recommended chart calls the tax account "GST Payable", "VAT Payable"…
+      return { ...a, name: style === 'recommended' && a.subtype === 'tax' ? `${names.tax} Payable` : names[a.subtype] };
+    });
 }
 
 /**
@@ -273,11 +424,14 @@ export function chartUpgrade(rows: Pick<Account, 'id' | 'code' | 'name' | 'subty
   const add: Omit<Account, 'id' | 'company_id' | 'archived'>[] = [];
   const rename: { id: number; name: string }[] = [];
   if (!rows.length) return { add, rename };
+  const style = chartStyleOf(rows);
   const local = localAccountNames(country), sgNames = localAccountNames('SG');
-  const defaults = defaultAccountsFor(country);
+  const defaults = defaultAccountsFor(country, style);
   const used = new Set(rows.map(r => r.code));
   for (const g of CHART_UPGRADES) {
     if (rows.some(r => r.subtype === g.marker)) continue;
+    // the recommended chart keeps exchange gains and losses in two accounts
+    if (g.marker === 'fx_gain_loss' && rows.some(r => r.subtype === 'fx_gain' || r.subtype === 'fx_loss')) continue;
     if (g.countries && !g.countries.includes((country || 'SG').toUpperCase())) continue;
     for (const d of defaults.filter(a => g.subtypes.includes(a.subtype || ''))) {
       if (rows.some(r => r.subtype === d.subtype)) continue;
@@ -292,7 +446,8 @@ export function chartUpgrade(rows: Pick<Account, 'id' | 'code' | 'name' | 'subty
   for (const r of rows) {
     const st = r.subtype || '';
     const old = CHART_UPGRADES.some(g => g.renames?.[st]?.[0] === r.name);
-    const target = local[st] || CHART_UPGRADES.map(g => g.renames?.[st]?.[1]).find(Boolean);
+    const target0 = local[st] || CHART_UPGRADES.map(g => g.renames?.[st]?.[1]).find(Boolean);
+    const target = style === 'recommended' && st === 'tax' && target0 ? `${target0} Payable` : target0;
     if (!target || r.name === target) continue;
     // only names nobody changed: an old standard name, or the Singapore standard name in another country
     if (old || (sgNames[st] && r.name === sgNames[st])) rename.push({ id: r.id, name: target });
@@ -300,11 +455,25 @@ export function chartUpgrade(rows: Pick<Account, 'id' | 'code' | 'name' | 'subty
   return { add, rename };
 }
 
-export function bankCodePlan(accounts: Pick<Account, 'id' | 'code' | 'subtype'>[]): { id: number; code: string }[] {
-  const banks = accounts.filter(a => a.subtype === 'bank')
-    .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }) || a.id - b.id);
+export function bankCodePlan(accounts: (Pick<Account, 'id' | 'code' | 'subtype'> & { currency?: string | null })[], companyCurrency?: string): { id: number; code: string }[] {
+  const byCode = (a: { code: string; id: number }, b: { code: string; id: number }) => a.code.localeCompare(b.code, undefined, { numeric: true }) || a.id - b.id;
+  const banks = accounts.filter(a => a.subtype === 'bank').sort(byCode);
   const taken = new Set(accounts.filter(a => a.subtype !== 'bank').map(a => a.code));
   const out: { id: number; code: string }[] = [];
+  if (chartStyleOf(accounts) === 'recommended') {
+    // bank accounts from 1010, accounts in another currency from 1021 (1020 is the "Foreign Currency Bank Accounts" heading)
+    const isForeign = (a: { currency?: string | null }) => !!(a.currency && companyCurrency && a.currency !== companyCurrency);
+    for (const [group, start] of [[banks.filter(a => !isForeign(a)), 1010], [banks.filter(isForeign), 1021]] as const) {
+      let next = start;
+      for (const b of group) {
+        while (taken.has(String(next))) next++;
+        if (b.code !== String(next)) out.push({ id: b.id, code: String(next) });
+        taken.add(String(next));
+        next++;
+      }
+    }
+    return out;
+  }
   let next = 1000;
   for (const b of banks) {
     while (taken.has(String(next))) next++;
@@ -312,6 +481,105 @@ export function bankCodePlan(accounts: Pick<Account, 'id' | 'code' | 'subtype'>[
     next++;
   }
   return out;
+}
+
+
+/** Older default accounts that moved in the recommended chart: old code → the new code and name. */
+const LEGACY_TO_RECOMMENDED: Record<string, { name: RegExp; code: string; to: string }> = {
+  '1200': { name: /^prepayments and deposits$/i, code: '1130', to: 'Prepaid Expenses' },
+  '1500': { name: /^equipment and furniture$/i, code: '1320', to: 'Office Equipment' },
+  '3000': { name: /^share capital$/i, code: '3000', to: 'Share Capital' },
+  '4100': { name: /^other income$/i, code: '4080', to: 'Other Operating Income' },
+  '5000': { name: /^cost of sales$/i, code: '5000', to: 'Cost of Sales' },
+  '6100': { name: /^rent$/i, code: '6100', to: 'Rent' },
+  '6200': { name: /^utilities$/i, code: '6110', to: 'Utilities' },
+  '6300': { name: /^office supplies$/i, code: '6200', to: 'Office Supplies' },
+  '6400': { name: /^travel and transport$/i, code: '6300', to: 'Travel and Accommodation' },
+  '6500': { name: /^meals and entertainment$/i, code: '6400', to: 'Meals and Entertainment' },
+  '6600': { name: /^marketing and advertising$/i, code: '6500', to: 'Marketing and Advertising' },
+  '6700': { name: /^software and subscriptions$/i, code: '6600', to: 'Software and Subscriptions' },
+  '6800': { name: /^professional fees$/i, code: '6800', to: 'Professional Fees' },
+  '6900': { name: /^bank charges$/i, code: '6900', to: 'Bank Charges' },
+};
+
+export interface ChartMove { id: number; from: string; to: string; fromName: string; name?: string }
+/**
+ * What it takes to bring a company with the older chart onto the recommended one: accounts Quantivra uses by itself and the
+ * old standard accounts take their new codes (names are changed only where nobody renamed them), bank accounts are
+ * renumbered 1010 onwards, and the accounts the recommended chart has and the company lacks are added. An account the
+ * company made itself keeps its code; if that code is wanted by a recommended account, that one is not added.
+ */
+export function recommendedChartPlan(rows: Pick<Account, 'id' | 'code' | 'name' | 'subtype' | 'currency'>[], country?: string | null, companyCurrency?: string) {
+  const empty = { moves: [] as ChartMove[], add: [] as Omit<Account, 'id' | 'company_id' | 'archived'>[], skipped: [] as { code: string; name: string }[] };
+  if (!rows.length || chartStyleOf(rows) === 'recommended') return empty;
+  const target = defaultAccountsFor(country, 'recommended');
+  // roles Quantivra posts to by itself: one account each (several fixed-asset accounts share a role, so they are not one)
+  const bySub = new Map(target.filter(t => t.subtype && t.subtype !== 'bank' && target.filter(x => x.subtype === t.subtype).length === 1).map(t => [t.subtype!, t]));
+  const FX_TARGET = target.find(t => t.subtype === 'fx_gain')!;
+
+  const want = new Map<number, { to: string; name?: string }>();
+  const sorted = [...rows].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }) || a.id - b.id);
+  const seenSub = new Set<string>();
+  for (const r of sorted) {
+    const st = r.subtype || '';
+    if (st === 'fx_gain_loss') { want.set(r.id, { to: FX_TARGET.code, name: /^foreign exchange gain \/ \(loss\)$/i.test(r.name) ? 'Foreign Exchange Gains / (Losses)' : undefined }); continue; }
+    const t = st && bySub.get(st);
+    if (t && !seenSub.has(st)) {
+      seenSub.add(st);
+      const def = defaultAccountsFor(country, 'legacy').find(d => d.subtype === st);
+      want.set(r.id, { to: t.code, name: def && r.name === def.name && def.name !== t.name ? t.name : undefined });
+      continue;
+    }
+    const m = LEGACY_TO_RECOMMENDED[r.code];
+    if (m && !st && m.name.test(r.name)) want.set(r.id, { to: m.code, name: r.name === m.to ? undefined : m.to });
+    else if (m && st === 'fixed' && m.name.test(r.name)) want.set(r.id, { to: m.code, name: m.to });
+  }
+  // bank accounts: numbered as the recommended chart does (once the cash account is at 1000)
+  {
+    const moved0 = rows.map(r => ({ ...r, code: want.get(r.id)?.to ?? r.code }));
+    const withCash = moved0.some(r => r.code === '1000' && r.subtype === 'cash') ? moved0 : [...moved0, { id: -1, code: '1000', name: 'Cash on Hand', subtype: 'cash', currency: null }];
+    for (const b of bankCodePlan(withCash, companyCurrency)) if (b.id > 0) want.set(b.id, { to: b.code });
+  }
+  // two accounts can't end up with one code. An account that stays put (one the company made itself, say) keeps its code
+  // and the moves wanting it are dropped; between two moves, the account with the older code wins.
+  const byId = new Map(rows.map(r => [r.id, r]));
+  const moving = (id: number) => { const w = want.get(id); return !!w && w.to !== byId.get(id)!.code; };
+  for (;;) {
+    const claims = new Map<string, number[]>();
+    for (const r of rows) { const c = want.get(r.id)?.to ?? r.code; claims.set(c, [...(claims.get(c) || []), r.id]); }
+    const clash = [...claims.values()].find(ids => ids.length > 1);
+    if (!clash) break;
+    const stay = clash.filter(id => !moving(id));
+    const movers = clash.filter(moving);
+    const keep = stay.length ? [] : movers.slice(0, 1);
+    for (const id of movers) if (!keep.includes(id)) want.delete(id);
+  }
+  const moved = rows.map(r => ({ ...r, code: want.get(r.id)?.to ?? r.code, name: want.get(r.id)?.name ?? r.name }));
+  const moves: ChartMove[] = rows.filter(r => want.has(r.id) && want.get(r.id)!.to !== r.code || want.get(r.id)?.name)
+    .map(r => ({ id: r.id, from: r.code, to: want.get(r.id)!.to, fromName: r.name, name: want.get(r.id)!.name }));
+
+  const real = moves.filter(m => m.to !== m.from || m.name);
+
+  const codes = new Set(moved.map(r => r.code));
+  const subs = new Set(moved.map(r => r.subtype).filter(Boolean) as string[]);
+  const add: typeof empty.add = [];
+  const skipped: typeof empty.skipped = [];
+  for (const t of target) {
+    if (t.subtype === 'bank') continue;
+    if (t.subtype && target.filter(x => x.subtype === t.subtype).length === 1 && subs.has(t.subtype)) continue;   // a role the company already has (several fixed-asset accounts are fine)
+    if ((t.subtype === 'fx_gain' || t.subtype === 'fx_loss') && subs.has('fx_gain_loss')) continue;
+    if (codes.has(t.code)) { if (moved.some(r => r.code === t.code && r.name.toLowerCase() === t.name.toLowerCase())) continue; skipped.push({ code: t.code, name: t.name }); continue; }
+    add.push(t);
+  }
+  return { moves: real, add, skipped };
+}
+
+/** The code a new bank account gets: 1010 onwards (1021 onwards in another currency) in the recommended chart, 1000 onwards in the older one. */
+export function nextBankCode(accounts: Pick<Account, 'code' | 'subtype'>[], foreign: boolean): string {
+  const used = new Set(accounts.map(a => a.code));
+  const start = chartStyleOf(accounts) === 'recommended' ? (foreign ? 1021 : 1010) : 1000;
+  for (let c = start; c < start + 90; c++) if (!used.has(String(c))) return String(c);
+  return `1${Date.now() % 1000}`;
 }
 
 export const today = () => new Date().toISOString().slice(0, 10);

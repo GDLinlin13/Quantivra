@@ -10,7 +10,7 @@ import { statementPeriod, statementMonthFromText } from '../../../../data/docume
 import { rowsForCurrency, statementCurrencies, rateFromText } from '../../../../data/bankCurrency';
 import { planImport, nothingNew } from '../../../../data/bankImport';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
-import { balanceDue, inBase, docRate, isForeignDoc, schemeLabel, type Account, type FinDocument } from '../../../../data/finance';
+import { balanceDue, inBase, docRate, isForeignDoc, schemeLabel, nextBankCode, type Account, type FinDocument } from '../../../../data/finance';
 import { parseBankCsv, type BankLine } from '../../../../data/bankCsv';
 import { parseStatementText, pdfToRows, rowsToLines, parseWithLayout, type PdfRow, type PdfLayout } from '../../../../data/bankPdf';
 import { TeachPdf } from './TeachPdf';
@@ -852,11 +852,7 @@ function BankAccountModal({ data, account, onClose, onSaved }: { data: FinanceDa
   const [saving, setSaving] = useState(false);
   const cur = Form.useWatch('currency', form) || data.currency;
   const foreign = cur !== data.currency;
-  const nextCode = () => {
-    const used = new Set(data.accounts.map(a => a.code));
-    for (let c = 1000; c < 1100; c++) if (!used.has(String(c))) return String(c);
-    return `1${Date.now() % 1000}`;
-  };
+  const nextCode = () => nextBankCode(data.accounts, foreign);
   const submit = async () => {
     const v = await form.validateFields();
     setSaving(true);

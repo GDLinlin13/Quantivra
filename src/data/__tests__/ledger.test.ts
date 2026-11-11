@@ -114,9 +114,9 @@ describe('ledger', () => {
 
   it('names payroll and tax accounts after the country', async () => {
     const { defaultAccountsFor, schemeLabel } = await import('../finance');
-    const my = defaultAccountsFor('MY'), name = (code: string) => my.find(a => a.code === code)!.name;
+    const my = defaultAccountsFor('MY', 'legacy'), name = (code: string) => my.find(a => a.code === code)!.name;
     expect([name('2100'), name('2210'), name('2220'), name('6010')]).toEqual(['SST', "Employee's EPF, SOCSO & EIS contributions payable", "Employer's EPF, SOCSO & EIS contributions payable", "Employer's EPF, SOCSO & EIS contributions"]);
-    expect(defaultAccountsFor('SG').find(a => a.code === '2210')!.name).toBe("Employee's CPF contribution payable");
+    expect(defaultAccountsFor('SG', 'legacy').find(a => a.code === '2210')!.name).toBe("Employee's CPF contribution payable");
     expect([schemeLabel('SG'), schemeLabel('DE')]).toEqual(['CPF', 'Statutory contributions']);
     // a company outside Singapore that got the Singapore names is renamed, its own names are left alone
     const rows = accounts.map(a => (a.code === '2220' ? { ...a, name: 'My own name' } : a));
@@ -179,6 +179,18 @@ describe('documents in another currency', () => {
     expect(balanced(es)).toBe(true);
     expect(bal(es, '1100')).toBe(0);
     expect(bal(es, '4900')).toBe(-50);
+  });
+
+  it('the recommended chart keeps exchange gains and losses in two accounts', async () => {
+    const { RECOMMENDED_ACCOUNTS } = await import('../finance');
+    const rec = RECOMMENDED_ACCOUNTS.map((a, i) => ({ ...a, id: i + 1, company_id: 1, archived: false, opening_balance: 0 })) as Account[];
+    const on = (es: any[], code: string) => balances(rec, es).find(b => b.account.code === code)!.balance;
+    const pay = (amount: number) => [{ id: 1, direction: 'in', number: 'R1', contact_id: 1, payment_date: '2026-06-20', amount, account_id: rec.find(a => a.code === '1010')!.id }];
+    const gain = buildLedger({ ...base, accounts: rec, payments: pay(7900) } as any);
+    expect([on(gain, '7030'), on(gain, '7120')]).toEqual([100, 0]);          // gain in 7030 (income)
+    const loss = buildLedger({ ...base, accounts: rec, payments: pay(7750) } as any);
+    expect([on(loss, '7030'), on(loss, '7120')]).toEqual([0, 50]);           // loss in 7120 (expense)
+    expect(balanced(loss)).toBe(true);
   });
 
   it('a bill in another currency paid at a better rate is a gain; tax return in the company currency', () => {
