@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { lineAmount, docTotals, balanceDue, statusAfterPayment, isOverdue, addDays, bankCodePlan, defaultAccountsFor, chartUpgrade } from '../finance';
+import { lineAmount, docTotals, balanceDue, statusAfterPayment, isOverdue, addDays, bankCodePlan, defaultAccountsFor, chartUpgrade, chartStyleOf, recommendedChartPlan, nextBankCode } from '../finance';
 
 describe('finance maths', () => {
   it('works out line amounts with a line discount', () => {
@@ -78,12 +78,13 @@ describe('company and tax registration names', () => {
 
 describe('dividend accounts', () => {
   it('are added to older charts once, unless the company made its own', () => {
-    const rows = defaultAccountsFor('SG').filter(a => !String(a.subtype).startsWith('dividend')).map((a, i) => ({ ...a, id: i + 1 }));
+    const rows = defaultAccountsFor('SG', 'legacy').filter(a => !String(a.subtype).startsWith('dividend')).map((a, i) => ({ ...a, id: i + 1 }));
     const add = chartUpgrade(rows, 'SG').add.map(a => `${a.code} ${a.name}`);
     expect(add).toEqual(['2400 Dividends payable', '3200 Dividends']);
     const own = [...rows, { id: 99, code: '3300', name: 'Dividend paid', subtype: null }];
     expect(chartUpgrade(own, 'SG').add.map(a => a.name)).toEqual(['Dividends payable']);
-    expect(chartUpgrade(defaultAccountsFor('SG').map((a, i) => ({ ...a, id: i + 1 })), 'SG').add).toEqual([]);
+    expect(chartUpgrade(defaultAccountsFor('SG', 'legacy').map((a, i) => ({ ...a, id: i + 1 })), 'SG').add).toEqual([]);
+    expect(chartUpgrade(defaultAccountsFor('SG').map((a, i) => ({ ...a, id: i + 1 })), 'SG')).toEqual({ add: [], rename: [] });   // the recommended chart is complete
   });
 });
 
@@ -113,5 +114,71 @@ describe('numbers for another year', () => {
     expect(nextFreeNumber('BILL-{YYYY}-{0000}', '2025-09-15', used)).toBe('BILL-2025-0003');
     expect(nextFreeNumber('BILL-{YYYY}-{0000}', '2024-01-02', used)).toBe('BILL-2024-0001');
     expect(nextFreeNumber('INV.{YY}{MM}-{000}', '2025-09-15', ['INV.2509-007'])).toBe('INV.2509-008');
+  });
+});
+
+describe('the recommended chart of accounts', () => {
+  const rec = defaultAccountsFor('SG');
+  const legacy = defaultAccountsFor('SG', 'legacy').map((a, i) => ({ ...a, id: i + 1, archived: false }));
+
+  it('follows the numbering: 1xxx assets … 8xxx taxation', () => {
+    const kind: Record<string, string> = { '1': 'asset', '2': 'liability', '3': 'equity', '4': 'income', '5': 'expense', '6': 'expense', '8': 'expense' };
+    for (const a of rec) {
+      if (a.code[0] === '7') expect(a.type).toBe(Number(a.code) < 7100 ? 'income' : 'expense');
+      else expect([a.code, a.type]).toEqual([a.code, kind[a.code[0]]]);
+    }
+    expect(rec.find(a => a.code === '1000')!.name).toBe('Cash on Hand');
+    expect(rec.find(a => a.code === '6990')!.name).toBe('General Administrative Expenses');
+    expect(new Set(rec.map(a => a.code)).size).toBe(rec.length);
+  });
+
+  it('has every account Quantivra posts to by itself, once', () => {
+    const roles = ['bank', 'cash', 'receivable', 'payable', 'tax', 'payroll_payable', 'statutory_payable', 'cpf_employer_payable', 'other_payroll_payable',
+      'claims_payable', 'dividends_payable', 'retained', 'dividends', 'sales', 'payroll', 'payroll_director', 'payroll_employer', 'payroll_employer_other', 'general', 'fx_gain', 'fx_loss'];
+    for (const r of roles) expect(rec.filter(a => a.subtype === r), r).toHaveLength(1);
+    expect(rec.some(a => a.subtype === 'gratuity_provision')).toBe(false);          // Gulf states only
+    expect(defaultAccountsFor('AE').some(a => a.subtype === 'gratuity_provision')).toBe(true);
+    expect(rec.find(a => a.subtype === 'tax')!.name).toBe('GST Payable');
+    expect(defaultAccountsFor('AE').find(a => a.subtype === 'tax')!.name).toBe('VAT Payable');
+  });
+
+  it('numbers new bank accounts from 1010, and accounts in another currency from 1021', () => {
+    const rows = rec.map((a, i) => ({ ...a, id: i + 1 }));
+    expect(bankCodePlan(rows, 'SGD')).toEqual([]);
+    const withMore = [...rows, { id: 900, code: '1011', subtype: 'bank', name: 'x', currency: null }, { id: 901, code: '1012', subtype: 'bank', name: 'y', currency: 'USD' }] as any[];
+    expect(bankCodePlan(withMore, 'SGD')).toEqual([{ id: 901, code: '1021' }]);
+    expect(nextBankCode(rows, false)).toBe('1011');
+    expect(nextBankCode(rows, true)).toBe('1021');
+    expect(nextBankCode(legacy, false)).toBe('1001');
+  });
+
+  it('brings an older chart onto the recommended one', () => {
+    const rows = [...legacy, { id: 500, code: '1002', name: 'DBS - USD', type: 'asset', subtype: 'bank', is_system: false, archived: false, currency: 'USD' },
+      { id: 501, code: '1300', name: 'My own account', type: 'asset', subtype: null, is_system: false, archived: false }] as any[];
+    expect(chartStyleOf(rows)).toBe('legacy');
+    const plan = recommendedChartPlan(rows, 'SG', 'SGD');
+    // apply it
+    const after = rows.map(r => { const m = plan.moves.find(x => x.id === r.id); return m ? { ...r, code: m.to, name: m.name ?? r.name } : r; })
+      .concat(plan.add.map((a, i) => ({ ...a, id: 1000 + i, archived: false }) as any));
+    expect(chartStyleOf(after)).toBe('recommended');
+    expect(new Set(after.map(a => a.code)).size).toBe(after.length);                        // no code twice
+    const at = (sub: string) => after.filter(a => a.subtype === sub).map(a => a.code);
+    expect([at('cash'), at('receivable'), at('payable'), at('tax'), at('payroll_payable'), at('sales'), at('retained'), at('fx_gain_loss')])
+      .toEqual([['1000'], ['1100'], ['2000'], ['2050'], ['2030'], ['4000'], ['3100'], ['7030']]);
+    expect(at('bank').sort()).toEqual(['1010', '1021']);                                      // the SGD bank, then the USD one
+    expect(after.find(a => a.id === 501)!.code).toBe('1300');                                 // a company's own account keeps its code
+    expect(plan.skipped.map(s => s.code)).toContain('1300');                                  // so the recommended 1300 is not added
+    expect(after.find(a => a.code === '6110')!.name).toBe('Utilities');
+    expect(after.find(a => a.code === '1130')!.name).toBe('Prepaid Expenses');
+    expect(after.find(a => a.name === 'Equipment and furniture' || a.name === 'Office Equipment')!.code).toBe('1320');
+    // nothing more to do afterwards
+    expect(recommendedChartPlan(after as any, 'SG', 'SGD').moves).toEqual([]);
+  });
+
+  it('leaves a name the company changed alone', () => {
+    const rows = legacy.map(r => (r.code === '6200' ? { ...r, name: 'Electricity and water' } : r)) as any[];
+    const plan = recommendedChartPlan(rows, 'SG', 'SGD');
+    expect(plan.moves.find(m => m.from === '6200')).toBeUndefined();      // not an untouched default: stays at 6200
+    expect(plan.add.some(a => a.code === '6110')).toBe(true);
   });
 });

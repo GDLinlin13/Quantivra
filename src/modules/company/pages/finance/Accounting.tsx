@@ -7,7 +7,7 @@ import { PlusOutlined, PrinterOutlined, EditOutlined, DeleteOutlined } from '@an
 import dayjs, { type Dayjs } from 'dayjs';
 import { loadLedgerInput, accountService, journalService, type JournalRow } from '../../../../services/finance';
 import { buildLedger, profitAndLoss, balanceSheet, gstReturn, aged, balances, accountLedger, type LedgerEntry } from '../../../../data/ledger';
-import { ACCOUNT_TYPE_LABEL, today, type Account, type AccountType } from '../../../../data/finance';
+import { ACCOUNT_TYPE_LABEL, today, chartStyleOf, type Account, type AccountType } from '../../../../data/finance';
 import { money } from '../../../../data/documentLayouts';
 import { PRINT_CSS } from '../hr/PayslipView';
 import type { FinanceData } from './DocList';
@@ -257,12 +257,17 @@ function ChartOfAccounts({ data, accounts, entries, reload }: { data: FinanceDat
   const [showArchived, setShowArchived] = useState(false);
   const bal = useMemo(() => new Map(balances(accounts, entries, undefined, today()).map(b => [b.account.id, b.balance])), [accounts, entries]);
   const rows = accounts.filter(a => showArchived || !a.archived);
+  const [switching, setSwitching] = useState(false);
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
         <Space><Segmented value={showArchived ? 'all' : 'active'} onChange={v => setShowArchived(v === 'all')} options={[{ value: 'active', label: 'In use' }, { value: 'all', label: 'Include archived' }]} /></Space>
-        {canWrite && <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ type: 'expense' })}>Add account</Button>}
+        <Space>
+          {canWrite && chartStyleOf(accounts) === 'legacy' && <Button onClick={() => setSwitching(true)}>Use the recommended chart</Button>}
+          {canWrite && <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ type: 'expense' })}>Add account</Button>}
+        </Space>
       </div>
+      {switching && <RecommendedChartModal companyId={data.companyId} onClose={() => setSwitching(false)} onDone={() => { setSwitching(false); reload(); data.reload(); }} />}
       <Table rowKey="id" size="small" dataSource={rows} pagination={false}
         columns={[
           { title: 'Code', dataIndex: 'code', width: 80 },
@@ -287,6 +292,40 @@ function ChartOfAccounts({ data, accounts, entries, reload }: { data: FinanceDat
       {editing && <AccountModal data={data} account={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); data.reload(); }} />}
       {history && <AccountHistory account={history} entries={entries} currency={data.currency} onClose={() => setHistory(null)} />}
     </div>
+  );
+}
+
+/** Shows what moving to the recommended chart of accounts changes, and does it when asked. */
+function RecommendedChartModal({ companyId, onClose, onDone }: { companyId: number; onClose: () => void; onDone: () => void }) {
+  const [plan, setPlan] = useState<Awaited<ReturnType<typeof accountService.recommendedPlan>> | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { accountService.recommendedPlan(companyId).then(setPlan).catch(e => { message.error(e.message); onClose(); }); }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const apply = async () => {
+    if (!plan) return;
+    setBusy(true);
+    try { await accountService.applyRecommendedPlan(companyId, plan); message.success('Chart of accounts updated'); onDone(); }
+    catch (e: any) { message.error(e.message); }
+    setBusy(false);
+  };
+  const changed = plan?.moves.filter(m => m.to !== m.from) || [];
+  return (
+    <Modal open onCancel={onClose} width={720} title="Use the recommended chart of accounts" okText="Update my chart" confirmLoading={busy}
+      okButtonProps={{ disabled: !plan || (!changed.length && !plan.add.length) }} onOk={apply}>
+      {!plan ? <Spin /> : (
+        <div style={{ maxHeight: 460, overflow: 'auto' }}>
+          <p>Accounts get the recommended codes: 1xxx assets, 2xxx liabilities, 3xxx equity, 4xxx revenue, 5xxx cost of sales, 6xxx operating expenses, 7xxx other income and expenses, 8xxx taxation. Your invoices, bills, payments and journals are not touched: they stay linked to the same accounts.</p>
+          <Typography.Title level={5}>Accounts that change code ({changed.length})</Typography.Title>
+          <Table size="small" rowKey="id" pagination={false} dataSource={changed}
+            columns={[{ title: 'Account', key: 'n', render: (_, m) => m.name ? `${m.fromName} → ${m.name}` : m.fromName }, { title: 'Now', dataIndex: 'from', width: 80 }, { title: 'New code', dataIndex: 'to', width: 90 }]} />
+          <Typography.Title level={5} style={{ marginTop: 16 }}>Accounts added ({plan.add.length})</Typography.Title>
+          <div style={{ columns: 2, fontSize: 12 }}>{plan.add.map(a => <div key={a.code}>{a.code} {a.name}</div>)}</div>
+          {plan.skipped.length > 0 && (
+            <Alert style={{ marginTop: 12 }} type="info" showIcon title="Not added, because you already use the code for your own account"
+              description={plan.skipped.map(s => `${s.code} ${s.name}`).join(' · ')} />
+          )}
+        </div>
+      )}
+    </Modal>
   );
 }
 
