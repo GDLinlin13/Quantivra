@@ -96,6 +96,17 @@ export interface LeaveType {
   increment_per_year: number; max_days: number | null;
   /** working_days: skip rest days & holidays; weeks: whole 7-day blocks (entitlement in weeks) */
   count_method: CountMethod; allow_single_days: boolean;
+  /** leave policy (migration 044) */
+  min_notice_days?: number; quota_days?: number | null; quota_period?: 'week' | 'month' | null;
+  /** false for leave that is not being away (work from home) */
+  counts_as_absence?: boolean;
+  /** time off in lieu: HR adds it to an employee's balance when it has been earned */
+  is_toil?: boolean;
+}
+
+export interface LeavePolicy { max_off_per_day: number | null; max_off_scope: 'company' | 'department'; min_at_work_per_department: number | null }
+export interface ToilCredit {
+  id: number; company_id: number; employee_id: number; leave_type_id: number; amount: number; worked_date: string; reason: string | null; created_at: string;
 }
 
 /** One row of the "start new leave year" preview. */
@@ -155,6 +166,34 @@ export const leaveService = {
   async types(companyId: number): Promise<LeaveType[]> {
     const { data } = await supabase.from('leave_types').select('*').eq('company_id', companyId).order('name');
     return data || [];
+  },
+
+  /** Company-wide rules: most people off at once, fewest at work per department (before update 044: none). */
+  async policy(companyId: number): Promise<LeavePolicy> {
+    const r = await supabase.from('leave_policy').select('*').eq('company_id', companyId).maybeSingle();
+    return r.data ? { max_off_per_day: r.data.max_off_per_day, max_off_scope: r.data.max_off_scope, min_at_work_per_department: r.data.min_at_work_per_department }
+      : { max_off_per_day: null, max_off_scope: 'company', min_at_work_per_department: null };
+  },
+  async savePolicy(companyId: number, p: LeavePolicy) {
+    const { error } = await supabase.from('leave_policy').upsert({ company_id: companyId, ...p, updated_at: new Date().toISOString() }, { onConflict: 'company_id' });
+    if (error) throw new Error(/leave_policy/i.test(error.message) && /relation|exist|schema cache/i.test(error.message) ? 'Leave policy needs database update 044 — ask your administrator to run it in Supabase.' : error.message);
+  },
+
+  async toilCredits(companyId: number, employeeId?: number): Promise<ToilCredit[]> {
+    let q = supabase.from('toil_credits').select('*').eq('company_id', companyId);
+    if (employeeId) q = q.eq('employee_id', employeeId);
+    const r = await q.order('created_at', { ascending: false });
+    return r.error ? [] : (r.data || []).map((c: any) => ({ ...c, amount: Number(c.amount) }));
+  },
+  /** HR adds time off in lieu (days or hours, as the leave type counts) to an employee's balance. */
+  async grantToil(employeeId: number, leaveTypeId: number, amount: number, workedDate: string, reason?: string): Promise<number> {
+    const { data, error } = await supabase.rpc('toil_grant', { p_employee_id: employeeId, p_type_id: leaveTypeId, p_amount: amount, p_worked_date: workedDate, p_reason: reason || null });
+    if (error) throw new Error(error.message);
+    return data as number;
+  },
+  async revokeToil(id: number) {
+    const { error } = await supabase.rpc('toil_revoke', { p_id: id });
+    if (error) throw new Error(error.message);
   },
 
   async saveType(t: Partial<LeaveType> & { company_id: number; name: string }) {

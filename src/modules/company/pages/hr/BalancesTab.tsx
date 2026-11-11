@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Tag, Tooltip, message, Modal, InputNumber, Space, Alert, Select, Typography, Drawer } from 'antd';
-import { ReloadOutlined, WarningOutlined, EditOutlined, CalendarOutlined } from '@ant-design/icons';
-import { hrService, leaveService, type Employee, type LeaveType, type LeaveBalance, type LeaveYearRow } from '../../../../services/hr';
+import { Table, Button, Tag, Tooltip, message, Modal, InputNumber, Space, Alert, Select, Typography, Drawer, Form, DatePicker, Input, Popconfirm } from 'antd';
+import { ReloadOutlined, WarningOutlined, EditOutlined, CalendarOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import { hrService, leaveService, type Employee, type LeaveType, type LeaveBalance, type LeaveYearRow, type ToilCredit } from '../../../../services/hr';
+import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { supabase } from '../../../../utils/supabase';
 import { unitLabel } from '../../../../utils/workdays';
 
@@ -23,6 +25,11 @@ export function BalancesTab({ companyId }: { companyId: number }) {
   const [busy, setBusy] = useState(false);
   const [country, setCountry] = useState('SG');
   const [year, setYear] = useState(THIS_YEAR);
+  const access = useCompanyAccess();
+  const canGrant = access.canWrite('leave') || access.canWrite('employees');
+  const [toilOpen, setToilOpen] = useState(false);
+  const [toilList, setToilList] = useState<ToilCredit[]>([]);
+  const [toilForm] = Form.useForm();
   const [edit, setEdit] = useState<Row | null>(null);
   const [editVal, setEditVal] = useState<number>(0);
   const [newYear, setNewYear] = useState<number | null>(null);
@@ -109,6 +116,18 @@ export function BalancesTab({ companyId }: { companyId: number }) {
     g.rows.push(r);
   }
   const selectedGroup = employeeGroups.find(g => g.employee.id === selectedEmployeeId) || null;
+  const toilTypes = selectedGroup ? selectedGroup.rows.map(r => r.leaveType).filter(t => t.is_toil && t.active) : [];
+  const loadToil = useCallback(async () => {
+    setToilList(selectedEmployeeId ? await leaveService.toilCredits(companyId, Number(selectedEmployeeId)) : []);
+  }, [companyId, selectedEmployeeId]);
+  useEffect(() => { loadToil(); }, [loadToil]);
+  const grantToil = async (v: any) => {
+    if (!selectedGroup) return;
+    try {
+      await leaveService.grantToil(Number(selectedGroup.employee.id), v.leave_type_id, Number(v.amount), dayjs(v.worked_date).format('YYYY-MM-DD'), v.reason);
+      message.success('Time off in lieu added'); setToilOpen(false); toilForm.resetFields(); loadToil(); load();
+    } catch (e: any) { message.error(e.message); }
+  };
 
   const noBalancesYet = !loading && rows.length > 0 && rows.every(r => !r.balance);
 
@@ -168,6 +187,10 @@ export function BalancesTab({ companyId }: { companyId: number }) {
 
       <Drawer open={!!selectedGroup} onClose={() => setSelectedEmployeeId(null)} width={Math.min(980, window.innerWidth)}
         title={selectedGroup ? `${selectedGroup.employee.full_name} — ${year} leave` : ''}>
+        {selectedGroup && canGrant && toilTypes.length > 0 && (
+          <Button icon={<PlusOutlined />} style={{ marginBottom: 12 }}
+            onClick={() => { toilForm.resetFields(); toilForm.setFieldsValue({ leave_type_id: toilTypes[0].id, worked_date: dayjs() }); setToilOpen(true); }}>Add time off in lieu</Button>
+        )}
         {selectedGroup && (
           <Table
             dataSource={selectedGroup.rows} rowKey="key" size="small" pagination={false} scroll={{ x: true }}
@@ -216,7 +239,38 @@ export function BalancesTab({ companyId }: { companyId: number }) {
         ]}
           />
         )}
+        {selectedGroup && toilList.length > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <Typography.Title level={5}>Time off in lieu added</Typography.Title>
+            <Table dataSource={toilList} rowKey="id" size="small" pagination={false}
+              columns={[
+                { title: 'Worked on', dataIndex: 'worked_date', width: 120 },
+                { title: 'Leave type', key: 't', render: (_: any, c: ToilCredit) => selectedGroup.rows.find(r => r.leaveType.id === c.leave_type_id)?.leaveType.name || '—' },
+                { title: 'Added', key: 'a', render: (_: any, c: ToilCredit) => { const lt = selectedGroup.rows.find(r => r.leaveType.id === c.leave_type_id)?.leaveType; return `${c.amount} ${unitLabel(lt?.count_method, c.amount)}`; } },
+                { title: 'Reason', dataIndex: 'reason', render: (v: string | null) => v || '—' },
+                { title: '', key: 'x', width: 50, render: (_: any, c: ToilCredit) => canGrant && (
+                  <Popconfirm title="Take this time off in lieu back?" description="Only possible while it hasn't been used."
+                    onConfirm={async () => { try { await leaveService.revokeToil(c.id); loadToil(); load(); } catch (e: any) { message.error(e.message); } }}>
+                    <Button size="small" danger icon={<DeleteOutlined />} />
+                  </Popconfirm>
+                ) },
+              ]} />
+          </div>
+        )}
       </Drawer>
+
+      <Modal open={toilOpen} title={selectedGroup ? `Time off in lieu — ${selectedGroup.employee.full_name}` : ''} okText="Add" onCancel={() => setToilOpen(false)} onOk={() => toilForm.submit()} destroyOnHidden>
+        <Form form={toilForm} layout="vertical" onFinish={grantToil}>
+          <Form.Item name="leave_type_id" label="Leave type" rules={[{ required: true }]}>
+            <Select options={toilTypes.map(t => ({ value: t.id, label: `${t.name} (${unitLabel(t.count_method, 2)})` }))} />
+          </Form.Item>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Form.Item name="amount" label="Amount earned" rules={[{ required: true, message: 'Enter how much' }]}><InputNumber style={{ width: '100%' }} min={0.25} max={365} step={0.25} /></Form.Item>
+            <Form.Item name="worked_date" label="Worked on" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>
+          </div>
+          <Form.Item name="reason" label="Reason"><Input placeholder="e.g. Worked on Saturday" /></Form.Item>
+        </Form>
+      </Modal>
 
       <Modal open={!!edit} onCancel={() => setEdit(null)} footer={null}
         title={edit ? `${edit.employee.full_name} — ${edit.leaveType.name}` : ''}>

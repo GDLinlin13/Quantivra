@@ -5,6 +5,7 @@ import { LeaveTab } from './hr/LeaveTab';
 import { ApprovalsTab } from './hr/ApprovalsTab';
 import { LeaveTypesTab } from './hr/LeaveTypesTab';
 import { BalancesTab } from './hr/BalancesTab';
+import { LeavePolicyTab } from './hr/LeavePolicyTab';
 import { PayrollTab } from './hr/PayrollTab';
 import { MyClaimsTab, ClaimsTab } from './hr/ClaimsTab';
 import { MyAttendanceTab, AttendanceTab } from './hr/AttendanceTab';
@@ -44,6 +45,7 @@ export function CompanyHRPage() {
           ...(canManageLeave ? [
             { key: 'balances', label: 'Leave Balances', children: <BalancesTab companyId={companyId} /> },
             { key: 'types', label: 'Leave Types', children: <LeaveTypesTab companyId={companyId} /> },
+            { key: 'policy', label: 'Leave Policy', children: <LeavePolicyTab companyId={companyId} /> },
           ] : []),
         ]}
       />

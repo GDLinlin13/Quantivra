@@ -12,7 +12,7 @@
 
 export type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 export type WorkPattern = Record<DayKey, number>; // 1 full day, 0.5 half day, 0 rest day
-export type CountMethod = 'working_days' | 'weeks' | 'calendar_days';
+export type CountMethod = 'working_days' | 'weeks' | 'calendar_days' | 'hours';
 
 export const DAY_KEYS: DayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 export const DAY_LABELS: Record<DayKey, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
@@ -53,12 +53,14 @@ function* eachDate(start: string, end: string) {
 export interface LeaveCountInput {
   start: string; end: string; halfDay?: boolean;
   method: CountMethod; allowSingleDays?: boolean;
+  /** time off by the hour: how many hours (within one day) */
+  hours?: number;
   pattern: WorkPattern; holidays: Set<string>;
 }
 
 export interface LeaveCount {
   amount: number;                 // in `unit`
-  unit: 'days' | 'weeks';
+  unit: 'days' | 'weeks' | 'hours';
   error?: string;
   calendarDays: number;
   workingDays: number;
@@ -88,6 +90,15 @@ export function countLeave(i: LeaveCountInput): LeaveCount {
 
   if (calendarDays === 0) return { ...base, amount: 0, unit: i.method === 'weeks' ? 'weeks' : 'days', error: 'The end date is before the start date' };
 
+  // time off by the hour: within one working day
+  if (i.method === 'hours') {
+    if (calendarDays !== 1) return { ...base, amount: 0, unit: 'hours', error: 'Time off by the hour is taken within one day' };
+    if (working <= 0 && !(i.halfDay)) return { ...base, amount: 0, unit: 'hours', error: 'This is not a working day' };
+    const h = Number(i.hours) || 0;
+    if (h <= 0 || h > 24) return { ...base, amount: 0, unit: 'hours', error: 'Enter how many hours' };
+    return { ...base, amount: round2(h), unit: 'hours' };
+  }
+
   if (i.method === 'calendar_days') return { ...base, amount: calendarDays, unit: 'days' };
 
   if (i.method === 'weeks') {
@@ -105,4 +116,4 @@ export function countLeave(i: LeaveCountInput): LeaveCount {
 }
 
 export const unitLabel = (method: CountMethod | undefined | null, n?: number) =>
-  method === 'weeks' ? (n === 1 ? 'week' : 'weeks') : (n === 1 ? 'day' : 'days');
+  method === 'weeks' ? (n === 1 ? 'week' : 'weeks') : method === 'hours' ? (n === 1 ? 'hour' : 'hours') : (n === 1 ? 'day' : 'days');

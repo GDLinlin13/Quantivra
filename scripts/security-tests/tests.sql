@@ -953,6 +953,134 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 ROLLBACK;
+\echo '9q. leave policy: notice, quota, people off, people at work, HR override, time off by the hour, time off in lieu'
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;                      -- Sam Staff is employee A2
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'leave', '*', 'view');
+UPDATE leave_types SET min_notice_days = 3 WHERE id = 1;           -- Annual: 3 working days ahead
+INSERT INTO leave_types (company_id, name, counts_as_absence, quota_days, quota_period) VALUES (1, 'Work from home', false, 2, 'week');
+:as_staff
+DO $$
+DECLARE mon date := date_trunc('week', current_date)::date + 14; wfh bigint;
+BEGIN
+  SELECT id INTO wfh FROM leave_types WHERE name = 'Work from home';
+  -- notice
+  BEGIN PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',2,'leave_type_id',1,'start_date',current_date + 1,'end_date',current_date + 1,'days',1));
+    RAISE EXCEPTION 'FAIL: short notice accepted';
+  EXCEPTION WHEN raise_exception THEN IF SQLERRM NOT LIKE 'POLICY:%' THEN RAISE; END IF; END;
+  PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',2,'leave_type_id',1,'start_date',mon,'end_date',mon,'days',1));
+  -- staff cannot give themselves an override
+  BEGIN PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',2,'leave_type_id',1,'start_date',current_date + 1,'end_date',current_date + 1,'days',1,'override_reason','pls'));
+    RAISE EXCEPTION 'FAIL: staff overrode the rules';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  -- work from home: two days a week
+  PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',2,'leave_type_id',wfh,'start_date',mon + 1,'end_date',mon + 1,'days',1));
+  PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',2,'leave_type_id',wfh,'start_date',mon + 2,'end_date',mon + 2,'days',1));
+  BEGIN PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',2,'leave_type_id',wfh,'start_date',mon + 3,'end_date',mon + 3,'days',1));
+    RAISE EXCEPTION 'FAIL: third work-from-home day in a week accepted';
+  EXCEPTION WHEN raise_exception THEN IF SQLERRM NOT LIKE 'POLICY:%' THEN RAISE; END IF; END;
+  PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',2,'leave_type_id',wfh,'start_date',mon + 7,'end_date',mon + 7,'days',1));
+END $$;
+:as_a
+DO $$
+DECLARE mon date := date_trunc('week', current_date)::date + 14;
+BEGIN
+  -- HR applies for someone around the notice rule, with a reason that is kept
+  PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',1,'leave_type_id',1,'start_date',current_date + 1,'end_date',current_date + 1,'days',1,'override_reason','urgent'));
+  ASSERT (SELECT policy_override FROM leave_requests WHERE employee_id = 1 AND start_date = current_date + 1) = 'urgent', 'FAIL: override reason not kept';
+  -- but not without one
+  BEGIN PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',1,'leave_type_id',1,'start_date',current_date + 1,'end_date',current_date + 1,'days',1));
+    RAISE EXCEPTION 'FAIL: HR skipped a rule without giving a reason';
+  EXCEPTION WHEN raise_exception THEN IF SQLERRM NOT LIKE 'POLICY:%' THEN RAISE; END IF; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'leave', '*', 'view');
+INSERT INTO hr_departments (company_id, name) VALUES (1, 'Ops');
+UPDATE employees SET department_id = (SELECT id FROM hr_departments WHERE name = 'Ops') WHERE company_id = 1;
+INSERT INTO leave_policy (company_id, max_off_per_day, max_off_scope, min_at_work_per_department) VALUES (1, 1, 'company', 1);
+INSERT INTO leave_requests (company_id, employee_id, leave_type_id, start_date, end_date, days)
+  VALUES (1, 1, 1, date_trunc('week', current_date)::date + 21, date_trunc('week', current_date)::date + 21, 1);   -- A1 off on a Monday
+:as_staff
+DO $$
+DECLARE mon date := date_trunc('week', current_date)::date + 21;
+BEGIN
+  BEGIN PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',2,'leave_type_id',1,'start_date',mon,'end_date',mon,'days',1));
+    RAISE EXCEPTION 'FAIL: two people off the same day accepted';
+  EXCEPTION WHEN raise_exception THEN IF SQLERRM NOT LIKE 'POLICY:%' THEN RAISE; END IF; END;
+  -- another day is fine
+  PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',2,'leave_type_id',1,'start_date',mon + 1,'end_date',mon + 1,'days',1));
+END $$;
+:as_a
+DO $$
+DECLARE mon date := date_trunc('week', current_date)::date + 21;
+BEGIN
+  -- Ops would have nobody at work on mon + 1 (A2 is off, A1 would be too)
+  BEGIN PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',1,'leave_type_id',1,'start_date',mon + 1,'end_date',mon + 1,'days',1));
+    RAISE EXCEPTION 'FAIL: department left with nobody at work';
+  EXCEPTION WHEN raise_exception THEN IF SQLERRM NOT LIKE 'POLICY:%' THEN RAISE; END IF; END;
+  PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',1,'leave_type_id',1,'start_date',mon + 1,'end_date',mon + 1,'days',1,'override_reason','cover arranged'));
+END $$;
+ROLLBACK;
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'leave', '*', 'view');
+INSERT INTO leave_types (company_id, name, count_method) VALUES (1, 'Hourly time off', 'hours');
+INSERT INTO leave_types (company_id, name, is_toil) VALUES (1, 'Time off in lieu', true);
+:as_staff
+DO $$
+DECLARE mon date := date_trunc('week', current_date)::date + 28; toil bigint; hourly bigint;
+BEGIN
+  SELECT id INTO toil FROM leave_types WHERE name = 'Time off in lieu';
+  SELECT id INTO hourly FROM leave_types WHERE name = 'Hourly time off';
+  -- time off by the hour: within one day
+  PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',2,'leave_type_id',hourly,'start_date',mon + 1,'end_date',mon + 1,'days',2));
+  BEGIN PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',2,'leave_type_id',hourly,'start_date',mon + 2,'end_date',mon + 3,'days',2));
+    RAISE EXCEPTION 'FAIL: time off by the hour over two days accepted';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+  -- time off in lieu is added by HR, not by the employee
+  BEGIN PERFORM toil_grant(2, toil, 1, current_date, 'worked Saturday');
+    RAISE EXCEPTION 'FAIL: staff added time off in lieu for themselves';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO toil_credits (company_id, employee_id, leave_type_id, amount, worked_date) VALUES (1, 2, toil, 5, current_date);
+    RAISE EXCEPTION 'FAIL: staff wrote a credit directly';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+:as_a
+DO $$
+DECLARE toil bigint; hourly bigint; g bigint;
+BEGIN
+  SELECT id INTO toil FROM leave_types WHERE name = 'Time off in lieu';
+  SELECT id INTO hourly FROM leave_types WHERE name = 'Hourly time off';
+  g := toil_grant(2, toil, 1.5, current_date, 'worked Saturday');
+  ASSERT (SELECT entitled_days FROM leave_balances WHERE employee_id = 2 AND leave_type_id = toil) = 1.5, 'FAIL: time off in lieu not added to the balance';
+  g := toil_grant(2, toil, 1, current_date, 'public holiday');
+  ASSERT (SELECT entitled_days FROM leave_balances WHERE employee_id = 2 AND leave_type_id = toil) = 2.5, 'FAIL: second grant not added';
+  BEGIN PERFORM toil_grant(2, hourly, 1, current_date, NULL);
+    RAISE EXCEPTION 'FAIL: time off in lieu added to a leave type that is not one';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+  -- a grant made by mistake can be taken back while the time is unused
+  PERFORM toil_revoke(g);
+  ASSERT (SELECT entitled_days FROM leave_balances WHERE employee_id = 2 AND leave_type_id = toil) = 1.5, 'FAIL: revoked grant not taken off';
+END $$;
+:as_staff
+DO $$
+DECLARE toil bigint;
+BEGIN
+  SELECT id INTO toil FROM leave_types WHERE name = 'Time off in lieu';
+  ASSERT (SELECT count(*) FROM toil_credits) = 1, 'FAIL: staff cannot see their own time off in lieu';
+  BEGIN PERFORM toil_revoke((SELECT id FROM toil_credits LIMIT 1));
+    RAISE EXCEPTION 'FAIL: staff removed their own time off in lieu';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  -- and they use it like any other leave
+  PERFORM leave_apply(jsonb_build_object('company_id',1,'employee_id',2,'leave_type_id',toil,'start_date',date_trunc('week', current_date)::date + 35,'end_date',date_trunc('week', current_date)::date + 35,'days',1));
+END $$;
+:as_b
+DO $$ BEGIN
+  ASSERT (SELECT count(*) FROM toil_credits) = 0 AND (SELECT count(*) FROM leave_policy) = 0, 'FAIL: B sees A leave policy data';
+END $$;
+ROLLBACK;
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;
