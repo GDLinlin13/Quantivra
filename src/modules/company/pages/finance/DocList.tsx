@@ -149,7 +149,7 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
       {editing && (
         <DocEditor companyId={companyId} docType={editing.type || docType} docId={editing.id} contacts={contacts} people={people} accounts={accounts} employees={data.employees} items={data.items}
           settings={settings} branding={branding} currency={currency}
-          onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />
+          onContactsChanged={reload} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />
       )}
       {viewing && <ViewModal id={viewing} data={data} onClose={() => setViewing(null)} />}
       {paying && <PaymentModal data={data} doc={paying} onClose={() => setPaying(null)} onDone={() => { setPaying(null); reload(); }} />}

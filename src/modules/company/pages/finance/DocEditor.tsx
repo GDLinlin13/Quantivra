@@ -3,7 +3,8 @@ import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Ta
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { docService, paymentService, catalogService, attachmentService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
+import { docService, paymentService, catalogService, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
+import { ContactDrawer } from './ContactsManager';
 import { companyFileService } from '../../../../services/finance';
 import { FileViewer } from '../../../../components/FileViewer';
 import {
@@ -20,13 +21,22 @@ const { Text } = Typography;
 const blankLine = (rate: number): DocLine => ({ description: '', quantity: 1, unit_price: 0, discount_pct: 0, tax_rate: rate });
 
 /** Create or edit a quotation, invoice, credit note, bill or expense. */
-export function DocEditor({ companyId, docType: startType, docId, contacts, people, accounts, settings, branding, currency, employees = [], items = [], onClose, onSaved }: {
+export function DocEditor({ companyId, docType: startType, docId, contacts: contactsIn, people: peopleIn, accounts, settings, branding, currency, employees = [], items = [], onClose, onSaved, onContactsChanged }: {
   companyId: number; docType: DocType; docId?: number | null;
   contacts: Contact[]; people: ContactPerson[]; accounts: Account[]; settings: FinanceSettings; branding: Branding | null; currency: string;
   employees?: { id: number; full_name: string }[];
   items?: CatalogItem[];
   onClose: () => void; onSaved: (id: number) => void;
+  /** called after a customer / supplier was added from here, so the lists behind this screen refresh */
+  onContactsChanged?: () => void;
 }) {
+  // customers / suppliers can be added from the dropdown, so this keeps its own copy
+  const [contacts, setContacts] = useState(contactsIn);
+  const [people, setPeople] = useState(peopleIn);
+  useEffect(() => setContacts(contactsIn), [contactsIn]);
+  useEffect(() => setPeople(peopleIn), [peopleIn]);
+  const [newContact, setNewContact] = useState<Partial<Contact> | null>(null);
+  const [contactSearch, setContactSearch] = useState('');
   const access = useCompanyAccess();
   // a purchase can switch between a bill (pay later) and an expense (already paid / staff claim) until it's saved
   const [docType, setDocType] = useState<DocType>(startType);
@@ -233,7 +243,21 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
           <Form.Item label={sales ? 'Customer' : 'Supplier'} required={docType !== 'expense'}>
             <Select showSearch optionFilterProp="label" value={doc.contact_id ?? undefined} onChange={pickContact} allowClear={docType === 'expense'}
               options={contactList.map(c => ({ value: c.id, label: c.name }))} placeholder={sales ? 'Choose a customer' : 'Choose a supplier'}
-              notFoundContent={`No ${sales ? 'customers' : 'suppliers'} yet — add them in CRM → Customers & Suppliers`} />
+              onSearch={setContactSearch} onOpenChange={o => { if (!o) setContactSearch(''); }}
+              notFoundContent={`No ${sales ? 'customers' : 'suppliers'} yet`}
+              popupRender={menu => (
+                <>
+                  {menu}
+                  {access.canWrite('crm') && (
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', padding: 4 }}>
+                      <Button type="link" icon={<PlusOutlined />} style={{ width: '100%', textAlign: 'left' }}
+                        onClick={() => setNewContact({ name: contactSearch.trim(), is_customer: sales, is_supplier: !sales })}>
+                        {contactSearch.trim() ? `Add “${contactSearch.trim()}” as a new ${sales ? 'customer' : 'supplier'}` : `Add a new ${sales ? 'customer' : 'supplier'}`}
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )} />
           </Form.Item>
           <Form.Item label="Person in charge">
             <Select allowClear value={doc.contact_person_id ?? undefined} onChange={v => set({ contact_person_id: v ?? null })}
@@ -397,6 +421,21 @@ export function DocEditor({ companyId, docType: startType, docId, contacts, peop
         </div>
       )}
       </ConfigProvider>
+      {newContact && (
+        <ContactDrawer companyId={companyId} contact={newContact} word={sales ? 'customer' : 'supplier'} currency={currency} docs={[]}
+          onClose={() => setNewContact(null)}
+          onSaved={async id => {
+            setNewContact(null); setContactSearch('');
+            try {
+              const [list, ppl] = await Promise.all([contactService.list(companyId), contactService.peopleOf(companyId)]);
+              setContacts(list); setPeople(ppl);
+              const c = list.find(x => x.id === id);
+              const main = ppl.filter(p => p.contact_id === id).sort((a, b) => Number(!!b.is_primary) - Number(!!a.is_primary))[0];
+              set({ contact_id: id, contact_person_id: main?.id ?? null, ...(c?.payment_terms_days != null && docType !== 'quote' && doc.issue_date ? { due_date: addDays(doc.issue_date, c.payment_terms_days) } : {}) });
+            } catch (e: any) { message.error(e.message); }
+            onContactsChanged?.();
+          }} />
+      )}
       {viewFile && <FileViewer name={viewFile.file_name} load={() => companyFileService.blob(viewFile.path)} onClose={() => setViewFile(null)} />}
     </Drawer>
   );
