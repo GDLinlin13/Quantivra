@@ -7,6 +7,7 @@ import { LeaveTypesTab } from './hr/LeaveTypesTab';
 import { BalancesTab } from './hr/BalancesTab';
 import { PayrollTab } from './hr/PayrollTab';
 import { MyClaimsTab, ClaimsTab } from './hr/ClaimsTab';
+import { MyAttendanceTab, AttendanceTab } from './hr/AttendanceTab';
 import { useCompanyAccess } from '../../../contexts/CompanyAccess';
 
 const { Title } = Typography;
@@ -20,6 +21,8 @@ export function CompanyHRPage() {
   const canPayroll = canViewPay && access.isOn('payroll');
   const canApprove = access.can('leave', 'approve');
   const canSeeStaff = canManageStaff || access.can('employees');
+  const canClock = access.can('attendance');
+  const canSeeAttendance = ['create', 'edit', 'delete'].some(a => access.can('attendance', a));
   const canClaim = ['view', 'create', 'edit'].some(a => access.can('claims', a));
   const canSeeClaims = ['approve', 'create', 'edit', 'delete'].some(a => access.can('claims', a));
   if (!companyId) return <Alert type="error" message="No company context" />;
@@ -30,6 +33,8 @@ export function CompanyHRPage() {
       <Tabs
         items={[
           ...(access.can('leave') ? [{ key: 'leave', label: 'My Leave', children: <LeaveTab companyId={companyId} /> }] : []),
+          ...(canClock ? [{ key: 'myattendance', label: 'My Attendance', children: <MyAttendanceTab companyId={companyId} /> }] : []),
+          ...(canSeeAttendance ? [{ key: 'attendance', label: 'Attendance', children: <AttendanceTab companyId={companyId} /> }] : []),
           ...(canClaim ? [{ key: 'myclaims', label: 'My Claims', children: <MyClaimsTab companyId={companyId} /> }] : []),
           ...(canSeeClaims ? [{ key: 'claims', label: 'Claims', children: <ClaimsTab companyId={companyId} /> }] : []),
           ...(canApprove ? [{ key: 'approvals', label: 'Approvals', children: <ApprovalsTab companyId={companyId} /> }] : []),

@@ -536,6 +536,7 @@ COMMIT;
 
 \echo '9k. every section follows role permissions: view only reads, create / edit writes, approve decides leave'
 BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;
 INSERT INTO company_permissions (role_id, module, feature, action) VALUES
   (3, 'finance', '*', 'view'), (3, 'crm', '*', 'view'), (3, 'inventory', '*', 'view'), (3, 'employees', '*', 'view');
 :as_staff
@@ -565,7 +566,7 @@ BEGIN
     IF FOUND THEN RAISE EXCEPTION 'FAIL: staff changed company details'; END IF;
   END;
   -- without a Leave tick they cannot apply
-  BEGIN PERFORM leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-02-02","end_date":"2026-02-02","days":1}');
+  BEGIN PERFORM leave_apply('{"company_id":1,"employee_id":2,"leave_type_id":1,"start_date":"2026-02-02","end_date":"2026-02-02","days":1}');
     RAISE EXCEPTION 'FAIL: staff without a Leave tick applied for leave';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
@@ -576,7 +577,7 @@ DO $$
 DECLARE v bigint;
 BEGIN
   -- with Leave view, staff apply for leave themselves, but cannot approve it
-  v := leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-02-02","end_date":"2026-02-02","days":1}');
+  v := leave_apply('{"company_id":1,"employee_id":2,"leave_type_id":1,"start_date":"2026-02-02","end_date":"2026-02-02","days":1}');
   BEGIN PERFORM leave_decide(v, 'approved', 'ok', 5);
     RAISE EXCEPTION 'FAIL: staff without Leave approve approved leave';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
@@ -586,6 +587,7 @@ BEGIN
 END $$;
 ROLLBACK;
 BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;
 INSERT INTO company_permissions (role_id, module, feature, action) VALUES
   (3, 'finance', '*', 'create'), (3, 'crm', '*', 'edit'), (3, 'leave', '*', 'approve');
 :as_staff
@@ -602,7 +604,7 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   DELETE FROM fin_accounts WHERE code = '9991';
   ASSERT FOUND = false, 'FAIL: create-only staff deleted a Finance account';
-  v := leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-02-03","end_date":"2026-02-03","days":1}');
+  v := leave_apply('{"company_id":1,"employee_id":2,"leave_type_id":1,"start_date":"2026-02-03","end_date":"2026-02-03","days":1}');
   PERFORM leave_decide(v, 'approved', 'ok', 5);
   ASSERT (SELECT status FROM leave_requests WHERE id = v) = 'approved', 'FAIL: staff with Leave approve cannot approve';
 END $$;
@@ -677,6 +679,100 @@ DO $$
 BEGIN
   UPDATE claims SET status = 'rejected', decision_note = 'no receipt';
   ASSERT (SELECT status FROM claims) = 'rejected', 'FAIL: approver cannot reject';
+END $$;
+ROLLBACK;
+\echo '9m. attendance: staff clock themselves with the database time, managers see and fix everyone'
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;            -- Sam Staff is employee A2
+:as_staff
+DO $$
+BEGIN
+  BEGIN INSERT INTO attendance_logs (company_id, employee_id, work_date, clock_in) VALUES (1, 2, '2026-03-01', now());
+    RAISE EXCEPTION 'FAIL: staff without an Attendance tick clocked in';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'attendance', '*', 'view');
+INSERT INTO attendance_logs (company_id, employee_id, work_date, clock_in, clock_out) VALUES (1, 1, '2026-03-02', '2026-03-02 01:00+00', '2026-03-02 09:00+00');
+:as_staff
+DO $$
+DECLARE v bigint; n int;
+BEGIN
+  -- clocks in: a made-up time is replaced by now
+  INSERT INTO attendance_logs (company_id, employee_id, work_date, clock_in) VALUES (1, 2, '2020-01-01', '2020-01-01 01:00+00') RETURNING id INTO v;
+  ASSERT (SELECT clock_in FROM attendance_logs WHERE id = v) > now() - interval '1 minute', 'FAIL: staff chose their own clock-in time';
+  ASSERT (SELECT work_date FROM attendance_logs WHERE id = v) > '2025-01-01', 'FAIL: staff chose their own work date';
+  ASSERT (SELECT count(*) FROM attendance_logs) = 1, 'FAIL: staff see colleagues'' hours';
+  BEGIN INSERT INTO attendance_logs (company_id, employee_id, work_date, clock_in) VALUES (1, 1, '2026-03-01', now());
+    RAISE EXCEPTION 'FAIL: staff clocked a colleague in';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO attendance_logs (company_id, employee_id, work_date, clock_in) VALUES (2, 3, '2026-03-01', now());
+    RAISE EXCEPTION 'FAIL: staff clocked in at another company';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  -- clocks out: the time is now; nothing else changes
+  UPDATE attendance_logs SET clock_out = '2020-01-01 09:00+00', clock_in = '2020-01-01 01:00+00', note = 'x' WHERE id = v;
+  ASSERT (SELECT clock_out FROM attendance_logs WHERE id = v) > now() - interval '1 minute', 'FAIL: staff chose their own clock-out time';
+  ASSERT (SELECT clock_in FROM attendance_logs WHERE id = v) > now() - interval '1 minute', 'FAIL: staff changed their clock-in';
+  -- a closed shift can't be edited or removed
+  UPDATE attendance_logs SET clock_out = now() + interval '1 hour' WHERE id = v;
+  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: staff changed a closed shift';
+  DELETE FROM attendance_logs WHERE id = v;
+  GET DIAGNOSTICS n = ROW_COUNT; ASSERT n = 0, 'FAIL: staff deleted a shift';
+END $$;
+:as_b
+DO $$ BEGIN ASSERT (SELECT count(*) FROM attendance_logs) = 0, 'FAIL: B sees A attendance'; END $$;
+ROLLBACK;
+BEGIN; :as_service
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'attendance', '*', 'edit');
+INSERT INTO attendance_logs (company_id, employee_id, work_date, clock_in, clock_out) VALUES (1, 1, '2026-03-02', '2026-03-02 01:00+00', '2026-03-02 09:00+00');
+:as_staff
+DO $$
+BEGIN
+  ASSERT (SELECT count(*) FROM attendance_logs) = 1, 'FAIL: Attendance edit does not show everyone''s hours';
+  UPDATE attendance_logs SET clock_out = '2026-03-02 10:00+00';
+  ASSERT (SELECT clock_out FROM attendance_logs) = '2026-03-02 10:00+00', 'FAIL: Attendance edit cannot correct a shift';
+  INSERT INTO attendance_logs (company_id, employee_id, work_date, clock_in, clock_out, source) VALUES (1, 1, '2026-03-03', '2026-03-03 01:00+00', '2026-03-03 09:00+00', 'manual');
+  BEGIN INSERT INTO attendance_logs (company_id, employee_id, work_date, clock_in) VALUES (2, 3, '2026-03-03', now());
+    RAISE EXCEPTION 'FAIL: manager added hours in another company';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+\echo '9n. applying leave on behalf: yourself, people you manage, or anyone for HR'
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;            -- Sam Staff is employee A2
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'leave', '*', 'view');
+:as_staff
+DO $$
+BEGIN
+  PERFORM leave_apply('{"company_id":1,"employee_id":2,"leave_type_id":1,"start_date":"2026-04-01","end_date":"2026-04-01","days":1}');
+  BEGIN PERFORM leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-04-02","end_date":"2026-04-02","days":1}');
+    RAISE EXCEPTION 'FAIL: staff applied leave for a colleague who is not their report';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_service
+UPDATE employees SET user_id = 5 WHERE id = 2;
+UPDATE employees SET manager_id = 2 WHERE id = 1;          -- A1 now reports to Sam
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'leave', '*', 'view');
+:as_staff
+DO $$
+BEGIN
+  PERFORM leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-04-02","end_date":"2026-04-02","days":1}');
+  ASSERT (SELECT count(*) FROM leave_requests WHERE employee_id = 1 AND start_date = '2026-04-02') = 1, 'FAIL: manager cannot apply for their report';
+  BEGIN PERFORM leave_apply('{"company_id":2,"employee_id":3,"leave_type_id":2,"start_date":"2026-04-02","end_date":"2026-04-02","days":1}');
+    RAISE EXCEPTION 'FAIL: manager applied for another company';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_service
+INSERT INTO company_permissions (role_id, module, feature, action) VALUES (3, 'employees', '*', 'edit');
+:as_staff
+DO $$
+BEGIN
+  PERFORM leave_apply('{"company_id":1,"employee_id":1,"leave_type_id":1,"start_date":"2026-04-03","end_date":"2026-04-03","days":1}');
+  ASSERT (SELECT count(*) FROM leave_requests WHERE employee_id = 1 AND start_date = '2026-04-03') = 1, 'FAIL: HR (Employees edit) cannot apply for anyone';
 END $$;
 ROLLBACK;
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
