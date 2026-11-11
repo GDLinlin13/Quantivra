@@ -131,9 +131,9 @@ function ItemsTab({ companyId, items, stock, accounts, settings, currency, reloa
   );
 }
 
-function ItemDrawer({ companyId, item, accounts, settings, currency, categories, onClose, onSaved }: {
+export function ItemDrawer({ companyId, item, accounts, settings, currency, categories, onClose, onSaved }: {
   companyId: number; item: Partial<CatalogItem>; accounts: Account[]; settings: FinanceSettings; currency: string; categories: string[];
-  onClose: () => void; onSaved: () => void;
+  onClose: () => void; onSaved: (id: number) => void;
 }) {
   const canWrite = useCompanyAccess().canWrite('inventory');
   const [form] = Form.useForm();
@@ -162,7 +162,7 @@ function ItemDrawer({ companyId, item, accounts, settings, currency, categories,
       const id = await catalogService.save(companyId, { ...item, ...v, tax_rate: v.tax_rate === 'default' ? null : v.tax_rate,
         ...(currencies.length > 1 ? { currency: v.currency && v.currency !== currency ? v.currency : null } : {}) });
       await catalogService.setPrices(companyId, id, custPrices.filter(p => p.contact_id).map(p => ({ contact_id: p.contact_id!, price: Number(p.price) || 0 })));
-      message.success('Saved'); onSaved();
+      message.success('Saved'); onSaved(id);
     } catch (e: any) { message.error(e.message); }
     setSaving(false);
   };
