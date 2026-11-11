@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Table, Button, Space, Input, Select, Drawer, Modal, Popconfirm, Tag, Typography, Empty, Segmented, message } from 'antd';
+import { Table, Button, Space, Input, Select, Drawer, Modal, Popconfirm, Tag, Typography, Empty, message } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, PrinterOutlined, DownloadOutlined } from '@ant-design/icons';
 import { priceListService, contactService } from '../../../services/finance';
 import { classLabel, type CatalogItem, type PriceList, type PriceListRow, type WeightClass } from '../../../data/catalog';
@@ -45,7 +45,7 @@ export function PriceListsTab({ companyId, items, classes, currency, company, br
   const [lists, setLists] = useState<PriceList[]>([]);
   const [rows, setRows] = useState<PriceListRow[]>([]);
   const [customers, setCustomers] = useState<Contact[]>([]);
-  const [kind, setKind] = useState<Kind>('sales');
+  const kind: Kind = 'sales';
   const [editing, setEditing] = useState<Partial<PriceList> | null>(null);
   const [printing, setPrinting] = useState<PriceList | null>(null);
   const [needs, setNeeds] = useState(false);
@@ -64,12 +64,8 @@ export function PriceListsTab({ companyId, items, classes, currency, company, br
   const usedBy = (id: number, k: Kind = kind) => customers.filter(c => (k === 'purchase' ? c.purchase_price_list_id : c.price_list_id) === id);
   return (
     <div>
-      <Segmented value={kind} onChange={v => setKind(v as Kind)} style={{ marginBottom: 12 }}
-        options={[{ value: 'sales', label: 'Customers (selling prices)' }, { value: 'purchase', label: 'Suppliers (buying prices)' }]} />
       <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-        {kind === 'sales'
-          ? 'A price list gives items their own selling prices. Assign a list to customers and their invoices pick those prices automatically; items not on the list keep the normal selling price.'
-          : 'Different suppliers charge different prices. Assign a list to a supplier and their bills pick those prices automatically; items not on the list keep the catalog cost. When a bill comes in at a new price, you are asked whether to update the supplier’s list.'}
+        A price list gives items their own selling prices. Assign a list to customers and their invoices pick those prices automatically; items not on the list keep the normal selling price.
       </Text>
       {needs && <Text type="warning" style={{ display: 'block', marginBottom: 12 }}>Price lists need database update 048 — ask your administrator to run it in Supabase.</Text>}
       {canWrite && <Button type="primary" icon={<PlusOutlined />} style={{ marginBottom: 12 }} onClick={() => setEditing({ name: '', kind })}>New price list</Button>}

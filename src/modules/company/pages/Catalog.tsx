@@ -16,6 +16,7 @@ import { money } from '../../../data/documentLayouts';
 import { AmountInput } from '../../../components/AmountInput';
 import { useCompanyAccess } from '../../../contexts/CompanyAccess';
 import { PriceListsTab } from './PriceLists';
+import { SupplierPricesTab } from './SupplierPrices';
 import { brandingService, type Branding } from '../../../services/branding';
 import { fmtDate } from '../../../utils/dateFormat';
 
@@ -70,7 +71,8 @@ export function CompanyCatalogPage() {
       <Title level={4} style={{ color: '#f0ede6' }}>Catalog</Title>
       <Tabs items={[
         { key: 'items', label: 'Products & services', children: <ItemsTab companyId={companyId} items={items} stock={stock} accounts={accounts} settings={settings} currency={currency} reload={load} /> },
-        { key: 'prices', label: 'Price lists', children: <PriceListsTab companyId={companyId} items={items} classes={classes} currency={currency} company={company} branding={branding} /> },
+        { key: 'prices', label: 'Customer price lists', children: <PriceListsTab companyId={companyId} items={items} classes={classes} currency={currency} company={company} branding={branding} /> },
+        { key: 'supplierPrices', label: 'Supplier prices', children: <SupplierPricesTab companyId={companyId} docs={docs as any[]} items={items} classes={classes} pieces={pieces} currency={currency} /> },
         { key: 'stock', label: 'Stock', children: <StockTab companyId={companyId} items={items} stock={stock} docs={docs} adjustments={adjustments} pieces={pieces} classes={classes} currency={currency} reload={load} /> },
       ]} />
     </div>

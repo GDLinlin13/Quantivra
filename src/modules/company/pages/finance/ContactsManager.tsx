@@ -118,7 +118,6 @@ export function ContactDrawer({ companyId, contact, word, currency, docs, onClos
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   useEffect(() => { priceListService.lists(companyId).then(l => setPriceLists(l.filter(x => !x.archived || x.id === contact.price_list_id || x.id === contact.purchase_price_list_id))).catch(() => setPriceLists([])); }, [companyId, contact.price_list_id, contact.purchase_price_list_id]);
   const isCustomer = Form.useWatch('is_customer', form);
-  const isSupplier = Form.useWatch('is_supplier', form);
 
   useEffect(() => {
     form.setFieldsValue({ is_customer: true, ...contact, currency: contactCurrencies(contact) });
@@ -159,11 +158,6 @@ export function ContactDrawer({ companyId, contact, word, currency, docs, onClos
           {isCustomer !== false && priceLists.some(l => (l.kind || 'sales') === 'sales') && (
             <Form.Item name="price_list_id" label="Price list (selling prices)" style={{ gridColumn: '1 / -1' }}>
               <Select allowClear placeholder="Normal selling prices" options={priceLists.filter(l => (l.kind || 'sales') === 'sales').map(l => ({ value: l.id, label: l.name }))} />
-            </Form.Item>
-          )}
-          {isSupplier && priceLists.some(l => l.kind === 'purchase') && (
-            <Form.Item name="purchase_price_list_id" label="Price list (what they charge us)" style={{ gridColumn: '1 / -1' }}>
-              <Select allowClear placeholder="Catalog costs" options={priceLists.filter(l => l.kind === 'purchase').map(l => ({ value: l.id, label: l.name }))} />
             </Form.Item>
           )}
           <Form.Item name="address" label="Address" style={{ gridColumn: '1 / -1' }}><Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>

@@ -108,7 +108,7 @@ describe('stock by weight', () => {
   });
 });
 
-import { costChanges } from '../catalog';
+import { costChanges, supplierPrices } from '../catalog';
 describe('new buying prices on a bill', () => {
   const items = [
     { id: 1, name: 'Delivery', purchase_price: 200, currency: 'MYR' },
@@ -146,12 +146,37 @@ describe('price lists', () => {
   });
 });
 
-describe('supplier prices on a bill', () => {
-  const items = [{ id: 1, name: 'Delivery', purchase_price: 200, currency: 'MYR' }] as any[];
-  it("compares with the supplier's own price when they have a list", () => {
-    const list = (i: number) => (i === 1 ? 230 : undefined);
-    expect(costChanges([{ item_id: 1, unit_price: 230 }], items, [], 'MYR', 'SGD', list)).toEqual([]);     // as their list says
-    expect(costChanges([{ item_id: 1, unit_price: 250 }], items, [], 'MYR', 'SGD', list).map(c => [c.old, c.price])).toEqual([[230, 250]]);
-    expect(costChanges([{ item_id: 1, unit_price: 230 }], items, [], 'MYR', 'SGD').map(c => [c.old, c.price])).toEqual([[200, 230]]);
+describe('supplier prices from their bills', () => {
+  const items = [{ id: 1, name: 'Delivery', purchase_price: 200, currency: 'MYR', stock_mode: 'normal' }, { id: 2, name: 'Patin', stock_mode: 'pieces', price_basis: 'per_kg', purchase_price: 0, currency: 'MYR' }] as any[];
+  const classes = [{ id: 9, item_id: 2, min_kg: 2, max_kg: 2.99, sale_price: 460, purchase_price: 380 }] as any[];
+  const pieces = [{ id: 31, item_id: 2, weight: 2.6, class_id: 9, document_id: 12, received_date: '2026-02-01', note: null }] as any[];
+  const bill = (id: number, date: string, contact: number, lines: any[], status = 'approved') => ({ id, doc_type: 'bill', status, number: `B-${id}`, issue_date: date, contact_id: contact, currency: 'MYR', lines });
+  const docs = [
+    bill(10, '2026-01-05', 7, [{ item_id: 1, unit_price: 200 }]),
+    bill(11, '2026-01-20', 7, [{ item_id: 1, unit_price: 230 }]),
+    bill(12, '2026-02-01', 7, [{ item_id: 2, unit_price: 390, piece_id: 31 }]),
+    bill(13, '2026-02-10', 8, [{ item_id: 1, unit_price: 180 }]),
+    bill(14, '2026-03-01', 7, [{ item_id: 1, unit_price: 999 }], 'draft'),
+  ];
+  const all = supplierPrices(docs as any, items, classes, pieces, 'MYR');
+  it('keeps the latest price per supplier and item, and the price before it', () => {
+    const a = all.find(x => x.contact_id === 7 && x.item_id === 1)!;
+    expect([a.price, a.number, a.prev?.price, a.bills]).toEqual([230, 'B-11', 200, 2]);        // the draft bill does not count
+    expect(all.find(x => x.contact_id === 8 && x.item_id === 1)!.price).toBe(180);               // another supplier, another price
+    expect(all.find(x => x.contact_id === 8 && x.item_id === 1)!.prev).toBeNull();
+  });
+  it('keeps a price per weight class for items stocked by weight', () => {
+    const p = all.find(x => x.item_id === 2)!;
+    expect([p.contact_id, p.class_id, p.price]).toEqual([7, 9, 390]);
+  });
+  it('asks about a price that changed since the last time, or differs from the catalog the first time', () => {
+    const prior = (i: number, c: number | null) => { const h = all.find(x => x.contact_id === 7 && x.item_id === i && (x.class_id ?? null) === c); return h ? { price: h.price, date: h.date, number: h.number } : undefined; };
+    expect(costChanges([{ item_id: 1, unit_price: 230 }], items, classes, 'MYR', 'SGD', prior)).toEqual([]);                    // same as last time
+    const c = costChanges([{ item_id: 1, unit_price: 250 }], items, classes, 'MYR', 'SGD', prior);
+    expect([c[0].old, c[0].price, c[0].since]).toEqual([230, 250, 'B-11, 2026-01-20']);
+    // never bought from this supplier: compared with the catalog cost
+    expect(costChanges([{ item_id: 1, unit_price: 230 }], items, classes, 'MYR', 'SGD').map(x => [x.old, x.price])).toEqual([[200, 230]]);
+    expect(costChanges([{ item_id: 2, unit_price: 400, weight: 2.6 }], items, classes, 'MYR', 'SGD', prior).map(x => [x.class_id, x.old, x.price])).toEqual([[9, 390, 400]]);
+    expect(costChanges([{ item_id: 1, unit_price: 230 }], items, classes, 'USD', 'SGD')).toEqual([]);                           // another currency: no catalog comparison
   });
 });

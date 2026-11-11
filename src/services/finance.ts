@@ -992,6 +992,15 @@ export const catalogService = {
   },
 };
 
+/** The bills and expenses of one supplier with their lines (what they charged before). */
+export async function supplierBills(companyId: number, contactId: number, exceptDocId?: number | null) {
+  const docs: any[] = must(await supabase.from('fin_documents').select('id, doc_type, status, number, issue_date, contact_id, currency')
+    .eq('company_id', companyId).eq('contact_id', contactId).in('doc_type', ['bill', 'expense'])) || [];
+  const ids = docs.map(d => d.id).filter(id => id !== exceptDocId);
+  const lines: any[] = ids.length ? (must(await supabase.from('fin_document_lines').select('document_id, item_id, unit_price, piece_id').in('document_id', ids).not('item_id', 'is', null)) || []) : [];
+  return docs.filter(d => d.id !== exceptDocId).map(d => ({ ...d, lines: lines.filter(l => l.document_id === d.id).map(l => ({ ...l, unit_price: Number(l.unit_price) })) }));
+}
+
 // ---- price lists (migration 048) -------------------------------------------------------------
 
 const PL_NEEDS = 'Price lists need database update 048 — ask your administrator to run it in Supabase.';
