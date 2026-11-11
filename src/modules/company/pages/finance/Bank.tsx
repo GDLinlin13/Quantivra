@@ -10,7 +10,7 @@ import { statementPeriod, statementMonthFromText } from '../../../../data/docume
 import { rowsForCurrency, statementCurrencies, rateFromText } from '../../../../data/bankCurrency';
 import { planImport, nothingNew } from '../../../../data/bankImport';
 import { buildLedger, balances, payrollDue, systemAccount, type PayrollDue } from '../../../../data/ledger';
-import { balanceDue, inBase, docRate, isForeignDoc, schemeLabel, nextBankCode, type Account, type FinDocument } from '../../../../data/finance';
+import { allocatePayment, balanceDue, inBase, docRate, isForeignDoc, schemeLabel, nextBankCode, type Account, type FinDocument } from '../../../../data/finance';
 import { parseBankCsv, type BankLine } from '../../../../data/bankCsv';
 import { parseStatementText, pdfToRows, rowsToLines, parseWithLayout, type PdfRow, type PdfLayout } from '../../../../data/bankPdf';
 import { TeachPdf } from './TeachPdf';
@@ -590,7 +590,9 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   const signedBase = foreign ? Math.sign(Number(txn.amount)) * amt : undefined;
   const fx = (n: number) => Math.round(n * 1e6) / 1e6;
   const [busy, setBusy] = useState(false);
-  const [docId, setDocId] = useState<number | null>(null);
+  // one or several bills / invoices of the same contact can be cleared by this one line
+  const [docIds, setDocIds] = useState<number[]>([]);
+  const docId = docIds.length === 1 ? docIds[0] : null;
   const [accountId, setAccountId] = useState<number | null>(null);
   const [memo, setMemo] = useState(txn.description || '');
   // booking to another of our banks in a different currency (e.g. HKD → CCB USD): the amount it arrives as
@@ -672,6 +674,23 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
     const worth = inBankCur(d) ? lineAmt : isForeignDoc(d, data.currency) ? amt / docRate(d) : amt;
     return isForeignDoc(d, data.currency) && !inBankCur(d) && worth >= due * 0.95 ? due : Math.min(Math.round(worth * 100) / 100, due);
   };
+  // several documents at once (company currency): paid in date order until the money runs out; money left over is the
+  // difference (bank charges or kept with the contact), as for one document
+  const multi = docIds.length > 1 ? docIds.map(id => data.docs.find(x => x.id === id)).filter(Boolean) as FinDocument[] : [];
+  multi.sort((a, b) => a.issue_date.localeCompare(b.issue_date) || a.id - b.id);
+  const multiDue = r2(multi.reduce((t, d) => t + balanceDue(d), 0));
+  const multiAlloc = (() => { const a = allocatePayment(amt, multi.map(d => balanceDue(d))); return multi.map((d, i) => ({ doc: d, due: a.parts[i].due, part: a.parts[i].part })); })();
+  const multiLeft = r2(amt - multiDue);                                // > 0: more money than bills
+  const multiBooked = !inbound && multiLeft > 0.004 && diffAccount !== 'keep';
+  const payMulti = () => run(async () => {
+    const first = multi[0];
+    const pid = await paymentService.record(data.companyId, {
+      direction: inbound ? 'in' : 'out', amount: amt, contact_id: first.contact_id, payment_date: txn.txn_date,
+      method: 'Bank transfer', reference: txn.description || undefined, account_id: txn.account_id,
+      ...(multiBooked ? { charges: multiLeft, charges_account_id: diffAccount as number } : {}),
+    }, multiAlloc.filter(a => a.part > 0.004).map(a => ({ document_id: a.doc.id, amount: multiBooked ? a.due : a.part })));
+    await bankService.matchPayment(txn.id, pid, signedBase);
+  });
   const [payOff, setPayOff] = useState<number | null>(null);
   useEffect(() => { setPayOff(null); }, [docId]);
   const payDoc = () => run(async () => {
@@ -721,13 +740,38 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
             <div>
               {openDocs.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={inbound ? 'No unpaid invoices' : 'No unpaid bills or expenses'} /> : (
                 <Table rowKey="id" size="small" pagination={{ pageSize: 8, hideOnSinglePage: true }} dataSource={openDocs}
-                  rowSelection={{ type: 'radio', selectedRowKeys: docId ? [docId] : [], onChange: k => setDocId(Number(k[0])) }}
+                  rowSelection={{ type: 'checkbox', selectedRowKeys: docIds, onChange: k => setDocIds(k.map(Number)),
+                    // several at once: the same contact, in the company's currency (a foreign one is cleared on its own)
+                    getCheckboxProps: (d: FinDocument) => {
+                      const first = data.docs.find(x => x.id === docIds[0]);
+                      return { disabled: !!first && d.id !== first.id && (isForeignDoc(first, data.currency) || isForeignDoc(d, data.currency) || d.contact_id !== first.contact_id) };
+                    } }}
                   columns={[
                     { title: inbound ? 'Number' : 'Invoice no.', key: 'no', render: (_, d) => <span style={{ fontWeight: named(d) ? 700 : 400 }}>{docNo(d)}</span> },
                     { title: 'Date', dataIndex: 'issue_date', render: (v: string) => fmtDate(v) },
                     { title: inbound ? 'Customer' : 'Supplier', key: 'c', render: (_, d) => contact(d.contact_id) },
                     { title: 'Still owed', key: 'b', align: 'right' as const, render: (_, d) => <span style={{ fontWeight: sameAmount(d) ? 700 : 400 }}>{money(balanceDue(d), d.currency || data.currency)}{isForeignDoc(d, data.currency) && !inBankCur(d) && <Text type="secondary"> ≈ {money(inBase(d, balanceDue(d)), data.currency)}</Text>}</span> },
                   ]} />
+              )}
+              {multi.length > 1 && (
+                <div style={{ marginTop: 8 }}>
+                  <Table rowKey={(r: any) => r.doc.id} size="small" pagination={false} dataSource={multiAlloc}
+                    columns={[
+                      { title: 'Cleared', key: 'n', render: (_: any, r: any) => docNo(r.doc) },
+                      { title: 'Still owed', key: 'd', align: 'right' as const, render: (_: any, r: any) => money(r.due, r.doc.currency || data.currency) },
+                      { title: 'This payment pays', key: 'p', align: 'right' as const, render: (_: any, r: any) => <b>{money(multiBooked ? r.due : r.part, r.doc.currency || data.currency)}</b> },
+                    ]} />
+                  <div style={{ marginTop: 6 }}>
+                    <Text type="secondary">{multi.length} documents, {money(multiDue, data.currency)} owed · this payment {money(amt, data.currency)}</Text>
+                    {multiLeft < -0.004 && <Text type="warning"> · {money(-multiLeft, data.currency)} stays owed on the last one(s)</Text>}
+                  </div>
+                  {!inbound && multiLeft > 0.004 && (
+                    <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <Text>Difference <b>{money(multiLeft, data.currency)}</b>:</Text>
+                      <Select style={{ minWidth: 340 }} showSearch optionFilterProp="label" value={diffAccount} onChange={v => setDiffTo(v)} options={diffOptions} />
+                    </div>
+                  )}
+                </div>
               )}
               {chosen && (
                 <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -743,7 +787,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                   <Select style={{ minWidth: 340 }} showSearch optionFilterProp="label" value={diffAccount} onChange={v => setDiffTo(v)} options={diffOptions} />
                 </div>
               )}
-              <Button type="primary" disabled={!docId || !ready} loading={busy} onClick={payDoc} style={{ marginTop: 8 }}>Record payment and match</Button>
+              <Button type="primary" disabled={!docIds.length || !ready} loading={busy} onClick={multi.length > 1 ? payMulti : payDoc} style={{ marginTop: 8 }}>Record payment and match</Button>
             </div>
           ),
         },

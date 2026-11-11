@@ -202,3 +202,19 @@ describe('the recommended chart of accounts', () => {
     expect(plan.add.some(a => a.code === '6110')).toBe(true);
   });
 });
+
+import { allocatePayment } from '../finance';
+describe('one payment clearing several bills', () => {
+  it('pays them in order, each in full, and reports money left over', () => {
+    const a = allocatePayment(357.0, [189.4, 92, 75.6]);
+    expect(a.parts.map(p => p.part)).toEqual([189.4, 92, 75.6]);
+    expect([a.totalDue, a.left]).toEqual([357, 0]);
+    expect(allocatePayment(400, [189.4, 92, 75.6]).left).toBe(43);
+  });
+  it('runs out of money part-way: the last bill is paid in part', () => {
+    const a = allocatePayment(300, [189.4, 92, 75.6]);
+    expect(a.parts.map(p => p.part)).toEqual([189.4, 92, 18.6]);
+    expect(a.left).toBe(0);
+    expect(allocatePayment(100, [189.4, 92]).parts.map(p => p.part)).toEqual([100, 0]);
+  });
+});

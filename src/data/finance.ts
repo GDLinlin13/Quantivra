@@ -550,3 +550,13 @@ export const addDays = (iso: string, days: number) => {
   d.setUTCDate(d.getUTCDate() + (Number(days) || 0));
   return d.toISOString().slice(0, 10);
 };
+
+/**
+ * One payment clearing several documents: they are paid in the order given (oldest first) until the money runs out.
+ * Returns each document's due amount and the part this payment pays; `left` is money over after all are paid in full.
+ */
+export function allocatePayment(amount: number, dues: number[]): { parts: { due: number; part: number }[]; totalDue: number; left: number } {
+  let left = r2(amount);
+  const parts = dues.map(d => { const due = r2(d); const part = Math.max(0, Math.min(due, left)); left = r2(left - part); return { due, part }; });
+  return { parts, totalDue: r2(dues.reduce((t, d) => t + d, 0)), left };
+}
