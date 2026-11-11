@@ -1,9 +1,10 @@
 import { A4_MODAL } from '../../../../utils/renderPdf';
 import { useState, useEffect } from 'react';
 import { Table, Button, Space, Tag, Input, Segmented, Modal, Form, InputNumber, DatePicker, Select, message, Statistic, Card, Typography, Empty, Dropdown } from 'antd';
-import { PlusOutlined, PrinterOutlined, DownloadOutlined, DollarOutlined, SearchOutlined, MoreOutlined, FileDoneOutlined, CopyOutlined } from '@ant-design/icons';
+import { PlusOutlined, EyeOutlined, PrinterOutlined, DownloadOutlined, DollarOutlined, SearchOutlined, MoreOutlined, FileDoneOutlined, CopyOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { docService, paymentService } from '../../../../services/finance';
+import { docService, paymentService, attachmentService, companyFileService, type Attachment } from '../../../../services/finance';
+import { FileViewer } from '../../../../components/FileViewer';
 import {
   balanceDue, inBase, docRate, isForeignDoc, isOverdue, today, DOC_LABEL, STATUS_LABEL, STATUS_COLOR, PAYMENT_METHODS,
   type DocType, type FinDocument, type Contact, type ContactPerson, type FinanceSettings, type Account,
@@ -42,6 +43,16 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
   const [editing, setEditing] = useState<{ id: number | null; type?: DocType } | null>(null);
   const [viewing, setViewing] = useState<number | null>(null);
   const [paying, setPaying] = useState<FinDocument | null>(null);
+  // the files uploaded on each document (the supplier's invoice, receipts…), to look at from the list
+  const [files, setFiles] = useState<Map<number, Attachment[]>>(new Map());
+  const [viewFile, setViewFile] = useState<Attachment | null>(null);
+  useEffect(() => {
+    attachmentService.listAll(companyId).then(all => {
+      const m = new Map<number, Attachment[]>();
+      for (const a of all) m.set(a.document_id, [...(m.get(a.document_id) || []), a]);
+      setFiles(m);
+    }).catch(() => setFiles(new Map()));
+  }, [companyId, docs.length]);
 
   // Bills also list expenses (already paid / staff claims): they're one list for the owner
   const mine = docs.filter(d => d.doc_type === docType || (docType === 'bill' && d.doc_type === 'expense'));
@@ -112,9 +123,17 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
           ...(payable ? [{ title: 'Balance', key: 'b', align: 'right' as const, render: (_: any, d: FinDocument) => d.status === 'void' ? '—' : money(balanceDue(d), d.currency) }] : []),
           { title: 'Status', key: 's', render: (_, d) => <Space size={4}><Tag color={STATUS_COLOR[d.status]}>{STATUS_LABEL[d.status]}</Tag>{isOverdue(d) && <Tag color="red">Overdue</Tag>}</Space> },
           {
-            title: '', key: 'a', width: 200, render: (_, d) => (
+            title: '', key: 'a', width: 240, render: (_, d) => (
               <Space size={4}>
                 <Button size="small" icon={<PrinterOutlined />} onClick={() => setViewing(d.id)} disabled={!sales} title={sales ? 'View / print / download' : undefined} />
+                {(files.get(d.id) || []).length === 1 && (
+                  <Button size="small" icon={<EyeOutlined />} title={`View ${files.get(d.id)![0].file_name}`} onClick={() => setViewFile(files.get(d.id)![0])} />
+                )}
+                {(files.get(d.id) || []).length > 1 && (
+                  <Dropdown trigger={['click']} menu={{ items: files.get(d.id)!.map(f => ({ key: String(f.id), label: f.file_name, onClick: () => setViewFile(f) })) }}>
+                    <Button size="small" icon={<EyeOutlined />} title="View the uploaded files" />
+                  </Dropdown>
+                )}
                 {canWrite && payable && d.status !== 'void' && d.status !== 'draft' && balanceDue(d) > 0 && (
                   <Button size="small" icon={<DollarOutlined />} onClick={() => setPaying(d)}>{sales ? 'Receive' : 'Pay'}</Button>
                 )}
@@ -153,6 +172,7 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
           onContactsChanged={reload} onItemsChanged={reload} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />
       )}
       {viewing && <ViewModal id={viewing} data={data} onClose={() => setViewing(null)} />}
+      {viewFile && <FileViewer name={viewFile.file_name} load={() => companyFileService.blob(viewFile.path)} onClose={() => setViewFile(null)} />}
       {paying && <PaymentModal data={data} doc={paying} onClose={() => setPaying(null)} onDone={() => { setPaying(null); reload(); }} />}
       <Text type="secondary" style={{ fontSize: 12 }}>{shown.length} shown</Text>
     </div>
