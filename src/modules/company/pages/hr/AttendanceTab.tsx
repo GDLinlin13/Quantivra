@@ -6,6 +6,7 @@ import { attendanceService, minutesOf, hoursText, type AttendanceLog } from '../
 import { leaveService, hrService, type Employee } from '../../../../services/hr';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const { Text } = Typography;
 const timeOf = (iso: string | null) => (iso ? dayjs(iso).format('HH:mm') : '—');
@@ -92,7 +93,7 @@ export function MyAttendanceTab({ companyId }: { companyId: number }) {
       <Table dataSource={logs} rowKey="id" size="small" loading={loading} pagination={{ pageSize: 50, hideOnSinglePage: true }}
         locale={{ emptyText: <span style={{ color: 'rgba(240,237,230,0.4)' }}>No hours this month</span> }}
         columns={[
-          { title: 'Date', dataIndex: 'work_date', width: 120 },
+          { title: 'Date', dataIndex: 'work_date', render: (v: string) => fmtDate(v), width: 120 },
           { title: 'In', key: 'i', width: 90, render: (_, l) => timeOf(l.clock_in) },
           { title: 'Out', key: 'o', width: 90, render: (_, l) => (l.clock_out ? timeOf(l.clock_out) : <Tag color="green">Working</Tag>) },
           { title: 'Hours', key: 'h', width: 110, render: (_, l) => hoursText(minutesOf(l, now)) },
@@ -201,7 +202,7 @@ export function AttendanceTab({ companyId }: { companyId: number }) {
           locale={{ emptyText: <span style={{ color: 'rgba(240,237,230,0.4)' }}>No entries</span> }}
           columns={[
             { title: 'Employee', key: 'n', render: (_, l) => name(l.employee_id) },
-            { title: 'Date', dataIndex: 'work_date', width: 120 },
+            { title: 'Date', dataIndex: 'work_date', render: (v: string) => fmtDate(v), width: 120 },
             { title: 'In', key: 'i', width: 80, render: (_, l) => timeOf(l.clock_in) },
             { title: 'Out', key: 'o', width: 90, render: (_, l) => (l.clock_out ? timeOf(l.clock_out) : <Tag color="green">Working</Tag>) },
             { title: 'Hours', key: 'h', width: 100, render: (_, l) => hoursText(minutesOf(l, now)) },

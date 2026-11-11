@@ -13,6 +13,7 @@ import { PRINT_CSS } from '../hr/PayslipView';
 import type { FinanceData } from './DocList';
 import { AmountInput } from '../../../../components/AmountInput';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -95,8 +96,8 @@ function Reports({ data, input, entries, reload }: { data: FinanceData; input: L
   // amounts without the currency: it is shown once at the top of each report
   const M = (n: number) => money(n, cur, 'number');
   const from = range[0].format('YYYY-MM-DD'), to = range[1].format('YYYY-MM-DD');
-  const period = `${range[0].format('D MMM YYYY')} – ${range[1].format('D MMM YYYY')}`;
-  const asAt = `As at ${range[1].format('D MMM YYYY')}`;
+  const period = `${fmtDate(from)} – ${fmtDate(to)}`;
+  const asAt = `As at ${fmtDate(to)}`;
   const company = data.branding?.legal_name || data.company?.name || '';
   const contact = (id: number | null) => data.contacts.find(c => c.id === id)?.name || '(no contact)';
 
@@ -390,7 +391,7 @@ function AccountHistory({ account, entries, currency, onClose }: { account: Acco
         title={() => <Text>Opening balance: <b>{M(h.opening)}</b></Text>}
         footer={() => <Text>Closing balance: <b>{M(h.closing)}</b></Text>}
         columns={[
-          { title: 'Date', dataIndex: 'date', width: 100 },
+          { title: 'Date', dataIndex: 'date', render: (v: string) => fmtDate(v), width: 100 },
           { title: 'From', dataIndex: 'source', render: (s: string) => SOURCE[s] || s, width: 130 },
           { title: 'Ref', dataIndex: 'ref', width: 140 },
           { title: 'Details', dataIndex: 'memo' },
@@ -418,7 +419,7 @@ function Journals({ data, accounts, journals, reload }: { data: FinanceData; acc
       <Table rowKey="id" size="small" dataSource={journals} pagination={{ pageSize: 50, hideOnSinglePage: true }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No journal entries" /> }}
         columns={[
-          { title: 'Date', dataIndex: 'journal_date', width: 110 },
+          { title: 'Date', dataIndex: 'journal_date', render: (v: string) => fmtDate(v), width: 110 },
           { title: 'Number', dataIndex: 'number', width: 140 },
           { title: 'Memo', dataIndex: 'memo' },
           { title: 'Lines', key: 'l', render: (_, j) => j.lines.map(l => <div key={l.id} style={{ fontSize: 12 }}>{name(l.account_id)}: {l.debit ? `Dr ${money(l.debit, data.currency)}` : `Cr ${money(l.credit, data.currency)}`}</div>) },

@@ -14,6 +14,7 @@ import { A4_MODAL } from '../../../../utils/renderPdf';
 import { elementsToPdf, downloadBlob, formatDocFileName } from '../../../../utils/payslipFiles';
 import { PRINT_CSS } from '../hr/PayslipView';
 import type { FinanceData } from './DocList';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const { Text } = Typography;
 export const DEFAULT_STATEMENT_FILE_NAME = 'Statement of account - {customer} - {date}';
@@ -26,12 +27,12 @@ export function statementData(s: Soa, contact: Contact | null, person: ContactPe
   const M = (n: number) => fmtMoney(n, s.currency, tpl?.amountFormat);
   const bank = pickPaymentAccount(inv, null);
   const payRows = (bank?.lines || []).filter(r => (r.value || '').trim());
-  const longDate = (d: string) => dayjs(d).format('D MMM YYYY');
+  const longDate = (d: string) => fmtDate(d);
   const fields: FieldValues = {
     ...companyFields(company, branding, tpl?.footerNote),
     currency: s.currency,
     document_title: 'STATEMENT OF ACCOUNT', company_gst_no: settings.gstRegistered ? (settings.gstNumber || '') : '',
-    statement_date: s.to, period_from: s.from || '', period_to: s.to,
+    statement_date: fmtDate(s.to), period_from: fmtDate(s.from), period_to: fmtDate(s.to),
     period: s.from ? `${longDate(s.from)} to ${longDate(s.to)}` : `All items up to ${longDate(s.to)}`,
     customer_name: contact?.name || '', customer_address: contact?.address || '',
     customer_contact: person?.name || '', customer_phone: person?.phone || contact?.phone || '', customer_email: person?.email || contact?.email || '',
@@ -43,7 +44,7 @@ export function statementData(s: Soa, contact: Contact | null, person: ContactPe
   };
   const lists: ListValues = {
     rows: s.rows.map(r => ({
-      date: r.date, type: KIND_LABEL[r.kind], number: r.number, reference: r.reference,
+      date: fmtDate(r.date), type: KIND_LABEL[r.kind], number: r.number, reference: r.reference,
       description: [r.description || '', r.kind === 'invoice' && r.reference ? `Ref ${r.reference}` : ''].filter(Boolean).join(' · '),
       debit: r.debit ? M(r.debit) : '', credit: r.credit ? M(r.credit) : '', balance: M(r.balance),
     })),
@@ -95,7 +96,7 @@ export function StatementView({ soa, contact, person, company, branding, setting
             <tr><td colSpan={6} style={{ ...td, fontStyle: 'italic' }}>Balance brought forward</td><td style={right}><CellValue text={M(soa.opening)} /></td></tr>
             {lists.rows.map((r, i) => (
               <tr key={i}>
-                <td style={nowrap}>{r.date}</td><td style={nowrap}>{r.type}</td><td style={nowrap}>{r.number}</td><td style={{ ...td, whiteSpace: 'pre-line', fontSize: 12 }}>{r.description}</td>
+                <td style={nowrap}>{fmtDate(r.date)}</td><td style={nowrap}>{r.type}</td><td style={nowrap}>{r.number}</td><td style={{ ...td, whiteSpace: 'pre-line', fontSize: 12 }}>{r.description}</td>
                 <td style={right}>{r.debit ? <CellValue text={r.debit} /> : ''}</td><td style={right}>{r.credit ? <CellValue text={r.credit} /> : ''}</td>
                 <td style={right}><CellValue text={r.balance} /></td>
               </tr>

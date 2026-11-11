@@ -12,6 +12,7 @@ import { supabase } from '../../../../utils/supabase';
 import { money } from '../../../../data/documentLayouts';
 import { AmountInput } from '../../../../components/AmountInput';
 import { FileViewer } from '../../../../components/FileViewer';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const { Text } = Typography;
 export const CLAIM_STATUS_COLOR: Record<string, string> = { pending: 'gold', approved: 'green', rejected: 'red', cancelled: 'default' };
@@ -155,7 +156,7 @@ export function MyClaimsTab({ companyId }: { companyId: number }) {
       <Table dataSource={claims} rowKey="id" size="small" pagination={{ pageSize: 50, hideOnSinglePage: true }}
         locale={{ emptyText: <span style={{ color: 'rgba(240,237,230,0.4)' }}>No claims yet</span> }}
         columns={[
-          { title: 'Date', dataIndex: 'claim_date', width: 110 },
+          { title: 'Date', dataIndex: 'claim_date', render: (v: string) => fmtDate(v), width: 110 },
           { title: 'Category', dataIndex: 'category' },
           { title: 'Description', dataIndex: 'description', render: (v: string | null) => v || '—' },
           { title: 'Amount', key: 'a', align: 'right' as const, render: (_, c) => money(c.amount, c.currency) },
@@ -245,7 +246,7 @@ export function ClaimsTab({ companyId }: { companyId: number }) {
         locale={{ emptyText: <span style={{ color: 'rgba(240,237,230,0.4)' }}>{filter === 'pending' ? 'Nothing to approve' : 'No claims'}</span> }}
         columns={[
           { title: 'Employee', key: 'e', render: (_, c) => name(c.employee_id) },
-          { title: 'Date', dataIndex: 'claim_date', width: 110 },
+          { title: 'Date', dataIndex: 'claim_date', render: (v: string) => fmtDate(v), width: 110 },
           { title: 'Category', dataIndex: 'category' },
           { title: 'Description', dataIndex: 'description', render: (v: string | null) => v || '—' },
           { title: 'Amount', key: 'a', align: 'right' as const, render: (_, c) => money(c.amount, c.currency) },

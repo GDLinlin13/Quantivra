@@ -20,6 +20,7 @@ import { PayslipView } from './hr/PayslipView';
 import { DocumentView } from './finance/DocumentView';
 import { FileViewer } from '../../../components/FileViewer';
 import { saveBankStatement } from './finance/saveStatement';
+import { fmtDate } from '../../../utils/dateFormat';
 
 const { Title, Text } = Typography;
 
@@ -331,7 +332,7 @@ export function CompanyDocumentsPage() {
               }}
               columns={[
                 { title: 'Name', key: 'n', sorter: (a: Row, b: Row) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }), render: (_, r: Row) => <Space>{/\.pdf$/i.test(r.name) || r.kind !== 'stored' ? <FilePdfOutlined /> : /\.(xlsx?|xlsm|csv)$/i.test(r.name) ? <FileExcelOutlined /> : /\.docx?$/i.test(r.name) ? <FileWordOutlined /> : /\.pptx?$/i.test(r.name) ? <FilePptOutlined /> : <FileOutlined />}<a onClick={() => act(r, 'open')}>{r.name}</a></Space> },
-                { title: 'Date', dataIndex: 'date', width: 120, sorter: (a: Row, b: Row) => a.date.localeCompare(b.date) },
+                { title: 'Date', dataIndex: 'date', render: (v: string) => fmtDate(v), width: 120, sorter: (a: Row, b: Row) => a.date.localeCompare(b.date) },
                 {
                   title: '', key: 'a', width: 220, render: (_, r: Row) => (
                     <Space size={4}>

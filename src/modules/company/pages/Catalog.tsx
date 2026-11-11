@@ -15,6 +15,7 @@ import { currencyOptions } from '../../../utils/currencies';
 import { money } from '../../../data/documentLayouts';
 import { AmountInput } from '../../../components/AmountInput';
 import { useCompanyAccess } from '../../../contexts/CompanyAccess';
+import { fmtDate } from '../../../utils/dateFormat';
 
 const { Title, Text } = Typography;
 
@@ -373,7 +374,7 @@ function StockTab({ companyId, items, stock, docs, adjustments, pieces, classes,
             return stockMoves(history, docs, adjustments, pieces).map(m => ({ ...m, balance: (run = Math.round((run + m.quantity) * 10000) / 10000) }));
           })()}
             columns={[
-              { title: 'Date', dataIndex: 'date', render: (v: string) => v || '—' },
+              { title: 'Date', dataIndex: 'date', render: (v: string) => fmtDate(v) || '—' },
               { title: 'What', dataIndex: 'kind', render: (k: string) => ({ opening: 'Opening stock', sold: 'Sold', bought: 'Bought', returned: 'Returned', adjusted: 'Adjusted' } as Record<string, string>)[k] },
               { title: 'Ref', dataIndex: 'ref' }, { title: 'Note', dataIndex: 'note', render: (v?: string) => v || '' },
               { title: 'Change', dataIndex: 'quantity', align: 'right' as const, render: (v: number) => <span style={{ color: v < 0 ? '#ff7875' : '#73d13d' }}>{v > 0 ? `+${v}` : v}</span> },
@@ -384,7 +385,7 @@ function StockTab({ companyId, items, stock, docs, adjustments, pieces, classes,
               <Text type="secondary">Adjustments can be removed:</Text>
               {adjustments.filter(a => a.item_id === history.id).map(a => (
                 <div key={a.id} style={{ marginTop: 4 }}>
-                  {a.adj_date} · {a.quantity > 0 ? '+' : ''}{a.quantity} {a.reason ? `· ${a.reason}` : ''}{' '}
+                  {fmtDate(a.adj_date)} · {a.quantity > 0 ? '+' : ''}{a.quantity} {a.reason ? `· ${a.reason}` : ''}{' '}
                   {canRemove && <Popconfirm title="Remove this adjustment?" onConfirm={async () => { await catalogService.removeAdjustment(a.id); reload(); setHistory(null); }}>
                     <Button size="small" type="link" danger>remove</Button>
                   </Popconfirm>}
@@ -427,7 +428,7 @@ function PiecesDrawer({ companyId, item, pieces, classes, currency, canWrite, on
           { title: 'Weight', dataIndex: 'weight', render: (w: number) => `${kgText(w)} kg` },
           { title: 'Class', key: 'c', render: (_, p) => { const c = classes.find(x => x.id === p.class_id) || classOf(classes, p.weight); return c ? classLabel(c) : <Text type="warning">No class</Text>; } },
           { title: 'Cost', key: 'cost', align: 'right' as const, render: (_, p) => { const c = classes.find(x => x.id === p.class_id); return c ? money(piecesCost(item, [p], classes), currency) : '—'; } },
-          { title: 'From', key: 'f', render: (_, p) => (p.document_id ? 'A bill' : `Received ${p.received_date}`) },
+          { title: 'From', key: 'f', render: (_, p) => (p.document_id ? 'A bill' : `Received ${fmtDate(p.received_date)}`) },
           { title: '', key: 'x', width: 60, render: (_, p) => canWrite && !p.document_id && (
             <Popconfirm title="Remove this piece?" onConfirm={async () => { try { await catalogService.removePiece(p.id); onChanged(); } catch (e: any) { message.error(e.message); } }}>
               <Button size="small" danger icon={<DeleteOutlined />} />

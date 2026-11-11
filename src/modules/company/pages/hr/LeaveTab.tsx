@@ -7,6 +7,7 @@ import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { countLeave, describePattern, unitLabel, DEFAULT_WORK_PATTERN, type WorkPattern } from '../../../../utils/workdays';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { supabase } from '../../../../utils/supabase';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const YEAR = new Date().getFullYear();
 const statusColor: Record<string, string> = { pending: 'gold', approved: 'green', rejected: 'red', cancelled: 'default' };
@@ -179,8 +180,8 @@ export function LeaveTab({ companyId }: { companyId: number }) {
         locale={{ emptyText: <span style={{ color: 'rgba(240,237,230,0.4)' }}>No leave requests</span> }}
         columns={[
           { title: 'Type', key: 't', render: (_, r) => typeById(r.leave_type_id)?.name || '—' },
-          { title: 'From', dataIndex: 'start_date', key: 'f' },
-          { title: 'To', dataIndex: 'end_date', key: 'to' },
+          { title: 'From', dataIndex: 'start_date', render: (v: string) => fmtDate(v), key: 'f' },
+          { title: 'To', dataIndex: 'end_date', render: (v: string) => fmtDate(v), key: 'to' },
           { title: 'Days', dataIndex: 'days', key: 'd' },
           { title: 'Reason', dataIndex: 'reason', key: 'r', render: (v: string) => v || '—' },
           { title: 'Status', dataIndex: 'status', key: 's', render: (v: string) => <Tag color={statusColor[v]}>{v}</Tag> },
@@ -223,7 +224,7 @@ export function LeaveTab({ companyId }: { companyId: number }) {
                   <div style={{ fontSize: 12 }}>
                     Not counted: {preview.skippedRestDays.length > 0 && `${preview.skippedRestDays.length} rest day(s)`}
                     {preview.skippedRestDays.length > 0 && preview.skippedHolidays.length > 0 && ', '}
-                    {preview.skippedHolidays.length > 0 && `${preview.skippedHolidays.length} public holiday(s) (${preview.skippedHolidays.map(d => dayjs(d).format('D MMM')).join(', ')})`}
+                    {preview.skippedHolidays.length > 0 && `${preview.skippedHolidays.length} public holiday(s) (${preview.skippedHolidays.map(d => fmtDate(d)).join(', ')})`}
                   </div>
                 )}
                 <div style={{ fontSize: 12 }}>{target ? `${target.full_name}’s` : 'Your'} work week: {describePattern(target && targetPattern ? targetPattern : pattern)}</div>

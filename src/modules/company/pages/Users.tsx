@@ -5,6 +5,7 @@ import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { adminUsersService, MIN_PASSWORD_LENGTH } from '../../../services/adminUsers';
 import { USERNAME_PATTERN, USERNAME_RULE_TEXT } from '../../../utils/loginEmail';
+import { fmtDate } from '../../../utils/dateFormat';
 
 const { Title } = Typography;
 
@@ -111,7 +112,7 @@ export function CompanyUsersPage() {
     { title: 'Job Title', dataIndex: 'job_title', key: 'job_title' },
     { title: 'Role', key: 'role', render: (_: any, r: any) => roles.find((x: any) => x.id === roleOf[r.id])?.name || '-' },
     { title: 'Status', dataIndex: 'is_active', key: 'status', render: (v: boolean) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Inactive'}</Tag> },
-    { title: 'Created', dataIndex: 'created_at', key: 'created', render: (v: string) => new Date(v).toLocaleDateString() },
+    { title: 'Created', dataIndex: 'created_at', key: 'created', render: (v: string) => fmtDate(v) },
     {
       title: '', key: 'del', render: (_: any, r: any) => (
         <Space size={4}>

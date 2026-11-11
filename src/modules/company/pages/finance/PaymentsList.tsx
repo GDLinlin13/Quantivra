@@ -5,6 +5,7 @@ import { paymentService, type Payment } from '../../../../services/finance';
 import { money } from '../../../../data/documentLayouts';
 import type { FinanceData } from './DocList';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const { Text } = Typography;
 
@@ -44,7 +45,7 @@ export function PaymentsList({ data, direction }: { data: FinanceData; direction
           </Table.Summary.Row>
         ) : null}
         columns={[
-          { title: 'Date', dataIndex: 'payment_date' },
+          { title: 'Date', dataIndex: 'payment_date', render: (v: string) => fmtDate(v) },
           { title: 'Number', dataIndex: 'number', render: (v: string | null) => v || '—' },
           { title: direction === 'in' ? 'From' : 'To', key: 'c', render: (_, p) => contacts.find(c => c.id === p.contact_id)?.name || '—' },
           { title: 'Amount', key: 'a', align: 'right' as const, render: (_, p) => money(p.amount, data.currency) },

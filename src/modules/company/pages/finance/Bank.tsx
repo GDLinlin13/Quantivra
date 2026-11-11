@@ -24,6 +24,7 @@ import type { FinanceData } from './DocList';
 import { AmountInput } from '../../../../components/AmountInput';
 import { payrollService } from '../../../../services/payroll';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
+import { fmtDate } from '../../../../utils/dateFormat';
 
 const { Text } = Typography;
 
@@ -322,7 +323,7 @@ export function Bank({ data }: { data: FinanceData }) {
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={filter === 'unmatched' ? 'All matched' : 'No lines'} /> }}
         columns={[
           // purple: the line came from the bank's statement (PDF / CSV)
-          { title: 'Date', key: 'dt', width: 110, render: (_, t) => <span style={t.source === 'statement' ? { color: PURPLE, fontWeight: 600 } : undefined}>{t.txn_date}</span> },
+          { title: 'Date', key: 'dt', width: 110, render: (_, t) => <span style={t.source === 'statement' ? { color: PURPLE, fontWeight: 600 } : undefined}>{fmtDate(t.txn_date)}</span> },
           { title: 'Description', key: 'd', render: (_, t) => describe(t) },
           // as on the bank statement: debit = money out, credit = money in
           { title: 'Debit', key: 'out', align: 'right' as const, width: 140, render: (_, t) => t.amount < 0 ? <span style={{ color: '#ff7875' }}>{t.status === ('expected' as any) && foreign ? money(-t.amount, currency) : num(-t.amount)}</span> : '' },
@@ -428,7 +429,7 @@ export function Bank({ data }: { data: FinanceData }) {
           )}
           <Table size="small" tableLayout="fixed" rowKey={(_l: ImportLine) => importing.indexOf(_l)} pagination={{ pageSize: 12 }} dataSource={importing}
             columns={[
-              { title: 'Date', dataIndex: 'txn_date', width: 110 },
+              { title: 'Date', dataIndex: 'txn_date', render: (v: string) => fmtDate(v), width: 110 },
               { title: 'Description', dataIndex: 'description' },
               { title: 'Amount', key: 'a', align: 'right' as const, width: 140, render: (_: any, l: ImportLine) => <span style={{ color: l.amount > 0 ? '#73d13d' : '#ff7875' }}>{money(l.amount, accCur)}</span> },
               {
@@ -517,7 +518,7 @@ function FxMatch({ txn, currency, accCur, onClose, onMatch }: {
     <Modal open title={`${sign > 0 ? 'Received' : 'Paid'} in ${accCur}`} okText="Match" confirmLoading={busy} okButtonProps={{ disabled: !received }} onCancel={onClose}
       onOk={async () => { setBusy(true); await onMatch(sign * received!, sign * base); setBusy(false); }}>
       <Space orientation="vertical" style={{ width: '100%' }}>
-        <Text>{txn.description} · {txn.txn_date} · {money(base, currency)}</Text>
+        <Text>{txn.description} · {fmtDate(txn.txn_date)} · {money(base, currency)}</Text>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div><Text type="secondary">Amount in {accCur}</Text>
             <AmountInput style={{ width: '100%' }} min={0.01} precision={2} prefix={accCur} value={received ?? undefined} onChange={v => setReceived(v == null ? null : Number(v))} /></div>
@@ -691,7 +692,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
 
   return (
     <Modal open width={780} onCancel={onClose} footer={null}
-      title={<span>{inbound ? 'Money in' : 'Money out'} {money(lineAmt, accCur)} on {txn.txn_date}<div style={{ fontSize: 12, fontWeight: 400, color: '#999' }}>{txn.description}</div></span>}>
+      title={<span>{inbound ? 'Money in' : 'Money out'} {money(lineAmt, accCur)} on {fmtDate(txn.txn_date)}<div style={{ fontSize: 12, fontWeight: 400, color: '#999' }}>{txn.description}</div></span>}>
       {foreign && !editRate && (
         <div style={{ marginBottom: 12 }}>
           <Text type="secondary">1 {accCur} = {rate ?? lastRate} {data.currency}{textRate ? ` = ${money(textRate.base, data.currency)} (the bank's rate)` : ''}</Text>{' '}
@@ -708,9 +709,9 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
             <Text type="secondary">or</Text>
             <AmountInput min={0} precision={2} style={{ width: 170 }} prefix={data.currency} value={base ?? undefined} onChange={v => { const b = v == null ? null : Number(v); setBase(b); setRate(b && lineAmt ? fx(b / lineAmt) : null); }} />
           </Space>
-          {looking && <div style={{ marginTop: 6 }}><Text type="secondary">Looking up the rate on {txn.txn_date}…</Text></div>}
-          {!ready && !looking && <div style={{ marginTop: 6 }}><Tag color="gold">Couldn't find the rate for {txn.txn_date} — enter the rate or the {data.currency} amount</Tag></div>}
-          {ready && !lastRate && rate != null && <div style={{ marginTop: 6 }}><Text type="secondary">Market rate on {txn.txn_date}; change it if your bank used another.</Text></div>}
+          {looking && <div style={{ marginTop: 6 }}><Text type="secondary">Looking up the rate on {fmtDate(txn.txn_date)}…</Text></div>}
+          {!ready && !looking && <div style={{ marginTop: 6 }}><Tag color="gold">Couldn't find the rate for {fmtDate(txn.txn_date)} — enter the rate or the {data.currency} amount</Tag></div>}
+          {ready && !lastRate && rate != null && <div style={{ marginTop: 6 }}><Text type="secondary">Market rate on {fmtDate(txn.txn_date)}; change it if your bank used another.</Text></div>}
         </div>
       )}
       <Tabs defaultActiveKey={suggestions.length || journalHits.length || nearHits.length ? 'existing' : payrollHit ? 'payroll' : openDocs.length ? 'doc' : 'account'} items={[
@@ -723,7 +724,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                   rowSelection={{ type: 'radio', selectedRowKeys: docId ? [docId] : [], onChange: k => setDocId(Number(k[0])) }}
                   columns={[
                     { title: inbound ? 'Number' : 'Invoice no.', key: 'no', render: (_, d) => <span style={{ fontWeight: named(d) ? 700 : 400 }}>{docNo(d)}</span> },
-                    { title: 'Date', dataIndex: 'issue_date' },
+                    { title: 'Date', dataIndex: 'issue_date', render: (v: string) => fmtDate(v) },
                     { title: inbound ? 'Customer' : 'Supplier', key: 'c', render: (_, d) => contact(d.contact_id) },
                     { title: 'Still owed', key: 'b', align: 'right' as const, render: (_, d) => <span style={{ fontWeight: sameAmount(d) ? 700 : 400 }}>{money(balanceDue(d), d.currency || data.currency)}{isForeignDoc(d, data.currency) && !inBankCur(d) && <Text type="secondary"> ≈ {money(inBase(d, balanceDue(d)), data.currency)}</Text>}</span> },
                   ]} />
@@ -752,7 +753,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
             {nearHits.length > 0 && (<>
               <Table rowKey="id" size="small" pagination={false} dataSource={nearHits}
                 columns={[
-                  { title: 'Date', dataIndex: 'txn_date' },
+                  { title: 'Date', dataIndex: 'txn_date', render: (v: string) => fmtDate(v) },
                   { title: 'Recorded as', key: 'd', render: (_, r) => r.description },
                   { title: 'Recorded', key: 'a', align: 'right' as const, render: (_, r) => money(Math.abs(r.amount), data.currency) },
                   // a bank in another currency: the transfer's own amount sets the rate (HKD 100 → USD 12.80 = 7.8125), no difference
@@ -772,7 +773,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
             {journalHits.length > 0 && (
               <Table rowKey="id" size="small" pagination={false} dataSource={journalHits} style={{ marginBottom: suggestions.length ? 12 : 0 }}
                 columns={[
-                  { title: 'Date', dataIndex: 'txn_date' },
+                  { title: 'Date', dataIndex: 'txn_date', render: (v: string) => fmtDate(v) },
                   { title: 'Recorded as', key: 'd', render: (_, r) => r.description },
                   { title: 'Amount', key: 'a', align: 'right' as const, render: (_, r) => money(Math.abs(r.amount), data.currency) },
                   { title: '', key: 'x', render: (_, r) => <Button size="small" type="primary" loading={busy} onClick={() => run(() => bankService.matchJournal(txn.id, r.journal_id!, signedBase))}>Match</Button> },
@@ -780,7 +781,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
             )}
             {suggestions.length > 0 && <Table rowKey="id" size="small" pagination={false} dataSource={suggestions}
               columns={[
-                { title: 'Date', dataIndex: 'payment_date' }, { title: 'Number', dataIndex: 'number' },
+                { title: 'Date', dataIndex: 'payment_date', render: (v: string) => fmtDate(v) }, { title: 'Number', dataIndex: 'number' },
                 { title: inbound ? 'From' : 'To', key: 'c', render: (_, p) => contact(p.contact_id) },
                 { title: 'Amount', key: 'a', align: 'right' as const, render: (_, p) => money(p.amount, data.currency) },
                 { title: '', key: 'x', render: (_, p) => <Button size="small" type="primary" loading={busy} onClick={() => run(() => bankService.matchPayment(txn.id, p.id, signedBase))}>Match</Button> },

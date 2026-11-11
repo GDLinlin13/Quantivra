@@ -8,6 +8,8 @@ import { useCompanyAccess } from '../../../contexts/CompanyAccess';
 import { timezoneOptions } from '../../../utils/timezones';
 import { currencyOptions } from '../../../utils/currencies';
 import { DocumentNumbersCard } from './settings/DocumentNumbersCard';
+import { DATE_FORMATS } from '../../../utils/dateFormat';
+import { useDateFormat } from '../../../contexts/DateFormat';
 import { WorkWeekHolidaysCard } from './settings/WorkWeekHolidaysCard';
 import { ChangePasswordCard } from '../../../components/ChangePasswordCard';
 
@@ -18,6 +20,7 @@ export function CompanySettingsPage() {
   const [company, setCompany] = useState<any>(null);
   const [form] = Form.useForm();
   const access = useCompanyAccess();
+  const dateFmt = useDateFormat();
 
   useEffect(() => {
     if (!companyId) return;
@@ -66,6 +69,10 @@ export function CompanySettingsPage() {
           </Form.Item>
           <Form.Item name="timezone" label={<Text style={{ color: '#f0ede6' }}>Timezone</Text>}>
             <Select showSearch optionFilterProp="label" options={timezoneOptions()} />
+          </Form.Item>
+          <Form.Item label={<Text style={{ color: '#f0ede6' }}>Date Format</Text>}>
+            <Select value={dateFmt.format} options={DATE_FORMATS}
+              onChange={async v => { try { await dateFmt.save(v); message.success('Date format saved'); } catch (e: any) { message.error(e.message); } }} />
           </Form.Item>
           <Button type="primary" htmlType="submit" style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
             Save
