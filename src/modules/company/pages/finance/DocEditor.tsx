@@ -3,7 +3,7 @@ import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Ta
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { docService, paymentService, catalogService, priceListService, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
+import { docService, paymentService, catalogService, priceListService, supplierBills, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
 import { ContactDrawer } from './ContactsManager';
 import { ItemDrawer } from '../Catalog';
 import { companyFileService } from '../../../../services/finance';
@@ -14,7 +14,7 @@ import {
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
-import { priceFor, basisOf, costChanges, classOf, classLabel, piecePrice, listPrice, kgText, type CatalogItem, type CustomerPrice, type WeightClass, type Piece, type PriceListRow } from '../../../../data/catalog';
+import { priceFor, basisOf, costChanges, supplierPrices, classOf, classLabel, piecePrice, listPrice, kgText, type CatalogItem, type CustomerPrice, type WeightClass, type Piece, type PriceListRow } from '../../../../data/catalog';
 import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
@@ -123,10 +123,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   // special prices for particular customers (Catalog → item → Customer prices)
   // Price lists (Catalog → Price lists): the customer buys at the prices of the list they are assigned to
   const [plRows, setPlRows] = useState<PriceListRow[]>([]);
-  useEffect(() => { priceListService.rows(companyId).then(setPlRows).catch(() => null); }, [companyId]);
-  // what the supplier charges: the prices of the list assigned to them (Catalog → Price lists → Suppliers)
-  const supplierList = contacts.find(c => c.id === doc.contact_id)?.purchase_price_list_id ?? null;
-  const supplierPrice = (itemId: number, classId: number | null = null) => (!sales ? listPrice(plRows, supplierList, itemId, classId) : undefined);
+  useEffect(() => { if (sales) priceListService.rows(companyId).then(setPlRows).catch(() => null); }, [companyId, sales]);
   const custPrices = useMemo<CustomerPrice[]>(() => plRows.filter(r => !r.class_id).flatMap(r =>
     contacts.filter(c => c.price_list_id === r.price_list_id).map(c => ({ item_id: r.item_id, contact_id: c.id, price: r.price }))), [plRows, contacts]);
   // Currencies: the company's own and those of its bank accounts. A document in another currency needs the
@@ -135,6 +132,14 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   const contactCurs = contactCurrencies(contacts.find(c => c.id === doc.contact_id));
   const currencies = [...new Set([currency, ...accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash') && a.currency).map(a => a.currency!), ...contactCurs, ...(doc.currency ? [doc.currency] : [])])];
   const docCur = doc.currency || currency;
+  // What this supplier charged before, from their earlier bills: the latest price per item (and weight class)
+  const [billsOf, setBillsOf] = useState<any[]>([]);
+  useEffect(() => {
+    if (sales || !doc.contact_id) { setBillsOf([]); return; }
+    supplierBills(companyId, doc.contact_id, docId).then(setBillsOf).catch(() => setBillsOf([]));
+  }, [companyId, sales, doc.contact_id, docId]);
+  const supplierHist = useMemo(() => supplierPrices(billsOf, items, classes, pieces, currency).filter(h => h.currency === docCur), [billsOf, items, classes, pieces, currency, docCur]);
+  const supplierPrice = (itemId: number, classId: number | null = null) => supplierHist.find(h => h.item_id === itemId && (h.class_id ?? null) === (classId ?? null));
   const foreign = docCur !== currency;
   const [rates, setRates] = useState<Record<string, number | null>>({});
   const rateFor = async (cur: string) => {
@@ -169,7 +174,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   const pickItem = (i: number, id: number | null, from: CatalogItem[] = items) => {
     const it = from.find(x => x.id === id);
     if (!it) { setLine(i, { item_id: null }); return; }
-    const price = sales ? priceFor(it, doc.contact_id, custPrices) : supplierPrice(it.id) ?? (Number(it.purchase_price) || 0);
+    const price = sales ? priceFor(it, doc.contact_id, custPrices) : supplierPrice(it.id)?.price ?? (Number(it.purchase_price) || 0);
     // an item priced in another currency: a new document with nothing priced yet takes the item's currency
     // (a bought item can have its own buying currency, e.g. bought in MYR, sold in SGD)
     const itemCur = !sales && it.purchase_currency ? it.purchase_currency : it.currency;
@@ -192,7 +197,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     const p = piecePrice(it, cls, weight, sales);
     // a customer's price list can price each weight class
     if (cls) {
-      const lp = sales ? listPrice(plRows, contacts.find(c => c.id === doc.contact_id)?.price_list_id, it.id, cls.id ?? null) : supplierPrice(it.id, cls.id ?? null);
+      const lp = sales ? listPrice(plRows, contacts.find(c => c.id === doc.contact_id)?.price_list_id, it.id, cls.id ?? null) : supplierPrice(it.id, cls.id ?? null)?.price;
       if (lp != null) p.unit_price = lp;
     }
     // the class goes in the Description (unless something else was typed there), so Qty stays readable
@@ -202,6 +207,19 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     setLine(i, { piece_id: pieceId, weight, quantity: p.quantity, unit_price: inDocCurrency(p.unit_price, itemCur), description: autoDesc });
     if (weight > 0 && !cls) message.warning(`No weight class for ${kgText(weight)} kg — add one in the catalog, or type the price`);
   };
+  // a new bill: items still at the catalog cost take the price this supplier charged last time
+  useEffect(() => {
+    if (sales || docId || !supplierHist.length) return;
+    let moved = 0;
+    setLines(ls => ls.map(l => {
+      const it = l.item_id ? items.find(x => x.id === l.item_id) : undefined;
+      const h = it && it.stock_mode !== 'pieces' ? supplierPrice(it.id) : undefined;
+      if (!it || !h || Math.abs((Number(l.unit_price) || 0) - (Number(it.purchase_price) || 0)) > 0.005 || Math.abs(h.price - (Number(l.unit_price) || 0)) < 0.005) return l;
+      moved++; return { ...l, unit_price: h.price };
+    }));
+    setTimeout(() => { if (moved) message.info('Prices updated to what this supplier charged last time'); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supplierHist]);
   const payFrom = accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash'));
   const banks = paymentAccounts(branding?.templates.invoice);
 
@@ -225,22 +243,6 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
         return { ...l, unit_price: p };
       }));
       setTimeout(() => { if (changed) message.info(`Prices updated to ${c?.name || 'this customer'}'s prices`); });
-    }
-    // a bill: lines still at the previous supplier's price move to this supplier's price
-    if (!sales) {
-      const nextList = c?.purchase_price_list_id ?? null;
-      const prevList = supplierList;
-      let changed = 0;
-      setLines(ls => ls.map(l => {
-        const it = l.item_id ? items.find(x => x.id === l.item_id) : undefined;
-        if (!it || it.stock_mode === 'pieces') return l;
-        const was = listPrice(plRows, prevList, it.id) ?? (Number(it.purchase_price) || 0);
-        if (Math.abs(Number(l.unit_price) - was) > 0.005) return l;
-        const now = listPrice(plRows, nextList, it.id) ?? (Number(it.purchase_price) || 0);
-        if (Math.abs(now - Number(l.unit_price)) > 0.005) changed++;
-        return { ...l, unit_price: now };
-      }));
-      setTimeout(() => { if (changed) message.info(`Prices updated to ${c?.name || 'this supplier'}'s prices`); });
     }
   };
 
@@ -268,16 +270,16 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       if (!sales && lines.some(isPieces)) await catalogService.syncBillPieces(companyId, id, doc.issue_date!, lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes);
       // a bill at a new price: offer to keep the catalog's cost up to date
       if (!sales) {
-        const changes = costChanges(lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes, docCur, currency, supplierList ? (i, c) => supplierPrice(i, c) : undefined);
+        const changes = costChanges(lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes, docCur, currency, (i, c) => { const h = supplierPrice(i, c); return h ? { price: h.price, date: h.date, number: h.number } : undefined; });
         if (changes.length && canCatalog) {
           const yes = await new Promise<boolean>(resolve => Modal.confirm({
-            title: 'New buying prices', okText: supplierList ? 'Update the supplier’s price list' : 'Update the catalog', cancelText: supplierList ? 'No, keep the list as it is' : 'No, keep the catalog as it is', width: 520,
+            title: 'New buying prices', okText: 'Update the catalog cost', cancelText: 'No, keep the catalog as it is', width: 560,
             content: (
               <div>
-                <div style={{ marginBottom: 8 }}>These prices differ from {supplierList ? 'what this supplier’s price list says' : 'the cost in the catalog'}. Update {supplierList ? 'the list' : 'it'}?</div>
+                <div style={{ marginBottom: 8 }}>The price changed. Update the cost in the catalog too?</div>
                 {changes.map((c, i) => (
                   <div key={i} style={{ fontSize: 13 }}>
-                    <b>{c.name}</b>{c.label ? ` (${c.label})` : ''}: {docCur} {c.old.toLocaleString(undefined, { maximumFractionDigits: 4 })} → <b>{c.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}</b>
+                    <b>{c.name}</b>{c.label ? ` (${c.label})` : ''}: {docCur} {c.old.toLocaleString(undefined, { maximumFractionDigits: 4 })} → <b>{c.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}</b>{c.since ? <span style={{ color: '#999' }}> (was on {c.since})</span> : <span style={{ color: '#999' }}> (catalog cost)</span>}
                   </div>
                 ))}
               </div>
@@ -285,10 +287,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
             onOk: () => resolve(true), onCancel: () => resolve(false),
           }));
           if (yes) {
-            try {
-              if (supplierList) { await priceListService.setPrices(companyId, supplierList, changes.map(c => ({ item_id: c.item_id, class_id: c.class_id, price: c.price }))); priceListService.rows(companyId).then(setPlRows).catch(() => null); message.success('Supplier price list updated'); }
-              else { await catalogService.setCosts(changes); onItemsChanged?.(); message.success('Catalog costs updated'); }
-            } catch (e: any) { message.error(e.message); }
+            try { await catalogService.setCosts(changes); onItemsChanged?.(); message.success('Catalog costs updated'); } catch (e: any) { message.error(e.message); }
           }
         }
       }

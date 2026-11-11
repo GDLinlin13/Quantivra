@@ -157,28 +157,76 @@ export function piecesCost(item: Pick<CatalogItem, 'price_basis'>, pieces: Piece
   }, 0) * 100) / 100;
 }
 
-export interface CostChange { item_id: number; class_id: number | null; name: string; label: string; old: number; price: number }
+export interface CostChange { item_id: number; class_id: number | null; name: string; label: string; old: number; price: number; since?: string }
+
+/** What one supplier charged for an item (or one weight class of it): the latest price and the one before that. */
+export interface SupplierPrice {
+  contact_id: number; item_id: number; class_id: number | null;
+  price: number; date: string; number: string; currency: string;
+  prev: { price: number; date: string; number: string } | null; bills: number;
+}
+interface BillLike { id: number; doc_type: string; status: string; number: string; issue_date: string; contact_id: number | null; currency?: string | null;
+  lines: { item_id?: number | null; unit_price: number; piece_id?: number | null }[] }
 /**
- * Prices on a bill that differ from the catalog's cost: the item's buying price, or — for items stocked by weight —
- * the buying price of the class the piece falls in. Only lines in the item's own buying currency are compared.
+ * Everything bought from each supplier, worked out from their bills and expenses (drafts and void ones don't count):
+ * per item — and per weight class for items stocked by weight — the latest price, and the last different price before it.
+ */
+export function supplierPrices(docs: BillLike[], items: Pick<CatalogItem, 'id' | 'stock_mode'>[], classes: WeightClass[], pieces: Piece[], companyCurrency = ''): SupplierPrice[] {
+  const byKey = new Map<string, { contact_id: number; item_id: number; class_id: number | null; hist: { price: number; date: string; number: string; currency: string; id: number }[] }>();
+  const ordered = docs.filter(d => ['bill', 'expense'].includes(d.doc_type) && !['draft', 'void'].includes(d.status) && d.contact_id)
+    .sort((a, b) => a.issue_date.localeCompare(b.issue_date) || a.id - b.id);
+  for (const d of ordered) {
+    for (const l of d.lines) {
+      const price = Number(l.unit_price) || 0;
+      if (!l.item_id || !(price > 0)) continue;
+      const it = items.find(x => x.id === l.item_id);
+      let classId: number | null = null;
+      if (it?.stock_mode === 'pieces') {
+        const w = pieces.find(p => p.id === l.piece_id)?.weight;
+        const c = w ? classOf(classes.filter(x => x.item_id === l.item_id), w) : null;
+        if (!c) continue;
+        classId = c.id ?? null;
+      }
+      const key = `${d.contact_id}:${l.item_id}:${classId ?? 0}`;
+      const e = byKey.get(key) || { contact_id: d.contact_id!, item_id: l.item_id, class_id: classId, hist: [] };
+      e.hist.push({ price, date: d.issue_date, number: d.number, currency: d.currency || companyCurrency, id: d.id });
+      byKey.set(key, e);
+    }
+  }
+  return [...byKey.values()].map(e => {
+    const last = e.hist[e.hist.length - 1];
+    const before = [...e.hist].reverse().find(h => Math.abs(h.price - last.price) > 0.005);
+    return { contact_id: e.contact_id, item_id: e.item_id, class_id: e.class_id, price: last.price, date: last.date, number: last.number, currency: last.currency,
+      prev: before ? { price: before.price, date: before.date, number: before.number } : null, bills: new Set(e.hist.map(h => h.id)).size };
+  });
+}
+
+/**
+ * Prices on a bill that changed: against what this supplier charged last time (`priorOf`), or — for something never bought
+ * from them before — against the catalog's cost (the item's buying price, or the cost of the weight class of a piece).
+ * Only lines in the item's own buying currency are compared with the catalog.
  */
 export function costChanges(lines: { item_id?: number | null; unit_price: number; weight?: number }[], items: CatalogItem[], classes: WeightClass[],
-  docCurrency: string, companyCurrency: string, listOf?: (itemId: number, classId: number | null) => number | undefined): CostChange[] {
+  docCurrency: string, companyCurrency: string, priorOf?: (itemId: number, classId: number | null) => { price: number; date: string; number: string } | undefined): CostChange[] {
   const out = new Map<string, CostChange>();
   for (const l of lines) {
     const it = l.item_id ? items.find(x => x.id === l.item_id) : undefined;
     const price = Number(l.unit_price) || 0;
     if (!it || !(price > 0)) continue;
-    if ((it.purchase_currency || it.currency || companyCurrency) !== docCurrency) continue;
     let cls: WeightClass | null = null;
     if (it.stock_mode === 'pieces') {
       cls = classOf(classes.filter(c => c.item_id === it.id), Number(l.weight) || 0);
       if (!cls) continue;
     }
-    // what it costs now: the supplier's own price when they have a list, else the catalog's
-    const old = listOf?.(it.id, cls?.id ?? null) ?? (Number(cls ? cls.purchase_price : it.purchase_price) || 0);
+    const prior = priorOf?.(it.id, cls?.id ?? null);
+    let old: number, since: string | undefined;
+    if (prior) { old = prior.price; since = `${prior.number}, ${prior.date}`; }
+    else {
+      if ((it.purchase_currency || it.currency || companyCurrency) !== docCurrency) continue;
+      old = Number(cls ? cls.purchase_price : it.purchase_price) || 0;
+    }
     if (Math.abs(old - price) < 0.005) continue;
-    out.set(`${it.id}:${cls?.id ?? 0}`, { item_id: it.id, class_id: cls?.id ?? null, name: it.name, label: cls ? classLabel(cls) : '', old, price });
+    out.set(`${it.id}:${cls?.id ?? 0}`, { item_id: it.id, class_id: cls?.id ?? null, name: it.name, label: cls ? classLabel(cls) : '', old, price, since });
   }
   return [...out.values()];
 }
