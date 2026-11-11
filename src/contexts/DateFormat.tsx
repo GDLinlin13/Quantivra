@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
 import { ConfigProvider } from 'antd';
-import enUS from 'antd/locale/en_US';
+import enUSLocale from 'antd/locale/en_US';
+
+// the built app can hand over the locale wrapped as { default }; take the real one either way
+const enUS: any = (enUSLocale as any)?.DatePicker ? enUSLocale : (enUSLocale as any)?.default;
 import { useAuth } from './AuthContext';
 import { supabase } from '../utils/supabase';
 import { DEFAULT_DATE_FORMAT, isDateFormat, setDateFormat } from '../utils/dateFormat';
@@ -25,7 +28,11 @@ export function DateFormatProvider({ children }: { children: ReactNode }) {
     setDateFormat(f); setFormat(f);
   }, [companyId]);
   // date pickers show and read dates in the chosen format
-  const locale = useMemo(() => ({ ...enUS, DatePicker: { ...enUS.DatePicker!, lang: { ...enUS.DatePicker!.lang, fieldDateFormat: format } } }), [format]);
+  const locale = useMemo(() => {
+    const dp = enUS?.DatePicker;
+    if (!dp?.lang) return enUS; // never take the page down over a date picker
+    return { ...enUS, DatePicker: { ...dp, lang: { ...dp.lang, fieldDateFormat: format } } };
+  }, [format]);
   return (
     <DateFormatContext.Provider value={{ format, save }}>
       <ConfigProvider locale={locale}>
