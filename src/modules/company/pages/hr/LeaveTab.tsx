@@ -33,7 +33,8 @@ export function LeaveTab({ companyId }: { companyId: number }) {
       if (rec) {
         const { data: co } = await supabase.from('companies').select('country').eq('id', companyId).maybeSingle();
         // (re)compute entitlements from this employee's facts + dependents
-        await leaveService.syncEntitlements(companyId, rec, co?.country || 'SG', YEAR);
+        // staff without Leave / Employees edit rights can't write balances; HR's Leave Balances tab sets them up
+        await leaveService.syncEntitlements(companyId, rec, co?.country || 'SG', YEAR).catch(() => null);
         const [b, r, pat, hol] = await Promise.all([
           leaveService.balances(rec.id, YEAR),
           leaveService.requests(companyId, { employeeId: rec.id }),

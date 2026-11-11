@@ -39,7 +39,13 @@ export function BalancesTab({ companyId }: { companyId: number }) {
       const active = emps.filter(e => e.status === 'active');
       const out: Row[] = [];
       for (const e of active) {
-        const [deps, bals] = await Promise.all([hrService.dependents(e.id), leaveService.balances(e.id, year)]);
+        const [deps, found] = await Promise.all([hrService.dependents(e.id), leaveService.balances(e.id, year)]);
+        let bals = found;
+        // set up missing balances here (staff can't create their own)
+        if (types.some(t => t.active && !bals.some(x => x.leave_type_id === t.id))) {
+          await leaveService.syncEntitlements(companyId, e, cc, year).catch(() => null);
+          bals = await leaveService.balances(e.id, year);
+        }
         const explained = leaveService.explain(types, e, deps, cc, year);
         for (const x of explained) {
           out.push({
