@@ -21,6 +21,9 @@ export const setDateFormat = (f?: string | null) => { current = isDateFormat(f) 
 /** A date (or the date part of a timestamp) in the company's format; anything that is not a date is returned as it is. */
 export function fmtDate(v: string | Date | null | undefined, format: string = current): string {
   if (v == null || v === '') return '';
+  // only real dates (2026-08-31, a timestamp, a Date) are re-formatted: text already in a company format (04/07/2025)
+  // must stay as it is, or day and month would be read the wrong way round
+  if (typeof v === 'string' && !/^\d{4}-\d{2}-\d{2}/.test(v)) return v;
   const d = dayjs(v);
   return d.isValid() ? d.format(format) : String(v);
 }

@@ -78,7 +78,7 @@ export function StatementView({ soa, contact, person, company, branding, setting
   return (
     <div id={domId} style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
       <DocumentShell country={company?.country} branding={branding} companyName={company?.name || ''} forPrint title="STATEMENT OF ACCOUNT"
-        meta={<>{number && <>{number}<br /></>}As at {soa.to}<br />{fields.period}</>}
+        meta={<>{number && <>{number}<br /></>}As at {fmtDate(soa.to)}<br />{fields.period}</>}
         showLogo={tpl?.showLogo ?? true} showCompanyBlock={tpl?.showCompanyBlock ?? true} footerNote={tpl?.footerNote}>
         <div style={{ fontSize: 13, color: '#111', marginBottom: 12, whiteSpace: 'pre-line' }}>
           <div style={{ color: '#666', fontSize: 12 }}>Statement for</div>
@@ -96,7 +96,7 @@ export function StatementView({ soa, contact, person, company, branding, setting
             <tr><td colSpan={6} style={{ ...td, fontStyle: 'italic' }}>Balance brought forward</td><td style={right}><CellValue text={M(soa.opening)} /></td></tr>
             {lists.rows.map((r, i) => (
               <tr key={i}>
-                <td style={nowrap}>{fmtDate(r.date)}</td><td style={nowrap}>{r.type}</td><td style={nowrap}>{r.number}</td><td style={{ ...td, whiteSpace: 'pre-line', fontSize: 12 }}>{r.description}</td>
+                <td style={nowrap}>{r.date}</td><td style={nowrap}>{r.type}</td><td style={nowrap}>{r.number}</td><td style={{ ...td, whiteSpace: 'pre-line', fontSize: 12 }}>{r.description}</td>
                 <td style={right}>{r.debit ? <CellValue text={r.debit} /> : ''}</td><td style={right}>{r.credit ? <CellValue text={r.credit} /> : ''}</td>
                 <td style={right}><CellValue text={r.balance} /></td>
               </tr>
