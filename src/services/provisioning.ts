@@ -201,7 +201,7 @@ async function provisionSteps(input: ProvisionInput, onProgress: ProgressCallbac
       email: input.owner_email || undefined,
       password: input.owner_password,
       phone: input.owner_mobile || '',
-      job_title: 'Owner',
+      job_title: 'Director',
     });
     return res.user;
   });
@@ -348,7 +348,7 @@ async function provisionSteps(input: ProvisionInput, onProgress: ProgressCallbac
       p: {
         company_id: company.id, user_id: String(owner.id), employee_code: 'EMP-001',  // the owner's login is their employee record's sign-in
         full_name: input.owner_full_name, email: input.owner_email || '',
-        phone: input.owner_mobile || '', job_title: 'Owner', employment_type: 'full_time',
+        phone: input.owner_mobile || '', job_title: 'Director', employment_type: 'director',
         status: 'active', join_date: new Date().toISOString().slice(0, 10),
       },
     });
