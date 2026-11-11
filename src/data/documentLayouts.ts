@@ -89,6 +89,7 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
     ...COMPANY_FIELDS,
     { name: 'document_title', label: 'Document title (STATEMENT OF ACCOUNT)' },
     { name: 'company_gst_no', label: 'Our tax registration no. (GST / VAT)' },
+    { name: 'statement_no', label: 'Statement number (given when printed or downloaded)' },
     { name: 'statement_date', label: 'Statement date' },
     { name: 'period', label: 'Period covered (e.g. 1 Jan 2026 to 31 Mar 2026)' },
     { name: 'period_from', label: 'Period start date' },
@@ -423,7 +424,7 @@ export const STARTER_LAYOUTS: Record<DocKind, (country?: string | null, branding
     const sum = (label: string, value: string, extra: GridCell = {}): RowSpec[number] =>
       ({ cells: [[0, { v: label, cs: 6, al: 'right', ...extra }], [6, { v: value, al: 'right', ...extra }]] });
     return build([76, 76, 112, 128, 104, 104, 110], [
-      ...headerRows(country, branding, 'STATEMENT OF ACCOUNT', ['As at {{statement_date}}', '{{period}}'], 1, 3, 3, 'soa'),
+      ...headerRows(country, branding, 'STATEMENT OF ACCOUNT', ['{{statement_no}}', 'As at {{statement_date}}', '{{period}}'], 1, 3, 3, 'soa'),
       { cells: [[0, { v: 'Statement for', cs: 7, fs: 12, c: GREY }]] },
       { cells: [[0, { v: '{{customer_name}}', cs: 7, b: true }]] },
       { cells: [[0, { v: '{{customer_address}}', cs: 7 }]] },
@@ -551,7 +552,7 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
   if (kind === 'soa') {
     return {
       fields: {
-        ...base, document_title: 'STATEMENT OF ACCOUNT', company_gst_no: '', statement_date: '2026-08-31', period: '1 Jul 2026 to 31 Aug 2026',
+        ...base, document_title: 'STATEMENT OF ACCOUNT', statement_no: 'SOA-2026-0001', company_gst_no: '', statement_date: '2026-08-31', period: '1 Jul 2026 to 31 Aug 2026',
         period_from: '2026-07-01', period_to: '2026-08-31',
         customer_name: sg ? 'Acme Trading Pte Ltd' : country === 'AE' ? 'Acme Trading LLC' : 'Acme Trading Ltd',
         customer_address: sg ? '1 Example Road, Singapore 123456' : country === 'AE' ? '1 Example Road, Dubai' : '1 Example Road',

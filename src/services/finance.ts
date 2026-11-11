@@ -451,6 +451,10 @@ export const docService = {
     }
     must(await supabase.from('fin_documents').delete().eq('id', id));
   },
+  /** The next number of any kind of document that follows Settings → Document numbers (statements: 'soa'). */
+  async nextEntityNumber(companyId: number, entity: string, date: string): Promise<string> {
+    return must(await supabase.rpc('fin_next_number', { p_company_id: companyId, p_entity: entity, p_date: date }));
+  },
   /** Another bill / expense of this supplier with the same invoice number (their own number, kept in Reference); void ones don't count. */
   async duplicateReference(companyId: number, contactId: number, reference: string, exceptDocId?: number | null): Promise<{ id: number; number: string } | null> {
     const ref = reference.trim();
