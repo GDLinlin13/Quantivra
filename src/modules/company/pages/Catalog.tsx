@@ -146,7 +146,8 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
   const sells = usedFor !== 'purchases', buys = usedFor !== 'sales';
   // prices in any currency: the ones your suppliers (or customers) use come first, then your own, then the rest
   const priceCur = Form.useWatch('currency', form) || item.currency || currency;
-  const buyCur = (sells && buys ? Form.useWatch('purchase_currency', form) : null) || priceCur;
+  const buyWatch = Form.useWatch('purchase_currency', form);
+  const buyCur = (sells && buys ? buyWatch : null) || priceCur;
   // special prices for particular customers
   const [customers, setCustomers] = useState<Contact[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
