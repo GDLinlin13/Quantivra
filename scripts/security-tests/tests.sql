@@ -1168,6 +1168,31 @@ DELETE FROM price_lists WHERE name = 'Restaurants';
 DELETE FROM catalog_items WHERE name = 'Pl item';
 COMMIT;
 
+\echo '9t. delivery addresses: a customer's addresses stay inside their company'
+BEGIN; :as_a
+DO $$
+DECLARE v_c bigint;
+BEGIN
+  INSERT INTO contacts (company_id, name, is_customer) VALUES (1, 'Addr customer', true) RETURNING id INTO v_c;
+  INSERT INTO contact_addresses (company_id, contact_id, label, address, is_default) VALUES (1, v_c, 'Warehouse', '2 Warehouse Lane', true);
+  PERFORM set_config('qv.alpha_contact', v_c::text, false);
+  BEGIN INSERT INTO contact_addresses (company_id, contact_id, address) VALUES (2, v_c, 'planted'); RAISE EXCEPTION 'FAIL: A added an address to B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+COMMIT;
+BEGIN; :as_b
+DO $$
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM contact_addresses WHERE company_id = 1), 'FAIL: B sees A delivery addresses';
+  BEGIN INSERT INTO contact_addresses (company_id, contact_id, address) VALUES (2, current_setting('qv.alpha_contact')::bigint, 'x');
+    RAISE EXCEPTION 'FAIL: B put an address on an A customer';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_a
+DELETE FROM contacts WHERE name = 'Addr customer';
+COMMIT;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;

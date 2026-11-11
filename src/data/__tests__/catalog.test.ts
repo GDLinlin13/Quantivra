@@ -43,10 +43,11 @@ describe('invoice line text', () => {
 describe('invoice file names', () => {
   it('fills in the pattern', async () => {
     const { formatDocFileName } = await import('../../utils/payslipFiles');
-    const ctx = { type: 'Invoice', number: 'CCSG2606001', customer: 'Argos Solutions Limited', reference: '', date: '2026-06-01', company: 'CC' };
-    expect(formatDocFileName(undefined, ctx)).toBe('Invoice CCSG2606001 - Argos Solutions Limited.pdf');
-    expect(formatDocFileName('{customer}_{number}_{month} {year}', ctx)).toBe('Argos Solutions Limited_CCSG2606001_June 2026.pdf');
-    expect(formatDocFileName('{number} - {reference} - {customer}', ctx)).toBe('CCSG2606001 - Argos Solutions Limited.pdf');
+    const ctx = { type: 'Invoice', number: 'CCSG2606001', customer: 'Sample Customer Limited', reference: '', date: '2026-06-01', company: 'CC' };
+    expect(formatDocFileName(undefined, ctx)).toBe('Invoice CCSG2606001 - Sample Customer Limited.pdf');
+    expect(formatDocFileName('{customer}_{number}_{month} {year}', ctx)).toBe('Sample Customer Limited_CCSG2606001_June 2026.pdf');
+    expect(formatDocFileName('{yy}{mm}{dd} {mon} {YY} - {number}', ctx)).toBe('260601 Jun 26 - CCSG2606001.pdf');
+    expect(formatDocFileName('{number} - {reference} - {customer}', ctx)).toBe('CCSG2606001 - Sample Customer Limited.pdf');
   });
 });
 
@@ -164,6 +165,13 @@ describe('supplier prices from their bills', () => {
     expect([a.price, a.number, a.prev?.price, a.bills]).toEqual([230, 'B-11', 200, 2]);        // the draft bill does not count
     expect(all.find(x => x.contact_id === 8 && x.item_id === 1)!.price).toBe(180);               // another supplier, another price
     expect(all.find(x => x.contact_id === 8 && x.item_id === 1)!.prev).toBeNull();
+  });
+  it('ignores a line marked as a one-off price', () => {
+    const withOneOff = [...docs, bill(15, '2026-03-05', 7, [{ item_id: 1, unit_price: 5, price_one_off: true }])];
+    const a = supplierPrices(withOneOff as any, items, classes, pieces, 'MYR').find(x => x.contact_id === 7 && x.item_id === 1)!;
+    expect([a.price, a.number]).toEqual([230, 'B-11']);
+    const changes = costChanges([{ item_id: 1, unit_price: 5 }, { item_id: 1, unit_price: 6 }], items, classes, 'MYR', 'SGD', () => ({ price: 230, date: '2026-01-20', number: 'B-11' }));
+    expect(changes[0].lines).toEqual([0, 1]);
   });
   it('keeps a price per weight class for items stocked by weight', () => {
     const p = all.find(x => x.item_id === 2)!;

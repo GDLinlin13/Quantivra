@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Table, Button, Space, Modal, Select, DatePicker, Segmented, Tag, Empty, Typography, message, Input } from 'antd';
 import { PrinterOutlined, DownloadOutlined, FileTextOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
-import { paymentService } from '../../../../services/finance';
+import { paymentService, docService } from '../../../../services/finance';
 import { today, type Contact, type ContactPerson, type FinanceSettings } from '../../../../data/finance';
 import { companyFields, money as fmtMoney, pickPaymentAccount } from '../../../../data/documentLayouts';
 import { buildStatement, statementCurrencies, customersOwing, type Soa, type SoaPayment, type SoaAllocation } from '../../../../data/soa';
@@ -21,7 +21,7 @@ export const DEFAULT_STATEMENT_FILE_NAME = 'Statement of account - {customer} - 
 const KIND_LABEL = { invoice: 'Invoice', credit_note: 'Credit note', payment: 'Payment' } as const;
 
 /** Fields and lists for the statement template, from a real statement. */
-export function statementData(s: Soa, contact: Contact | null, person: ContactPerson | null, company: any, branding: Branding | null, settings: FinanceSettings) {
+export function statementData(s: Soa, contact: Contact | null, person: ContactPerson | null, company: any, branding: Branding | null, settings: FinanceSettings, number = '') {
   const tpl = branding?.templates.soa;
   const inv = branding?.templates.invoice;
   const M = (n: number) => fmtMoney(n, s.currency, tpl?.amountFormat);
@@ -31,7 +31,7 @@ export function statementData(s: Soa, contact: Contact | null, person: ContactPe
   const fields: FieldValues = {
     ...companyFields(company, branding, tpl?.footerNote),
     currency: s.currency,
-    document_title: 'STATEMENT OF ACCOUNT', company_gst_no: settings.gstRegistered ? (settings.gstNumber || '') : '',
+    document_title: 'STATEMENT OF ACCOUNT', statement_no: number, company_gst_no: settings.gstRegistered ? (settings.gstNumber || '') : '',
     statement_date: fmtDate(s.to), period_from: fmtDate(s.from), period_to: fmtDate(s.to),
     period: s.from ? `${longDate(s.from)} to ${longDate(s.to)}` : `All items up to ${longDate(s.to)}`,
     customer_name: contact?.name || '', customer_address: contact?.address || '',
@@ -54,11 +54,11 @@ export function statementData(s: Soa, contact: Contact | null, person: ContactPe
 }
 
 /** One customer's statement in the company's Statement Template, ready to print or turn into a PDF. */
-export function StatementView({ soa, contact, person, company, branding, settings, domId = 'fin-soa-print' }: {
-  soa: Soa; contact: Contact | null; person: ContactPerson | null; company: any; branding: Branding | null; settings: FinanceSettings; domId?: string;
+export function StatementView({ soa, contact, person, company, branding, settings, number = '', domId = 'fin-soa-print' }: {
+  number?: string; soa: Soa; contact: Contact | null; person: ContactPerson | null; company: any; branding: Branding | null; settings: FinanceSettings; domId?: string;
 }) {
   const tpl = branding?.templates.soa;
-  const { fields, lists, M, payRows } = statementData(soa, contact, person, company, branding, settings);
+  const { fields, lists, M, payRows } = statementData(soa, contact, person, company, branding, settings, number);
 
   if (tpl?.layout?.enabled) {
     return (
@@ -78,7 +78,7 @@ export function StatementView({ soa, contact, person, company, branding, setting
   return (
     <div id={domId} style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
       <DocumentShell country={company?.country} branding={branding} companyName={company?.name || ''} forPrint title="STATEMENT OF ACCOUNT"
-        meta={<>As at {soa.to}<br />{fields.period}</>}
+        meta={<>{number && <>{number}<br /></>}As at {fmtDate(soa.to)}<br />{fields.period}</>}
         showLogo={tpl?.showLogo ?? true} showCompanyBlock={tpl?.showCompanyBlock ?? true} footerNote={tpl?.footerNote}>
         <div style={{ fontSize: 13, color: '#111', marginBottom: 12, whiteSpace: 'pre-line' }}>
           <div style={{ color: '#666', fontSize: 12 }}>Statement for</div>
@@ -96,7 +96,7 @@ export function StatementView({ soa, contact, person, company, branding, setting
             <tr><td colSpan={6} style={{ ...td, fontStyle: 'italic' }}>Balance brought forward</td><td style={right}><CellValue text={M(soa.opening)} /></td></tr>
             {lists.rows.map((r, i) => (
               <tr key={i}>
-                <td style={nowrap}>{fmtDate(r.date)}</td><td style={nowrap}>{r.type}</td><td style={nowrap}>{r.number}</td><td style={{ ...td, whiteSpace: 'pre-line', fontSize: 12 }}>{r.description}</td>
+                <td style={nowrap}>{r.date}</td><td style={nowrap}>{r.type}</td><td style={nowrap}>{r.number}</td><td style={{ ...td, whiteSpace: 'pre-line', fontSize: 12 }}>{r.description}</td>
                 <td style={right}>{r.debit ? <CellValue text={r.debit} /> : ''}</td><td style={right}>{r.credit ? <CellValue text={r.credit} /> : ''}</td>
                 <td style={right}><CellValue text={r.balance} /></td>
               </tr>
@@ -140,25 +140,40 @@ function StatementModal({ data, contactId, currency, payments, allocations, onCl
   const [to, setTo] = useState<Dayjs>(dayjs());
   const [from, setFrom] = useState<Dayjs | null>(null);
   const [busy, setBusy] = useState(false);
+  // the statement gets its number (Settings → Document numbers) when it is printed or downloaded, once per statement shown
+  const [number, setNumber] = useState('');
+  useEffect(() => setNumber(''), [cur, from, to, contactId]);
   const soa = useMemo(() => buildStatement({ contactId, currency: cur, from: from ? from.format('YYYY-MM-DD') : null, to: to.format('YYYY-MM-DD'), docs, payments, allocations }),
     [contactId, cur, from, to, docs, payments, allocations]);
-  const fileName = formatDocFileName(branding?.templates.soa.fileName || DEFAULT_STATEMENT_FILE_NAME, {
-    type: 'Statement of account', number: '', customer: contact?.name, reference: '', date: soa.to, company: branding?.legal_name || company?.name,
+  const nameFor = (n: string) => formatDocFileName(branding?.templates.soa.fileName || DEFAULT_STATEMENT_FILE_NAME, {
+    type: 'Statement of account', number: n, customer: contact?.name, reference: '', date: soa.to, company: branding?.legal_name || company?.name,
   }).replace(/\.pdf$/, '');
+  const ensureNumber = async () => {
+    if (number) return number;
+    try {
+      const n = await docService.nextEntityNumber(data.companyId, 'soa', soa.to);
+      setNumber(n);
+      await new Promise(r => setTimeout(r, 200));      // let the statement show its number before it is captured
+      return n;
+    } catch (e: any) { message.error(e.message); return ''; }
+  };
 
-  const print = () => {
+  const print = async () => {
+    const n = await ensureNumber();
     const el = document.getElementById('fin-soa-print');
     if (!el) return;
     const w = window.open('', '_blank', 'width=820,height=1000');
     if (!w) { message.error('Allow pop-ups to print'); return; }
-    w.document.write(`<html><head><title>${fileName}</title><style>${PRINT_CSS}</style></head><body>${el.innerHTML}</body></html>`);
+    w.document.write(`<html><head><title>${nameFor(n)}</title><style>${PRINT_CSS}</style></head><body>${el.innerHTML}</body></html>`);
     w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
   };
   const download = async () => {
-    const el = document.getElementById('fin-soa-print');
-    if (!el) return;
     setBusy(true);
-    try { downloadBlob(await elementsToPdf([el]), `${fileName}.pdf`); } catch (e: any) { message.error(e.message); }
+    try {
+      const n = await ensureNumber();
+      const el = document.getElementById('fin-soa-print');
+      if (el) downloadBlob(await elementsToPdf([el]), `${nameFor(n)}.pdf`);
+    } catch (e: any) { message.error(e.message); }
     setBusy(false);
   };
   const month = (m: number) => { const d = dayjs().subtract(m, 'month'); setFrom(d.startOf('month')); setTo(m === 0 ? dayjs() : d.endOf('month')); };
@@ -176,7 +191,7 @@ function StatementModal({ data, contactId, currency, payments, allocations, onCl
         {from && <><Button size="small" onClick={() => month(0)}>This month</Button><Button size="small" onClick={() => month(1)}>Last month</Button></>}
       </Space>
       <div style={{ width: 760, maxWidth: '100%' }}>
-        <StatementView soa={soa} contact={contact} person={person} company={company} branding={branding} settings={settings} />
+        <StatementView soa={soa} contact={contact} person={person} company={company} branding={branding} settings={settings} number={number} />
       </div>
     </Modal>
   );

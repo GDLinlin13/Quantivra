@@ -67,6 +67,8 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
     { name: 'payment_terms', label: 'Payment terms' },
     { name: 'customer_name', label: 'Customer name' },
     { name: 'customer_address', label: 'Customer address' },
+    { name: 'delivery_address', label: 'Delivery address (invoices with products)' },
+    { name: 'deliver_to', label: 'Delivery address with a “Deliver to” heading (empty when there is none)' },
     { name: 'customer_contact', label: 'Customer person in charge' },
     { name: 'customer_phone', label: 'Customer phone' },
     { name: 'customer_email', label: 'Customer email' },
@@ -87,6 +89,7 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
     ...COMPANY_FIELDS,
     { name: 'document_title', label: 'Document title (STATEMENT OF ACCOUNT)' },
     { name: 'company_gst_no', label: 'Our tax registration no. (GST / VAT)' },
+    { name: 'statement_no', label: 'Statement number (given when printed or downloaded)' },
     { name: 'statement_date', label: 'Statement date' },
     { name: 'period', label: 'Period covered (e.g. 1 Jan 2026 to 31 Mar 2026)' },
     { name: 'period_from', label: 'Period start date' },
@@ -267,6 +270,7 @@ export const LEGACY: Partial<Record<DocKind, (sg: boolean, reg: string) => GridT
     { cells: [[0, { v: '{{company_legal_name}}', cs: 2, b: true }], [2, label('Bill to', { cs: 3 })]] },
     { h: 36, cells: [[0, { v: '{{company_address}}', cs: 2, fs: 11, c: GREY }], [2, { v: '{{customer_name}}\n{{customer_address}}', cs: 3 }]] },
     { h: 36, cells: [[2, { v: 'Attn: {{customer_contact}}\n{{customer_phone}} · {{customer_email}}', cs: 3, fs: 11 }]] },
+    { cells: [[2, { v: '{{deliver_to}}', cs: 3, fs: 11 }]] },
     { cells: [[0, { v: `${reg} {{company_reg_no}}`, cs: 2, fs: 11, c: GREY }], [2, { v: 'Due date {{due_date}} ({{payment_terms}})', cs: 3, fs: 11, c: GREY }]] },
     { h: 14 },
     { cells: [
@@ -391,6 +395,7 @@ export const STARTER_LAYOUTS: Record<DocKind, (country?: string | null, branding
       { cells: [[0, { v: 'Bill to', cs: 5, fs: 12, c: GREY }]] },
       { cells: [[0, { v: '{{customer_name}}', cs: 5, b: true }]] },
       { cells: [[0, { v: '{{customer_address}}', cs: 5 }]] },
+      { cells: [[0, { v: '{{deliver_to}}', cs: 5, fs: 12 }]] },
       { cells: [[0, { v: 'Attn: {{customer_contact}} · {{customer_phone}} · {{customer_email}}', cs: 5, fs: 12 }]] },
       { cells: [[0, { v: `Our ${taxRegLabel(country)} {{company_gst_no}}`, cs: 5, fs: 11, c: GREY }]] },
       { h: 12 },
@@ -419,7 +424,7 @@ export const STARTER_LAYOUTS: Record<DocKind, (country?: string | null, branding
     const sum = (label: string, value: string, extra: GridCell = {}): RowSpec[number] =>
       ({ cells: [[0, { v: label, cs: 6, al: 'right', ...extra }], [6, { v: value, al: 'right', ...extra }]] });
     return build([76, 76, 112, 128, 104, 104, 110], [
-      ...headerRows(country, branding, 'STATEMENT OF ACCOUNT', ['As at {{statement_date}}', '{{period}}'], 1, 3, 3, 'soa'),
+      ...headerRows(country, branding, 'STATEMENT OF ACCOUNT', ['{{statement_no}}', 'As at {{statement_date}}', '{{period}}'], 1, 3, 3, 'soa'),
       { cells: [[0, { v: 'Statement for', cs: 7, fs: 12, c: GREY }]] },
       { cells: [[0, { v: '{{customer_name}}', cs: 7, b: true }]] },
       { cells: [[0, { v: '{{customer_address}}', cs: 7 }]] },
@@ -547,7 +552,7 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
   if (kind === 'soa') {
     return {
       fields: {
-        ...base, document_title: 'STATEMENT OF ACCOUNT', company_gst_no: '', statement_date: '2026-08-31', period: '1 Jul 2026 to 31 Aug 2026',
+        ...base, document_title: 'STATEMENT OF ACCOUNT', statement_no: 'SOA-2026-0001', company_gst_no: '', statement_date: '2026-08-31', period: '1 Jul 2026 to 31 Aug 2026',
         period_from: '2026-07-01', period_to: '2026-08-31',
         customer_name: sg ? 'Acme Trading Pte Ltd' : country === 'AE' ? 'Acme Trading LLC' : 'Acme Trading Ltd',
         customer_address: sg ? '1 Example Road, Singapore 123456' : country === 'AE' ? '1 Example Road, Dubai' : '1 Example Road',
@@ -575,6 +580,8 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
       invoice_no: 'INV-0001', invoice_date: '2026-08-01', due_date: '2026-08-31', payment_terms: `${terms} days`,
       customer_name: sg ? 'Acme Trading Pte Ltd' : country === 'AE' ? 'Acme Trading LLC' : 'Acme Trading Ltd',
       customer_address: sg ? '1 Example Road, Singapore 123456' : country === 'AE' ? '1 Example Road, Dubai' : '1 Example Road',
+      delivery_address: sg ? '2 Warehouse Lane, Singapore 654321' : '2 Warehouse Lane',
+      deliver_to: `Deliver to:\n${sg ? '2 Warehouse Lane, Singapore 654321' : '2 Warehouse Lane'}`,
       customer_contact: 'Mr John Lee', customer_phone: sg ? '+65 6123 4567' : country === 'AE' ? '+971 4 123 4567' : '+1 555 123 4567', customer_email: 'accounts@acme.example', customer_website: 'www.acme.example',
       subtotal: m(3000), total_discount: m(300), subtotal_after_discount: m(2700),
       tax: m(243), total: m(2943),

@@ -20,7 +20,7 @@ export interface MatchLookup {
 
 /**
  * A matched bank line in words. `title`: what it was for — the details typed when matching (e.g. "Bank charges
- * June", "Salaries — May 2026") or, for a payment, "RCT-2026-0001 · Argos Solutions Limited · CCSG2605001".
+ * June", "Salaries — May 2026") or, for a payment, "RCT-2026-0001 · Sample Customer Limited · CCSG2605001".
  * `accounts`: the account names it went to, without codes ("Bank charges", "Net salaries payable").
  */
 export function matchLabel(t: BankTxn, data: FinanceData, look: MatchLookup): { title: string; accounts: string } | null {

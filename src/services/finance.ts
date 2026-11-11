@@ -10,7 +10,7 @@ const DEFAULT_DOC_FORMATS: Record<string, string> = {
 };
 import {
   docTotals, statusAfterPayment, numberYearDiffers, isSalesDoc, bankCodePlan, chartUpgrade, defaultAccountsFor, recommendedChartPlan, DEFAULT_FINANCE_SETTINGS, DOC_NUMBER_ENTITY,
-  type Contact, type ContactPerson, type FinDocument, type DocLine, type DocType, type FinanceSettings, type Account,
+  type Contact, type ContactPerson, type ContactAddress, type FinDocument, type DocLine, type DocType, type FinanceSettings, type Account,
 } from '../data/finance';
 import { splitByShare, payrollSplit } from '../data/ledger';
 
@@ -25,6 +25,25 @@ export const contactService = {
   },
   async people(contactId: number): Promise<ContactPerson[]> {
     return must(await supabase.from('contact_people').select('*').eq('contact_id', contactId).order('is_primary', { ascending: false }).order('name')) || [];
+  },
+  /** A customer's saved delivery addresses (empty until migration 053 is run). */
+  async addressesOf(companyId: number): Promise<ContactAddress[]> {
+    const r = await supabase.from('contact_addresses').select('*').eq('company_id', companyId).order('is_default', { ascending: false }).order('id');
+    return r.error ? [] : r.data || [];
+  },
+  async saveAddresses(companyId: number, contactId: number, rows: ContactAddress[]) {
+    const old = must(await supabase.from('contact_addresses').select('id').eq('contact_id', contactId)) || [];
+    const keep = new Set(rows.filter(r => r.id).map(r => r.id));
+    for (const o of old) if (!keep.has(o.id)) must(await supabase.from('contact_addresses').delete().eq('id', o.id));
+    const list = rows.filter(r => (r.address || '').trim());
+    // one default at most
+    let seen = false;
+    for (const r of list) {
+      const row = { company_id: companyId, contact_id: contactId, label: (r.label || '').trim() || null, address: r.address.trim(), is_default: !!r.is_default && !seen };
+      if (row.is_default) seen = true;
+      if (r.id) must(await supabase.from('contact_addresses').update(row).eq('id', r.id));
+      else must(await supabase.from('contact_addresses').insert(row));
+    }
   },
   async peopleOf(companyId: number): Promise<ContactPerson[]> {
     return must(await supabase.from('contact_people').select('*').eq('company_id', companyId).order('name')) || [];
@@ -374,12 +393,14 @@ export const docService = {
     const row: any = {
       company_id: companyId, doc_type: d.doc_type, status: d.status || 'draft',
       contact_id: d.contact_id || null, contact_person_id: d.contact_person_id || null,
-      issue_date: d.issue_date, due_date: d.due_date || null, reference: d.reference || null, currency: d.currency || 'SGD',
+      issue_date: d.issue_date, due_date: d.due_date || null, reference: (d.reference || '').trim() || null, currency: d.currency || 'SGD',
       tax_inclusive: !!d.tax_inclusive, discounts: d.discounts || [],
       subtotal: t.subtotal, discount_total: t.discount_total, tax_total: t.tax_total, total: t.total,
       notes: d.notes || null, terms: d.terms || null, source_id: d.source_id || null,
       paid_from_account_id: d.paid_from_account_id || null, employee_id: d.employee_id || null,
       payment_account_index: d.payment_account_index ?? null, updated_at: new Date().toISOString(),
+      // the delivery address (migration 053); left out until the document has one
+      ...(d.delivery_address !== undefined ? { delivery_address: (d.delivery_address || '').trim() || null } : {}),
       // a document in another currency keeps its exchange rate (migration 036); left out otherwise
       ...(d.fx_rate !== undefined ? { fx_rate: d.fx_rate || null } : {}),
     };
@@ -402,7 +423,7 @@ export const docService = {
     const rows = lines.filter(l => (l.description || '').trim() || Number(l.unit_price)).map((l, i) => ({
       company_id: companyId, document_id: id, position: i, description: l.description || '',
       quantity: Number(l.quantity) || 0, unit_price: Number(l.unit_price) || 0, discount_pct: Number(l.discount_pct) || 0,
-      tax_rate: Number(l.tax_rate) || 0, account_id: l.account_id || null, ...(l.item_id ? { item_id: l.item_id } : {}), ...(l.piece_id ? { piece_id: l.piece_id } : {}), amount: t.lines[lines.indexOf(l)],
+      tax_rate: Number(l.tax_rate) || 0, account_id: l.account_id || null, ...(l.item_id ? { item_id: l.item_id } : {}), ...(l.piece_id ? { piece_id: l.piece_id } : {}), ...(l.price_one_off ? { price_one_off: true } : {}), amount: t.lines[lines.indexOf(l)],
     }));
     if (rows.length) must(await supabase.from('fin_document_lines').insert(rows));
     // keep paid status right if the total changed
@@ -429,6 +450,20 @@ export const docService = {
       await supabase.from('catalog_pieces').delete().in('id', bought.map((p: any) => p.id));
     }
     must(await supabase.from('fin_documents').delete().eq('id', id));
+  },
+  /** The next number of any kind of document that follows Settings → Document numbers (statements: 'soa'). */
+  async nextEntityNumber(companyId: number, entity: string, date: string): Promise<string> {
+    return must(await supabase.rpc('fin_next_number', { p_company_id: companyId, p_entity: entity, p_date: date }));
+  },
+  /** Another bill / expense of this supplier with the same invoice number (their own number, kept in Reference); void ones don't count. */
+  async duplicateReference(companyId: number, contactId: number, reference: string, exceptDocId?: number | null): Promise<{ id: number; number: string } | null> {
+    const ref = reference.trim();
+    if (!ref) return null;
+    const rows: any[] = must(await supabase.from('fin_documents').select('id, number, reference, status')
+      .eq('company_id', companyId).eq('contact_id', contactId).in('doc_type', ['bill', 'expense']).neq('status', 'void')) || [];
+    const norm = (v: string) => v.trim().replace(/\s+/g, ' ').toLowerCase();
+    const hit = rows.find(r => r.id !== exceptDocId && r.reference && norm(r.reference) === norm(ref));
+    return hit ? { id: hit.id, number: hit.number } : null;
   },
   /** Turn a quotation into a new draft invoice (keeps the lines and discounts). */
   async quoteToInvoice(companyId: number, quoteId: number, dueDays: number): Promise<number> {
@@ -999,7 +1034,7 @@ export async function supplierBills(companyId: number, contactId: number, except
   const docs: any[] = must(await supabase.from('fin_documents').select('id, doc_type, status, number, issue_date, contact_id, currency')
     .eq('company_id', companyId).eq('contact_id', contactId).in('doc_type', ['bill', 'expense'])) || [];
   const ids = docs.map(d => d.id).filter(id => id !== exceptDocId);
-  const lines: any[] = ids.length ? (must(await supabase.from('fin_document_lines').select('document_id, item_id, unit_price, piece_id').in('document_id', ids).not('item_id', 'is', null)) || []) : [];
+  const lines: any[] = ids.length ? (must(await supabase.from('fin_document_lines').select('document_id, item_id, unit_price, piece_id, price_one_off').in('document_id', ids).not('item_id', 'is', null)) || []) : [];
   return docs.filter(d => d.id !== exceptDocId).map(d => ({ ...d, lines: lines.filter(l => l.document_id === d.id).map(l => ({ ...l, unit_price: Number(l.unit_price) })) }));
 }
 

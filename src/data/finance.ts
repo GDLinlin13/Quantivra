@@ -32,6 +32,9 @@ export interface Contact {
 export const contactCurrencies = (c?: { currency?: string | null } | null): string[] =>
   (c?.currency || '').split(/[\s,]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
 
+/** A saved delivery address of a customer (migration 053). */
+export interface ContactAddress { id?: number; company_id?: number; contact_id?: number; label?: string | null; address: string; is_default?: boolean }
+
 export interface ContactPerson {
   id?: number; company_id?: number; contact_id?: number; name: string; designation?: string | null;
   email?: string | null; phone?: string | null; is_primary?: boolean;
@@ -44,6 +47,8 @@ export interface DocLine {
   discount_pct: number; tax_rate: number; account_id?: number | null; item_id?: number | null; amount?: number;
   /** the piece of a by-weight item this line buys or sells (migration 046) */
   piece_id?: number | null;
+  /** a bill line at a price that is not the supplier's price from now on (migration 052) */
+  price_one_off?: boolean;
   /** screen only: the weight of the piece a bill line buys; saved on the piece, not the line */
   weight?: number;
 }
@@ -56,6 +61,8 @@ export interface FinDocument {
   notes: string | null; terms: string | null; source_id: number | null;
   paid_from_account_id?: number | null; employee_id?: number | null;
   payment_account_index?: number | null;
+  /** where the products go (printed on the invoice; a copy of one of the customer's addresses or typed in) */
+  delivery_address?: string | null;
   /** company currency per 1 unit of the document's currency; empty when the document is in the company's currency (migration 036) */
   fx_rate?: number | null;
   created_at?: string;
@@ -543,3 +550,13 @@ export const addDays = (iso: string, days: number) => {
   d.setUTCDate(d.getUTCDate() + (Number(days) || 0));
   return d.toISOString().slice(0, 10);
 };
+
+/**
+ * One payment clearing several documents: they are paid in the order given (oldest first) until the money runs out.
+ * Returns each document's due amount and the part this payment pays; `left` is money over after all are paid in full.
+ */
+export function allocatePayment(amount: number, dues: number[]): { parts: { due: number; part: number }[]; totalDue: number; left: number } {
+  let left = r2(amount);
+  const parts = dues.map(d => { const due = r2(d); const part = Math.max(0, Math.min(due, left)); left = r2(left - part); return { due, part }; });
+  return { parts, totalDue: r2(dues.reduce((t, d) => t + d, 0)), left };
+}

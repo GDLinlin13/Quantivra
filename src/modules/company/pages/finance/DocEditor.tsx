@@ -3,14 +3,14 @@ import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Ta
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { docService, paymentService, catalogService, priceListService, supplierBills, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
+import { docService, paymentService, catalogService, priceListService, supplierBills, contactService as contactsApi, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
 import { ContactDrawer } from './ContactsManager';
 import { ItemDrawer } from '../Catalog';
 import { companyFileService } from '../../../../services/finance';
 import { FileViewer } from '../../../../components/FileViewer';
 import {
   docTotals, addDays, today, DOC_LABEL, DOC_NUMBER_ENTITY, contactCurrencies, STATUS_LABEL, STATUS_COLOR,
-  type DocType, type FinDocument, type DocLine, type DocDiscount, type Contact, type ContactPerson, type FinanceSettings, type Account,
+  type DocType, type FinDocument, type DocLine, type DocDiscount, type Contact, type ContactPerson, type ContactAddress, type FinanceSettings, type Account,
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
@@ -66,6 +66,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   useEffect(() => {
     if (docId) {
       docService.get(docId).then(({ doc: d, lines: ls }) => {
+        loadedPrices.current = new Map(ls.filter(l => l.id).map(l => [l.id!, Number(l.unit_price)]));
         setDoc(d); setDocType(d.doc_type); setLines(ls.length ? ls.map(l => ({ ...l, quantity: Number(l.quantity), unit_price: Number(l.unit_price), discount_pct: Number(l.discount_pct), tax_rate: Number(l.tax_rate) })) : [blankLine(gstRate)]);
         setDiscounts(d.discounts || []); setLoading(false);
       }).catch(e => { message.error(e.message); onClose(); });
@@ -84,6 +85,8 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   const typedNumber = sales && typed.has(DOC_NUMBER_ENTITY[docType]);
   // lines are numbered and can be dragged into another place
   const dragFrom = useRef<number | null>(null);
+  // the prices lines had when this document was opened (an unchanged price is not asked about again)
+  const loadedPrices = useRef(new Map<number, number>());
   const [dragOver, setDragOver] = useState<number | null>(null);
   const moveLine = (from: number, to: number) => {
     if (from === to) return;
@@ -95,6 +98,19 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
 
   const contactList = contacts.filter(c => !c.archived && (sales ? c.is_customer : c.is_supplier) || c.id === doc.contact_id);
   const contactPeople = people.filter(p => p.contact_id === doc.contact_id);
+  // delivery address: for sales documents that have products; the customer can keep several (CRM), one is the default
+  const [addresses, setAddresses] = useState<ContactAddress[]>([]);
+  useEffect(() => { if (sales) contactsApi.addressesOf(companyId).then(setAddresses).catch(() => setAddresses([])); }, [companyId, sales]);
+  const hasProducts = lines.some(l => l.item_id && items.find(x => x.id === l.item_id)?.kind === 'product');
+  const wantsAddress = sales && docType !== 'credit_note' && !!doc.contact_id && hasProducts;
+  const myAddresses = addresses.filter(a => a.contact_id === doc.contact_id);
+  useEffect(() => {
+    // a new document takes the customer's default address as soon as it has a product
+    if (!wantsAddress || docId || doc.delivery_address) return;
+    const d = myAddresses.find(a => a.is_default);
+    if (d) set({ delivery_address: d.address });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantsAddress, doc.contact_id, addresses]);
   // What a line can be booked to: income for sales; for purchases, expenses plus the few asset accounts you can
   // buy into (prepayments, equipment) — never bank / cash / receivables, and not the payroll accounts payroll books itself.
   const AUTO = ['bank', 'cash', 'receivable', 'payroll', 'payroll_director', 'payroll_employer', 'payroll_employer_other', 'gratuity_expense'];
@@ -255,6 +271,11 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     if (docType !== 'expense' && !doc.contact_id) { message.error(sales ? 'Choose a customer' : 'Choose a supplier'); return; }
     if (!lines.some(l => (l.description || '').trim() || l.item_id || Number(l.unit_price))) { message.error('Add at least one line'); return; }
     if (typedNumber && !(doc.number || '').trim()) { message.error(`Enter the ${DOC_LABEL[docType].toLowerCase()} number`); return; }
+    // the supplier's own invoice number can only be recorded once
+    if (!sales && doc.contact_id && (doc.reference || '').trim()) {
+      const dup = await docService.duplicateReference(companyId, doc.contact_id, doc.reference || '', docId).catch(() => null);
+      if (dup) { message.error(`Invoice number ${(doc.reference || '').trim()} is already recorded for this supplier (${dup.number}).`); return; }
+    }
     for (const l of lines) {
       if (!isPieces(l)) continue;
       const nm = items.find(x => x.id === l.item_id)?.name;
@@ -268,32 +289,44 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       if (!fx) { message.error(`Couldn't find a ${docCur} rate — enter it: 1 ${docCur} = ? ${currency}`); return; }
       set({ fx_rate: fx });
     }
-    setSaving(true);
-    try {
-      const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}) } as any, lines, { keepNumber: typedNumber });
-      // pieces bought: one piece per line, with its weight
-      if (!sales && lines.some(isPieces)) await catalogService.syncBillPieces(companyId, id, doc.issue_date!, lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes);
-      // a bill at a different price from this supplier's last one: say so (their prices follow the bills by themselves)
-      if (!sales) {
-        const changes = costChanges(lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes, docCur, currency,
-          (i, c) => { const h = supplierPrice(i, c); return h ? { price: h.price, date: h.date, number: h.number } : undefined; }).filter(c => c.since);
-        if (changes.length) {
-          await new Promise<void>(resolve => Modal.info({
-            title: 'Prices changed from this supplier’s last bill', okText: 'OK', width: 560, onOk: () => resolve(), onCancel: () => resolve(),
-            content: (
-              <div>
-                {changes.map((c, i) => (
-                  <div key={i} style={{ fontSize: 13 }}>
-                    <b>{c.name}</b>{c.label ? ` (${c.label})` : ''}: {docCur} {c.old.toLocaleString(undefined, { maximumFractionDigits: 4 })} → <b>{c.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}</b>
-                    <span style={{ color: '#999' }}> ({c.price > c.old ? '▲' : '▼'} {Math.abs(Math.round(((c.price - c.old) / c.old) * 1000) / 10)}% · was on {c.since})</span>
-                  </div>
-                ))}
-                <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>Supplier prices follow the bills automatically (Catalog → Supplier prices).</div>
-              </div>
-            ),
-          }));
+    // a bill at a different price from this supplier's last one: ask whether it becomes their price from now on
+    let toSave = lines;
+    if (!sales) {
+      const withWeight = lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l));
+      const changes = costChanges(withWeight, items, classes, docCur, currency,
+        (i, c) => { const h = supplierPrice(i, c); return h ? { price: h.price, date: h.date, number: h.number } : undefined; })
+        .map(c => ({ ...c, lines: c.lines.filter(ix => { const l = lines[ix]; return !(l.id && loadedPrices.current.get(l.id) === Number(l.unit_price)) && !l.price_one_off; }) }))
+        .filter(c => c.since && c.lines.length);
+      if (changes.length) {
+        const update = await new Promise<boolean>(resolve => { Modal.confirm({
+          title: 'Prices changed from this supplier’s last bill', okText: 'Yes, update the price', cancelText: 'No, this bill only', width: 580,
+          content: (
+            <div>
+              {changes.map((c, i) => (
+                <div key={i} style={{ fontSize: 13 }}>
+                  <b>{c.name}</b>{c.label ? ` (${c.label})` : ''}: {docCur} {c.old.toLocaleString(undefined, { maximumFractionDigits: 4 })} → <b>{c.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}</b>
+                  <span style={{ color: '#999' }}> ({c.price > c.old ? '▲' : '▼'} {Math.abs(Math.round(((c.price - c.old) / c.old) * 1000) / 10)}% · was on {c.since})</span>
+                </div>
+              ))}
+              <div style={{ marginTop: 8 }}>Update this supplier’s price for next time?</div>
+              <div style={{ color: '#999', fontSize: 12 }}>No: this bill keeps its price, but the supplier’s price stays as it was.</div>
+            </div>
+          ),
+          onOk: () => resolve(true), onCancel: () => resolve(false),
+        }); });
+        if (!update) {
+          const oneOff = new Set(changes.flatMap(c => c.lines));
+          toSave = lines.map((l, ix) => (oneOff.has(ix) ? { ...l, price_one_off: true } : l));
         }
       }
+    }
+    setSaving(true);
+    try {
+      const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}),
+        // the delivery address goes with a document that has products (migration 053)
+        ...(doc.delivery_address || 'delivery_address' in doc ? { delivery_address: wantsAddress ? doc.delivery_address || null : null } : {}) } as any, toSave, { keepNumber: typedNumber });
+      // pieces bought: one piece per line, with its weight
+      if (!sales && lines.some(isPieces)) await catalogService.syncBillPieces(companyId, id, doc.issue_date!, lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes);
       // An expense paid on the spot (from a bank / cash account) is recorded as paid straight away.
       if (docType === 'expense' && doc.paid_from_account_id && (status === 'approved' || doc.status === 'approved')) {
         const { doc: fresh } = await docService.get(id);
@@ -398,10 +431,35 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
             </Form.Item>
           ) : (
             <Form.Item label={sales ? 'Reference / PO no.' : 'Invoice no.'}>
-              <Input value={doc.reference || ''} onChange={e => set({ reference: e.target.value })} />
+              <Input value={doc.reference || ''} onChange={e => set({ reference: e.target.value })}
+                onBlur={() => { if (doc.reference && doc.reference !== doc.reference.trim()) set({ reference: doc.reference.trim() }); if (!sales && doc.contact_id && (doc.reference || '').trim()) docService.duplicateReference(companyId, doc.contact_id, doc.reference || '', docId).then(d => { if (d) message.error(`Invoice number ${(doc.reference || '').trim()} is already recorded for this supplier (${d.number}).`); }).catch(() => null); }} />
             </Form.Item>
           )}
         </div>
+        {wantsAddress && (
+          <div style={{ marginBottom: 12 }}>
+            <Space wrap align="center" style={{ marginBottom: 6 }}>
+              <Text>Delivery address</Text>
+              {myAddresses.length > 0 && (
+                <Select allowClear style={{ width: 280 }} placeholder="Choose a saved address"
+                  value={myAddresses.find(a => a.address.trim() === (doc.delivery_address || '').trim())?.id}
+                  onChange={v => set({ delivery_address: myAddresses.find(a => a.id === v)?.address || '' })}
+                  options={myAddresses.map(a => ({ value: a.id, label: a.label || a.address.split('\n')[0] }))} />
+              )}
+              {(doc.delivery_address || '').trim() && !myAddresses.some(a => a.address.trim() === (doc.delivery_address || '').trim()) && access.canWrite('crm') && (
+                <Button size="small" onClick={async () => {
+                  try {
+                    const text = (doc.delivery_address || '').trim();
+                    await contactsApi.saveAddresses(companyId, doc.contact_id!, [...myAddresses, { label: text.split('\n')[0].slice(0, 40), address: text, is_default: !myAddresses.length }]);
+                    setAddresses(await contactsApi.addressesOf(companyId));
+                    message.success('Address saved to the customer');
+                  } catch (e: any) { message.error(e.message); }
+                }}>Save this address to the customer</Button>
+              )}
+            </Space>
+            <Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} placeholder="Where the products go" value={doc.delivery_address || ''} onChange={e => set({ delivery_address: e.target.value })} />
+          </div>
+        )}
         {currencies.length > 1 && (
           <Space wrap align="center" style={{ marginBottom: 12 }}>
             <Text>Currency</Text>
@@ -454,7 +512,9 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
           ...(catalog.length || access.canWrite('inventory') ? [{ title: 'Item', width: 240, render: (_: any, l: DocLine, i: number) => (
             <Select style={{ width: '100%' }} allowClear showSearch optionFilterProp="label" value={l.item_id ?? undefined} placeholder="From the catalog"
               onChange={v => pickItem(i, v ?? null)} onSearch={setItemSearch} onOpenChange={o => { if (!o) setItemSearch(''); }}
-              options={catalog.map(it => ({ value: it.id, label: `${it.code ? `${it.code} · ` : ''}${it.name}` }))}
+              options={[['Products', 'product'], ['Services', 'service']].map(([label, kind]) => ({
+                label, options: catalog.filter(it => it.kind === kind).map(it => ({ value: it.id, label: `${it.code ? `${it.code} · ` : ''}${it.name}` })),
+              })).filter(g => g.options.length)}
               popupRender={menu => (
                 <>
                   {menu}
@@ -617,7 +677,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       </ConfigProvider>
       {newItem && (
         <ItemDrawer companyId={companyId} item={{ kind: 'product', name: newItem.name, used_for: sales ? 'sales' : 'purchases' } as any} accounts={accounts} settings={settings}
-          currency={currency} categories={[...new Set(items.map(i => i.category).filter(Boolean) as string[])]}
+          currency={currency}
           onClose={() => setNewItem(null)}
           onSaved={async id => {
             const row = newItem.row;

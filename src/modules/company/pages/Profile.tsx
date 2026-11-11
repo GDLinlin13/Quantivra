@@ -256,7 +256,7 @@ export function CompanyProfilePage() {
       <Form.Item label="Download file name" style={{ marginBottom: 12 }}>
         <Input value={tpl.soa.fileName ?? ''} placeholder={DEFAULT_STATEMENT_FILE_NAME} onChange={e => setTplField('soa', 'fileName', e.target.value)} />
         <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
-          e.g. {formatDocFileName(tpl.soa.fileName || DEFAULT_STATEMENT_FILE_NAME, { type: 'Statement of account', number: '', customer: 'Argos Solutions Limited', reference: '', date: '2026-08-31', company: v.legal_name || company.name })}
+          e.g. {formatDocFileName(tpl.soa.fileName || DEFAULT_STATEMENT_FILE_NAME, { type: 'Statement of account', number: '', customer: 'Sample Customer Limited', reference: '', date: '2026-08-31', company: v.legal_name || company.name })}
         </Text>
       </Form.Item>
       <Form.Item label="Footer note" style={{ marginBottom: 0 }}>
@@ -276,7 +276,7 @@ export function CompanyProfilePage() {
       <Form.Item label="Download file name" style={{ marginBottom: 12 }}>
         <Input value={tpl.invoice.fileName ?? ''} placeholder={DEFAULT_DOC_FILE_NAME} onChange={e => setTplField('invoice', 'fileName', e.target.value)} />
         <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
-          e.g. {formatDocFileName(tpl.invoice.fileName, { type: 'Invoice', number: 'INV-0001', customer: 'Argos Solutions Limited', reference: 'PO-123', date: '2026-06-01', company: v.legal_name || company.name })}
+          e.g. {formatDocFileName(tpl.invoice.fileName, { type: 'Invoice', number: 'INV-0001', customer: 'Sample Customer Limited', reference: 'PO-123', date: '2026-06-01', company: v.legal_name || company.name })}
         </Text>
         <div style={{ marginTop: 6 }}>
           {DOC_FILE_NAME_TOKENS.map(tk => (

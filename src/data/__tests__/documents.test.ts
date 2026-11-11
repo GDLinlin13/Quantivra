@@ -6,7 +6,7 @@ describe('documents folders', () => {
     runs: [{ id: 1, period_year: 2026, period_month: 5, status: 'finalised', pay_date: '2026-05-31' }, { id: 2, period_year: 2026, period_month: 6, status: 'draft' }],
     slips: [{ id: 21, run_id: 1, employee_name: 'Ivan Ong', name: 'Payslip - Ivan Ong - May 2026.pdf' }, { id: 22, run_id: 2, employee_name: 'Ivan Ong', name: 'draft.pdf' }],
     docs: [
-      { id: 10, doc_type: 'invoice', number: 'INV-1', issue_date: '2026-06-01', status: 'sent', contact: 'Argos' },
+      { id: 10, doc_type: 'invoice', number: 'INV-1', issue_date: '2026-06-01', status: 'sent', contact: 'Sample' },
       { id: 11, doc_type: 'invoice', number: null, issue_date: '2026-06-02', status: 'draft' },
       { id: 12, doc_type: 'bill', number: 'BILL-1', issue_date: '2026-05-20', status: 'approved', contact: 'ACRA' },
     ],
@@ -24,11 +24,11 @@ describe('documents folders', () => {
     expect(get('payslips').children[0].children.map(m => [m.title, m.files.map(x => x.name)])).toEqual([['05 May', ['Payslip - Ivan Ong - May 2026.pdf']]]);
     const byName = buildFolders(input, { by: 'name' });
     expect(byName.find(x => x.key === 'payslips')!.children.map(c => [c.title, c.files.length])).toEqual([['Ivan Ong', 1]]);
-    expect(byName.find(x => x.key === 'invoice')!.children.map(c => c.title)).toEqual(['Argos']);
+    expect(byName.find(x => x.key === 'invoice')!.children.map(c => c.title)).toEqual(['Sample']);
     expect(byName.find(x => x.key === 'bills')!.children[0].files.map(x => x.name)).toEqual(['BILL-1 - ACRA - acra.pdf']);
   });
   it('files invoices (not drafts), bills, bank statements and other files', () => {
-    expect(get('invoice').children[0].children[0].files.map(x => x.name)).toEqual(['INV-1 - Argos.pdf']);
+    expect(get('invoice').children[0].children[0].files.map(x => x.name)).toEqual(['INV-1 - Sample.pdf']);
     expect(get('bills').children[0].children[0].files.map(x => x.name)).toEqual(['BILL-1 - ACRA - acra.pdf']);
     expect(get('bank').children.map(b => b.title)).toEqual(['DBS - SGD', 'Maybank - USD']);
     expect(get('bank').children[0].children[0].files.map(x => x.name)).toEqual(['DBS May.pdf']);

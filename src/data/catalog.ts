@@ -157,7 +157,7 @@ export function piecesCost(item: Pick<CatalogItem, 'price_basis'>, pieces: Piece
   }, 0) * 100) / 100;
 }
 
-export interface CostChange { item_id: number; class_id: number | null; name: string; label: string; old: number; price: number; since?: string }
+export interface CostChange { item_id: number; class_id: number | null; name: string; label: string; old: number; price: number; since?: string; lines: number[] }
 
 /** What one supplier charged for an item (or one weight class of it): the latest price and the one before that. */
 export interface SupplierPrice {
@@ -166,7 +166,7 @@ export interface SupplierPrice {
   prev: { price: number; date: string; number: string } | null; bills: number;
 }
 interface BillLike { id: number; doc_type: string; status: string; number: string; issue_date: string; contact_id: number | null; currency?: string | null;
-  lines: { item_id?: number | null; unit_price: number; piece_id?: number | null }[] }
+  lines: { item_id?: number | null; unit_price: number; piece_id?: number | null; price_one_off?: boolean | null }[] }
 /**
  * Everything bought from each supplier, worked out from their bills and expenses (drafts and void ones don't count):
  * per item — and per weight class for items stocked by weight — the latest price, and the last different price before it.
@@ -178,7 +178,7 @@ export function supplierPrices(docs: BillLike[], items: Pick<CatalogItem, 'id' |
   for (const d of ordered) {
     for (const l of d.lines) {
       const price = Number(l.unit_price) || 0;
-      if (!l.item_id || !(price > 0)) continue;
+      if (!l.item_id || !(price > 0) || l.price_one_off) continue;          // a one-off price is not the supplier's price
       const it = items.find(x => x.id === l.item_id);
       let classId: number | null = null;
       if (it?.stock_mode === 'pieces' && classes.some(x => x.item_id === l.item_id)) {
@@ -210,7 +210,7 @@ export function supplierPrices(docs: BillLike[], items: Pick<CatalogItem, 'id' |
 export function costChanges(lines: { item_id?: number | null; unit_price: number; weight?: number }[], items: CatalogItem[], classes: WeightClass[],
   docCurrency: string, companyCurrency: string, priorOf?: (itemId: number, classId: number | null) => { price: number; date: string; number: string } | undefined): CostChange[] {
   const out = new Map<string, CostChange>();
-  for (const l of lines) {
+  for (const [idx, l] of lines.entries()) {
     const it = l.item_id ? items.find(x => x.id === l.item_id) : undefined;
     const price = Number(l.unit_price) || 0;
     if (!it || !(price > 0)) continue;
@@ -227,7 +227,8 @@ export function costChanges(lines: { item_id?: number | null; unit_price: number
       old = Number(cls ? cls.purchase_price : it.purchase_price) || 0;
     }
     if (Math.abs(old - price) < 0.005) continue;
-    out.set(`${it.id}:${cls?.id ?? 0}`, { item_id: it.id, class_id: cls?.id ?? null, name: it.name, label: cls ? classLabel(cls) : '', old, price, since });
+    const key = `${it.id}:${cls?.id ?? 0}`;
+    out.set(key, { item_id: it.id, class_id: cls?.id ?? null, name: it.name, label: cls ? classLabel(cls) : '', old, price, since, lines: [...(out.get(key)?.lines || []), idx] });
   }
   return [...out.values()];
 }

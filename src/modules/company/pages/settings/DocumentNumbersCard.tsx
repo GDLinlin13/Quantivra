@@ -23,7 +23,9 @@ export function DocumentNumbersCard({ companyId }: { companyId: number }) {
     supabase.from('company_settings').select('value')
       .eq('company_id', companyId).eq('category', 'company').eq('key', 'numbering_formats').maybeSingle()
       .then(({ data }) => {
-        const list = Array.isArray(data?.value) ? data!.value as NumberingFormat[] : DEFAULTS;
+        const saved = Array.isArray(data?.value) ? data!.value as NumberingFormat[] : DEFAULTS;
+        // statements are numbered too: the row is there to set up even before the first one is printed
+        const list = saved.some(r => r.entity === 'soa') ? saved : [...saved, { entity: 'soa', format: 'SOA-{YYYY}-{0000}', next: 1, reset: 'yearly' as const }];
         setRows(list.map(r => ({ reset: /\{YY(YY)?\}/.test(r.format) ? 'yearly' : 'never', ...r })));
       });
   }, [companyId]);

@@ -8,8 +8,10 @@ export const FILE_NAME_TOKENS: { token: string; label: string }[] = [
   { token: '{id}', label: 'Employee ID' },
   { token: '{designation}', label: 'Designation' },
   { token: '{month}', label: 'Month name (May)' },
+  { token: '{mon}', label: 'Short month (May, Jun)' },
   { token: '{mm}', label: 'Month number (05)' },
   { token: '{year}', label: 'Year (2026)' },
+  { token: '{yy}', label: 'Short year (26)' },
   { token: '{company}', label: 'Company name' },
 ];
 
@@ -25,8 +27,8 @@ export function formatFileName(pattern: string | undefined, ctx: FileNameContext
   const p = (pattern || '').trim() || fallback;
   const values: Record<string, string> = {
     name: ctx.name || '', id: ctx.id || '', designation: ctx.designation || '',
-    month: MONTH_NAMES[ctx.month - 1] || '', mm: String(ctx.month).padStart(2, '0'),
-    year: String(ctx.year), company: ctx.company || '',
+    month: MONTH_NAMES[ctx.month - 1] || '', mon: (MONTH_NAMES[ctx.month - 1] || '').slice(0, 3), mm: String(ctx.month).padStart(2, '0'),
+    year: String(ctx.year), yy: String(ctx.year).slice(-2), company: ctx.company || '',
   };
   let out = p.replace(/\{(\w+)\}/g, (m, k: string) => (k.toLowerCase() in values ? values[k.toLowerCase()] : m));
   out = out
@@ -50,7 +52,9 @@ export const DOC_FILE_NAME_TOKENS: { token: string; label: string }[] = [
   { token: '{dd}', label: 'Day (01)' },
   { token: '{mm}', label: 'Month number (06)' },
   { token: '{month}', label: 'Month name (June)' },
+  { token: '{mon}', label: 'Short month (Jun)' },
   { token: '{year}', label: 'Year (2026)' },
+  { token: '{yy}', label: 'Short year (26)' },
   { token: '{company}', label: 'Company name' },
 ];
 export interface DocFileNameContext { type: string; number?: string | null; customer?: string; reference?: string | null; date: string; company?: string }
@@ -61,7 +65,7 @@ export function formatDocFileName(pattern: string | undefined, ctx: DocFileNameC
   const [y, m, d] = (ctx.date || '').split('-');
   const values: Record<string, string> = {
     type: ctx.type, number: ctx.number || '', customer: ctx.customer || '', reference: ctx.reference || '',
-    date: ctx.date || '', dd: d || '', mm: m || '', month: MONTH_NAMES[Number(m) - 1] || '', year: y || '', company: ctx.company || '',
+    date: ctx.date || '', dd: d || '', mm: m || '', month: MONTH_NAMES[Number(m) - 1] || '', mon: (MONTH_NAMES[Number(m) - 1] || '').slice(0, 3), year: y || '', yy: (y || '').slice(-2), company: ctx.company || '',
   };
   return `${cleanFileName(p.replace(/\{(\w+)\}/g, (x, k: string) => (k.toLowerCase() in values ? values[k.toLowerCase()] : x))) || ctx.type}.pdf`;
 }
