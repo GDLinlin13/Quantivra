@@ -9,7 +9,7 @@ const SG_ONLY_FIELDS = new Set(['cpf_employee', 'cpf_employer', 'cpf_total', 'sd
 const HK_ONLY_FIELDS = new Set(['mpf_employee', 'mpf_employer', 'mpf_total']);
 const isHK = (country?: string | null) => (country || '').toUpperCase() === 'HK';
 
-export type DocKind = 'payslip' | 'invoice';
+export type DocKind = 'payslip' | 'invoice' | 'soa';
 
 export interface FieldDef { name: string; label: string }
 export interface ListDef { name: string; label: string; fields: FieldDef[] }
@@ -83,6 +83,33 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
     { name: 'bank_details', label: 'Bank / payment details' },
     { name: 'payment_account', label: 'Bank account name (which bank is shown)' },
   ],
+  soa: [
+    ...COMPANY_FIELDS,
+    { name: 'document_title', label: 'Document title (STATEMENT OF ACCOUNT)' },
+    { name: 'company_gst_no', label: 'Our tax registration no. (GST / VAT)' },
+    { name: 'statement_date', label: 'Statement date' },
+    { name: 'period', label: 'Period covered (e.g. 1 Jan 2026 to 31 Mar 2026)' },
+    { name: 'period_from', label: 'Period start date' },
+    { name: 'period_to', label: 'Period end date' },
+    { name: 'customer_name', label: 'Customer name' },
+    { name: 'customer_address', label: 'Customer address' },
+    { name: 'customer_contact', label: 'Customer person in charge' },
+    { name: 'customer_phone', label: 'Customer phone' },
+    { name: 'customer_email', label: 'Customer email' },
+    { name: 'opening_balance', label: 'Balance brought forward' },
+    { name: 'total_charges', label: 'Total invoiced in the period' },
+    { name: 'total_credits', label: 'Total paid and credited in the period' },
+    { name: 'closing_balance', label: 'Amount due (closing balance)' },
+    { name: 'overdue_amount', label: 'Overdue amount' },
+    { name: 'age_current', label: 'Ageing: not yet due' },
+    { name: 'age_1_30', label: 'Ageing: 1–30 days overdue' },
+    { name: 'age_31_60', label: 'Ageing: 31–60 days overdue' },
+    { name: 'age_61_90', label: 'Ageing: 61–90 days overdue' },
+    { name: 'age_90_plus', label: 'Ageing: over 90 days overdue' },
+    { name: 'notes', label: 'Notes' },
+    { name: 'bank_details', label: 'Bank / payment details' },
+    { name: 'payment_account', label: 'Bank account name (which bank is shown)' },
+  ],
 };
 
 const nameAmount = (list: string, what: string): FieldDef[] => [
@@ -125,6 +152,26 @@ export const DOC_LISTS: Record<DocKind, ListDef[]> = {
       name: 'discounts', label: 'Discounts', fields: [
         { name: 'discounts.name', label: 'Discount name' },
         { name: 'discounts.amount', label: 'Discount amount' },
+      ],
+    },
+  ],
+  soa: [
+    {
+      name: 'rows', label: 'Statement lines', fields: [
+        { name: 'rows.date', label: 'Date' },
+        { name: 'rows.type', label: 'Type (Invoice / Credit note / Payment)' },
+        { name: 'rows.number', label: 'Document number' },
+        { name: 'rows.reference', label: 'Reference' },
+        { name: 'rows.description', label: 'Description' },
+        { name: 'rows.debit', label: 'Charge (invoiced)' },
+        { name: 'rows.credit', label: 'Credit (paid or credited)' },
+        { name: 'rows.balance', label: 'Running balance' },
+      ],
+    },
+    {
+      name: 'payment', label: 'Payment details', fields: [
+        { name: 'payment.label', label: 'Payment detail label' },
+        { name: 'payment.value', label: 'Payment detail value' },
       ],
     },
   ],
@@ -173,7 +220,7 @@ type RowSpec = { h?: number; repeat?: string; cells?: [number, GridCell][] }[];
 const label = (v: string, extra: GridCell = {}): GridCell => ({ v, b: true, c: GREY, ...extra });
 
 /** The older grid starters (one company's own design). Kept only to recognise untouched copies of them. */
-export const LEGACY: Record<DocKind, (sg: boolean, reg: string) => GridTemplate> = {
+export const LEGACY: Partial<Record<DocKind, (sg: boolean, reg: string) => GridTemplate>> = {
   payslip: (sg, reg) => build([130, 16, 140, 40, 130, 16, 140], [
     { h: 30, cells: [[0, { v: '{{logo}}', rs: 3, cs: 3, va: 'middle' }], [4, { v: `${reg} : {{company_reg_no}}`, cs: 3, b: true, al: 'right' }]] },
     { h: 36, cells: [[4, { v: '{{company_address}}', cs: 3, fs: 11, al: 'right' }]] },
@@ -248,7 +295,9 @@ export function isLegacyStarter(kind: DocKind, t: GridTemplate | null | undefine
   if (!t) return false;
   const key = (x: GridTemplate) => canonical({ cols: x.cols.map(w => Math.max(20, w)), rows: x.rows, cells: x.cells });
   const mine = key(t);
-  return [true, false].some(sg => ['UEN', 'Reg. No.', companyRegLabel(country)].some(reg => key(LEGACY[kind](sg, reg)) === mine));
+  const old = LEGACY[kind];
+  if (!old) return false;
+  return [true, false].some(sg => ['UEN', 'Reg. No.', companyRegLabel(country)].some(reg => key(old(sg, reg)) === mine));
 }
 
 /** Key order does not matter (the database reorders keys). */
@@ -259,8 +308,8 @@ function canonical(v: any): string {
 }
 
 /** The company header of the pre-built design: logo, name and details on the left, title and dates on the right. */
-function headerRows(country: string | null | undefined, branding: any, title: string, meta: string[], logoCols: number, nameCols: number, rightCols: number): RowSpec {
-  const kindKey = title === 'PAYSLIP' ? 'payslip' : 'invoice';
+function headerRows(country: string | null | undefined, branding: any, title: string, meta: string[], logoCols: number, nameCols: number, rightCols: number, kind?: DocKind): RowSpec {
+  const kindKey = kind || (title === 'PAYSLIP' ? 'payslip' : 'invoice');
   const opts = branding?.templates?.[kindKey] || {};
   const logo = (opts.showLogo ?? true);
   const block = (opts.showCompanyBlock ?? true);
@@ -364,6 +413,41 @@ export const STARTER_LAYOUTS: Record<DocKind, (country?: string | null, branding
       ...footerRows(branding, 'invoice', 5),
     ]);
   },
+  soa: (country, branding) => {
+    const accent = branding?.accent_color || '#1677ff';
+    const head: GridCell = { b: true, bg: SHADE, bb: true };
+    const sum = (label: string, value: string, extra: GridCell = {}): RowSpec[number] =>
+      ({ cells: [[0, { v: label, cs: 6, al: 'right', ...extra }], [6, { v: value, al: 'right', ...extra }]] });
+    return build([76, 76, 112, 128, 104, 104, 110], [
+      ...headerRows(country, branding, 'STATEMENT OF ACCOUNT', ['As at {{statement_date}}', '{{period}}'], 1, 3, 3, 'soa'),
+      { cells: [[0, { v: 'Statement for', cs: 7, fs: 12, c: GREY }]] },
+      { cells: [[0, { v: '{{customer_name}}', cs: 7, b: true }]] },
+      { cells: [[0, { v: '{{customer_address}}', cs: 7 }]] },
+      { cells: [[0, { v: 'Attn: {{customer_contact}} · {{customer_phone}} · {{customer_email}}', cs: 7, fs: 12 }]] },
+      { h: 12 },
+      { cells: [[0, { v: 'Date', ...head }], [1, { v: 'Type', ...head }], [2, { v: 'Number', ...head }], [3, { v: 'Description', ...head }],
+        [4, { v: 'Charges', ...head, al: 'right' }], [5, { v: 'Credits', ...head, al: 'right' }], [6, { v: 'Balance', ...head, al: 'right' }]] },
+      { cells: [[0, { v: 'Balance brought forward', cs: 6, i: true, bb: true }], [6, { v: '{{opening_balance}}', al: 'right', bb: true }]] },
+      { repeat: 'rows', cells: [
+        [0, { v: '{{rows.date}}', bb: true }], [1, { v: '{{rows.type}}', bb: true }], [2, { v: '{{rows.number}}', bb: true }],
+        [3, { v: '{{rows.description}}', bb: true, fs: 12 }], [4, { v: '{{rows.debit}}', al: 'right', bb: true }],
+        [5, { v: '{{rows.credit}}', al: 'right', bb: true }], [6, { v: '{{rows.balance}}', al: 'right', bb: true }],
+      ] },
+      sum('Total charges', '{{total_charges}}'),
+      sum('Total credits', '-{{total_credits}}'),
+      sum('Amount due', '{{closing_balance}}', { b: true, c: accent, fs: 14 }),
+      { h: 12 },
+      { cells: [[0, { v: 'Ageing', cs: 7, b: true, fs: 12 }]] },
+      { cells: [[0, { v: 'Not yet due', ...{ fs: 11, c: GREY } }], [1, { v: '1–30 days', fs: 11, c: GREY }], [2, { v: '31–60 days', fs: 11, c: GREY }], [3, { v: '61–90 days', fs: 11, c: GREY }], [4, { v: 'Over 90 days', cs: 2, fs: 11, c: GREY }], [6, { v: 'Overdue', fs: 11, c: GREY, al: 'right' }]] },
+      { cells: [[0, { v: '{{age_current}}', fs: 12 }], [1, { v: '{{age_1_30}}', fs: 12 }], [2, { v: '{{age_31_60}}', fs: 12 }], [3, { v: '{{age_61_90}}', fs: 12 }], [4, { v: '{{age_90_plus}}', cs: 2, fs: 12 }], [6, { v: '{{overdue_amount}}', fs: 12, al: 'right', b: true }]] },
+      { h: 12 },
+      { cells: [[0, { v: '{{notes}}', cs: 7, fs: 12 }]] },
+      { h: 10 },
+      { cells: [[0, { v: 'Payment details', cs: 7, b: true, fs: 12 }]] },
+      { repeat: 'auto', cells: [[0, { v: '{{payment.label}}', cs: 2, fs: 12 }], [2, { v: '{{payment.value}}', cs: 5, fs: 12 }]] },
+      ...footerRows(branding, 'soa', 7),
+    ]);
+  },
 };
 
 // ---- filling in -------------------------------------------------------------
@@ -430,7 +514,7 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
   const cur = company?.currency || 'SGD';
   const fmt = branding?.templates?.[kind]?.amountFormat;
   const m = (n: number) => money(n, cur, fmt);
-  const base = companyFields(company, branding, kind === 'payslip' ? branding?.templates?.payslip?.footerNote : branding?.templates?.invoice?.footerNote);
+  const base = companyFields(company, branding, branding?.templates?.[kind]?.footerNote);
   const country = (company?.country || 'SG').toUpperCase();
   const sg = isSG(country);
   if (kind === 'payslip') {
@@ -457,6 +541,30 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
           { name: 'CPF', employee: m(1600), employer: m(1360), total: m(2960) },
           { name: 'SDL', employee: m(0), employer: m(11.25), total: m(11.25) },
         ] : hk ? [{ name: 'MPF', employee: m(475), employer: m(475), total: m(950) }] : [],
+      },
+    };
+  }
+  if (kind === 'soa') {
+    return {
+      fields: {
+        ...base, document_title: 'STATEMENT OF ACCOUNT', company_gst_no: '', statement_date: '2026-08-31', period: '1 Jul 2026 to 31 Aug 2026',
+        period_from: '2026-07-01', period_to: '2026-08-31',
+        customer_name: sg ? 'Acme Trading Pte Ltd' : country === 'AE' ? 'Acme Trading LLC' : 'Acme Trading Ltd',
+        customer_address: sg ? '1 Example Road, Singapore 123456' : country === 'AE' ? '1 Example Road, Dubai' : '1 Example Road',
+        customer_contact: 'Mr John Lee', customer_phone: sg ? '+65 6123 4567' : country === 'AE' ? '+971 4 123 4567' : '+1 555 123 4567', customer_email: 'accounts@acme.example',
+        opening_balance: m(1200), total_charges: m(3000), total_credits: m(2200), closing_balance: m(2000), overdue_amount: m(1200),
+        age_current: m(800), age_1_30: m(0), age_31_60: m(1200), age_61_90: m(0), age_90_plus: m(0), notes: '',
+        bank_details: bankDetailsText(branding?.templates?.invoice),
+        payment_account: pickPaymentAccount(branding?.templates?.invoice)?.title || `Main account (${cur})`,
+      },
+      lists: {
+        rows: [
+          { date: '2026-07-03', type: 'Invoice', number: 'INV-0007', reference: 'PO-88', description: '', debit: m(1800), credit: '', balance: m(3000) },
+          { date: '2026-07-21', type: 'Payment', number: 'RCT-0004', reference: 'Bank transfer', description: 'Payment received — INV-0005', credit: m(1200), debit: '', balance: m(1800) },
+          { date: '2026-08-10', type: 'Credit note', number: 'CN-0001', reference: '', description: 'Credit note', credit: m(1000), debit: '', balance: m(800) },
+          { date: '2026-08-24', type: 'Invoice', number: 'INV-0009', reference: '', description: '', debit: m(1200), credit: '', balance: m(2000) },
+        ],
+        payment: paymentRows(branding?.templates?.invoice, true).map(r => ({ label: r.label, value: r.value })),
       },
     };
   }
@@ -545,5 +653,6 @@ export const LIST_EXAMPLES: Record<string, string> = {
   statutory: 'CPF, SDL, CDAC… (one line per scheme, with the employee and employer share)',
   lines: 'Whatever is typed on each invoice line, e.g. Consulting services',
   payment: 'Account Name, Bank, Account No… — the lines you fill in under Invoice settings; put the label in one cell and the value in the next',
+  rows: 'One line per invoice, credit note and payment in the period, with the running balance',
   discounts: 'e.g. Loyalty discount (10%), Early payment discount — one line per discount; nothing is printed when there is none',
 };

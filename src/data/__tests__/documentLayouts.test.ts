@@ -25,7 +25,7 @@ describe('templates belong to each company', () => {
   });
 
   it('the older starter left untouched counts as not designed yet; own designs stay', () => {
-    const old = { ...LEGACY.payslip(true, 'UEN'), enabled: false };
+    const old = { ...LEGACY.payslip!(true, 'UEN'), enabled: false };
     expect(ownLayout('payslip', JSON.parse(JSON.stringify(old)), 'SG')).toBeUndefined();
     expect(ownLayout('payslip', { ...old, enabled: true }, 'AE')).toBeUndefined();
     expect(texts(ownLayout('payslip', { ...old, enabled: true }, 'SG'))).toMatch(/cpf_employer/);

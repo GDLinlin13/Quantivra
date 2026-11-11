@@ -13,6 +13,7 @@ import { Accounting } from './finance/Accounting';
 import { Bank } from './finance/Bank';
 import { PayrollPayables } from './finance/PayrollPayables';
 import { StaffClaims } from './finance/StaffClaims';
+import { Statements } from './finance/Statements';
 import { useCompanyAccess } from '../../../contexts/CompanyAccess';
 
 const { Title } = Typography;
@@ -66,6 +67,7 @@ export function CompanyFinancePage() {
           { key: 'invoices', label: 'Invoices', children: <DocList data={d} docType="invoice" /> },
           { key: 'quotes', label: 'Quotations', children: <DocList data={d} docType="quote" /> },
           { key: 'received', label: 'Payments received', children: <PaymentsList data={d} direction="in" /> },
+          { key: 'statements', label: 'Statements', children: <Statements data={d} /> },
         ]} />
       )}
       {area === 'purchases' && (

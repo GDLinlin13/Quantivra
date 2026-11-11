@@ -91,6 +91,18 @@ function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
                 ordinary (non-repeating) rows. SDL is a levy the company pays, not CPF; it has its own <code style={code} onClick={() => onInsert('sdl')} title="Click to put it in the selected cell">{'{{sdl}}'}</code> field.
               </p>}
             </>
+          ) : kind === 'soa' ? (
+            <>
+            <p style={{ margin: '0 0 8px' }}>
+              Each statement has a different number of lines. You design <b>one</b> row with the statement-line fields in it, e.g.
+               <code style={code} onClick={() => onInsert('rows.date')} title="Click to put it in the selected cell">{'{{rows.date}}'}</code>, <code style={code} onClick={() => onInsert('rows.number')} title="Click to put it in the selected cell">{'{{rows.number}}'}</code> and <code style={code} onClick={() => onInsert('rows.balance')} title="Click to put it in the selected cell">{'{{rows.balance}}'}</code>. That row turns
+              yellow ↻ and, when printed, is copied once per invoice, credit note and payment.
+            </p>
+            <p style={{ margin: '0 0 8px' }}>
+              <b>Payment details:</b> put <code style={code} onClick={() => onInsert('payment.label')} title="Click to put it in the selected cell">{'{{payment.label}}'}</code> in the left cell and
+               <code style={code} onClick={() => onInsert('payment.value')} title="Click to put it in the selected cell">{'{{payment.value}}'}</code> in the right cell of one row. They come from the Invoice Template.
+            </p>
+            </>
           ) : (
             <>
             <p style={{ margin: '0 0 8px' }}>
@@ -126,6 +138,7 @@ function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
           <p style={{ margin: '8px 0 0', color: 'rgba(240,237,230,0.55)' }}>
             {kind === 'payslip'
               ? `The item names come from payroll: Basic Salary from the employee record, the statutory ones${sg ? ' (CPF, SDL, CDAC…)' : ''} are worked out automatically, and the rest are whatever you add under Payroll → Pay items. You never type item codes — the payslip shows the names.`
+              : kind === 'soa' ? 'The lines are the customer’s invoices, credit notes and payments, with the running balance.'
               : 'The item names are whatever is typed on each invoice line.'}
           </p>
         </div>
