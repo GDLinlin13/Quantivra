@@ -473,7 +473,9 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
           ...(catalog.length || access.canWrite('inventory') ? [{ title: 'Item', width: 240, render: (_: any, l: DocLine, i: number) => (
             <Select style={{ width: '100%' }} allowClear showSearch optionFilterProp="label" value={l.item_id ?? undefined} placeholder="From the catalog"
               onChange={v => pickItem(i, v ?? null)} onSearch={setItemSearch} onOpenChange={o => { if (!o) setItemSearch(''); }}
-              options={catalog.map(it => ({ value: it.id, label: `${it.code ? `${it.code} · ` : ''}${it.name}` }))}
+              options={[['Products', 'product'], ['Services', 'service']].map(([label, kind]) => ({
+                label, options: catalog.filter(it => it.kind === kind).map(it => ({ value: it.id, label: `${it.code ? `${it.code} · ` : ''}${it.name}` })),
+              })).filter(g => g.options.length)}
               popupRender={menu => (
                 <>
                   {menu}
