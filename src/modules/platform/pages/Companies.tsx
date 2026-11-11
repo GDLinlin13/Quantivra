@@ -10,6 +10,7 @@ import { currencyOptions } from '../../../utils/currencies';
 import { packFor2026 } from '../../../data/country-law-2026';
 import type { Company } from '../../../types';
 import { MODULES } from '../../../types';
+import { SWITCHABLE_MODULES } from '../../../data/permissionGuide';
 import { provisionCompany, getProvisionSteps, type ProvisionInput, type ProvisionResult, type ProvisionStep } from '../../../services/provisioning';
 
 const { Title, Text } = Typography;
@@ -42,7 +43,9 @@ const DEFAULT_COUNTRIES = [
   { code: 'VN', name: '\uD83C\uDDFB\uD83C\uDDF3 Vietnam', currency: 'VND', phone_code: '+84' },
 ];
 
-const ALL_FEATURES_MODULES = ['Dashboard', 'HR', 'Payroll', 'Leave', 'Attendance', 'Claims', 'Finance', 'Accounting', 'Inventory', 'Purchasing', 'Sales', 'CRM', 'Projects', 'Assets', 'Reports', 'AI'];
+// The sections a company can have (the Dashboard is always there). Accounting, assets, sales, purchasing and reports are all part of Finance.
+const ALL_FEATURES_MODULES = SWITCHABLE_MODULES;
+const moduleLabel = (key: string) => (MODULES as Record<string, { label: string }>)[key]?.label || key;
 
 
 const GLOBAL_CHART_OF_ACCOUNTS = [
@@ -94,10 +97,10 @@ const GLOBAL_CHART_OF_ACCOUNTS = [
 ];
 
 const BUSINESS_PACK_PRESETS: Record<string, { label: string; desc: string; modules: string[] }> = {
-  starter: { label: 'Starter', desc: 'Core HR essentials', modules: ['Dashboard', 'HR', 'Leave', 'Claims'] },
-  hr_payroll: { label: 'HR & Payroll', desc: 'Full HR with payroll', modules: ['Dashboard', 'HR', 'Payroll', 'Leave', 'Attendance', 'Claims'] },
-  finance: { label: 'Finance', desc: 'Accounting & finance', modules: ['Dashboard', 'Finance', 'Accounting', 'Assets'] },
-  trading: { label: 'Trading', desc: 'Finance + inventory', modules: ['Dashboard', 'Finance', 'Inventory', 'Purchasing', 'Sales'] },
+  starter: { label: 'Starter', desc: 'Core HR essentials', modules: ['employees', 'leave', 'claims'] },
+  hr_payroll: { label: 'HR & Payroll', desc: 'Full HR with payroll', modules: ['employees', 'payroll', 'leave', 'attendance', 'claims'] },
+  finance: { label: 'Finance', desc: 'Accounting & finance', modules: ['finance'] },
+  trading: { label: 'Trading', desc: 'Finance + catalog + CRM', modules: ['finance', 'inventory', 'crm'] },
   enterprise: { label: 'Enterprise', desc: 'All modules', modules: ALL_FEATURES_MODULES },
 };
 
@@ -486,7 +489,7 @@ export function CompaniesPage() {
                 <Row gutter={[8, 8]}>
                   {ALL_FEATURES_MODULES.map(key => (
                     <Col span={8} key={key}>
-                      <Checkbox value={key} style={{ color: '#f0ede6' }}>{key}</Checkbox>
+                      <Checkbox value={key} style={{ color: '#f0ede6' }}>{moduleLabel(key)}</Checkbox>
                     </Col>
                   ))}
                 </Row>
@@ -518,7 +521,7 @@ export function CompaniesPage() {
               <Card size="small" style={{ background: '#0b0f12', borderColor: 'rgba(255,255,255,0.08)' }}>
                 <Text style={{ color: 'rgba(240,237,230,0.5)', display: 'block', marginBottom: 8 }}>Modules ({((form.getFieldValue('modules') as string[]) || []).length} enabled)</Text>
                 <div>
-                  {((form.getFieldValue('modules') as string[]) || []).map(k => <Tag key={k}>{k}</Tag>)}
+                  {((form.getFieldValue('modules') as string[]) || []).map(k => <Tag key={k}>{moduleLabel(k)}</Tag>)}
                 </div>
               </Card>
             </div>

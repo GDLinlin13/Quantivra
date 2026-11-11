@@ -2,6 +2,7 @@ import { supabase } from '../utils/supabase';
 import { adminUsersService } from './adminUsers';
 import { suggestCompanyCode, COMPANY_CODE_PATTERN, COMPANY_CODE_RULE_TEXT } from '../utils/loginEmail';
 import { packFor2026 } from '../data/country-law-2026';
+import { SWITCHABLE_MODULES } from '../data/permissionGuide';
 
 export interface ProvisionInput {
   name: string;
@@ -234,6 +235,12 @@ async function provisionSteps(input: ProvisionInput, onProgress: ProgressCallbac
     if (error) throw error;
   });
 
+  // The sections not chosen are switched off (Settings → Modules can change this later)
+  await supabase.from('company_settings').upsert({
+    company_id: company.id, category: 'company', key: 'modules_off',
+    value: { modules: SWITCHABLE_MODULES.filter(m => !input.modules.includes(m)) },
+  }, { onConflict: 'company_id,category,key' });
+
   const departments: string[] = ['Management', 'Finance', 'HR', 'Operations'];
   const positions: string[] = ['CEO', 'Manager', 'Executive', 'Assistant'];
   // The country pack's statutory leave list, falling back to a generic set.
@@ -414,8 +421,7 @@ async function provisionSteps(input: ProvisionInput, onProgress: ProgressCallbac
   if (input.modules.includes('leave')) workflowTemplates.push('Leave Approval');
   if (input.modules.includes('claims')) workflowTemplates.push('Claim Approval');
   if (input.modules.includes('attendance')) workflowTemplates.push('Attendance Correction');
-  if (input.modules.includes('purchasing')) workflowTemplates.push('Purchase Order');
-  if (input.modules.includes('finance') || input.modules.includes('accounting')) workflowTemplates.push('Journal Approval');
+  if (input.modules.includes('finance')) workflowTemplates.push('Journal Approval');
 
   const savedWorkflows: any[] = [];
   await run(16, async () => {
