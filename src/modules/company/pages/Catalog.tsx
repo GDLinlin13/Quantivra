@@ -107,7 +107,7 @@ function ItemsTab({ companyId, items, stock, accounts, settings, currency, reloa
   const [editing, setEditing] = useState<Partial<CatalogItem> | null>(null);
   const q = search.trim().toLowerCase();
   const shown = items.filter(i => (showArchived || !i.archived) && (kind === 'all' || i.kind === kind) && (use === 'all' || (i.used_for || 'both') === 'both' || i.used_for === use)
-    && (!q || [i.name, i.code, i.category, i.description].some(v => (v || '').toLowerCase().includes(q))));
+    && (!q || [i.name, i.code, i.description].some(v => (v || '').toLowerCase().includes(q))));
   const M = (n: number) => money(n, currency);
   return (
     <div>
@@ -115,7 +115,7 @@ function ItemsTab({ companyId, items, stock, accounts, settings, currency, reloa
         <Space wrap>
           <Segmented value={kind} onChange={v => setKind(String(v))} options={[{ value: 'all', label: 'All' }, { value: 'product', label: 'Products' }, { value: 'service', label: 'Services' }]} />
           <Segmented value={use} onChange={v => setUse(String(v))} options={[{ value: 'all', label: 'Sales & purchases' }, { value: 'sales', label: 'Sales' }, { value: 'purchases', label: 'Purchases' }]} />
-          <Input allowClear prefix={<SearchOutlined />} placeholder="Search name, code, category" style={{ width: 260 }} value={search} onChange={e => setSearch(e.target.value)} />
+          <Input allowClear prefix={<SearchOutlined />} placeholder="Search name or code" style={{ width: 260 }} value={search} onChange={e => setSearch(e.target.value)} />
           <Space size={6}><Switch size="small" checked={showArchived} onChange={setShowArchived} /><Text type="secondary">Show archived</Text></Space>
         </Space>
         {canWrite && <Space>
@@ -130,7 +130,6 @@ function ItemsTab({ companyId, items, stock, accounts, settings, currency, reloa
           { title: 'Name', key: 'n', render: (_, i) => <a onClick={() => setEditing(i)}>{i.name}</a>, sorter: (a, b) => a.name.localeCompare(b.name) },
           { title: 'Type', key: 'k', width: 100, render: (_, i) => <Tag color={i.kind === 'product' ? 'blue' : 'purple'}>{i.kind === 'product' ? 'Product' : 'Service'}</Tag> },
           { title: 'Used for', key: 'u', width: 110, render: (_, i) => ({ sales: 'Sales', purchases: 'Purchases', both: 'Both' } as Record<string, string>)[i.used_for || 'both'] },
-          { title: 'Category', dataIndex: 'category', render: (v: string | null) => v || '—' },
           {
             title: 'In stock', key: 'st', align: 'right' as const, render: (_, i) => {
               if (!i.track_stock) return <Text type="secondary">—</Text>;
@@ -153,14 +152,13 @@ function ItemsTab({ companyId, items, stock, accounts, settings, currency, reloa
           },
         ]} />
       {editing && <ItemDrawer companyId={companyId} item={editing} accounts={accounts} settings={settings} currency={currency}
-        categories={[...new Set(items.map(i => i.category).filter(Boolean) as string[])]}
         onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
     </div>
   );
 }
 
-export function ItemDrawer({ companyId, item, accounts, settings, currency, categories, onClose, onSaved }: {
-  companyId: number; item: Partial<CatalogItem>; accounts: Account[]; settings: FinanceSettings; currency: string; categories: string[];
+export function ItemDrawer({ companyId, item, accounts, settings, currency, onClose, onSaved }: {
+  companyId: number; item: Partial<CatalogItem>; accounts: Account[]; settings: FinanceSettings; currency: string;
   onClose: () => void; onSaved: (id: number) => void;
 }) {
   const canWrite = useCompanyAccess().canWrite('inventory');
@@ -274,12 +272,6 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, cate
           </div>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
-          <Form.Item name="category" label="Category">
-            <Select allowClear showSearch mode={undefined} options={categories.map(c => ({ value: c, label: c }))}
-              placeholder="e.g. Design, Printing" onSearch={() => null}
-              popupRender={menu => <>{menu}<div style={{ padding: 6 }}><Input size="small" placeholder="New category — press Enter"
-                onPressEnter={e => form.setFieldValue('category', (e.target as HTMLInputElement).value)} /></div></>} />
-          </Form.Item>
           {settings.gstRegistered && (
             <Form.Item name="tax_rate" label="GST">
               <Select options={[{ value: 'default', label: `Standard (${settings.gstRate}%)` }, { value: 0, label: '0% (zero-rated / exempt)' }]} />

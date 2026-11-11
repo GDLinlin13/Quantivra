@@ -617,7 +617,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       </ConfigProvider>
       {newItem && (
         <ItemDrawer companyId={companyId} item={{ kind: 'product', name: newItem.name, used_for: sales ? 'sales' : 'purchases' } as any} accounts={accounts} settings={settings}
-          currency={currency} categories={[...new Set(items.map(i => i.category).filter(Boolean) as string[])]}
+          currency={currency}
           onClose={() => setNewItem(null)}
           onSaved={async id => {
             const row = newItem.row;
