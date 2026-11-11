@@ -2,6 +2,7 @@ import { RouterProvider } from 'react-router-dom';
 import { ConfigProvider, theme } from 'antd';
 import { AuthProvider } from './contexts/AuthContext';
 import { router } from './routes';
+import { NoAutofill } from './components/NoAutofill';
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
         },
       }}
     >
+      <NoAutofill />
       <AuthProvider>
         <RouterProvider router={router} />
       </AuthProvider>
