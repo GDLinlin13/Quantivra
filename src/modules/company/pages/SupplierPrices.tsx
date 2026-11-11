@@ -27,7 +27,6 @@ export function SupplierPricesTab({ companyId, docs, items, classes, pieces, cur
     return <>{it?.name || `Item ${p.item_id}`}{c ? <Text type="secondary"> — {classLabel(c)}</Text> : null}</>;
   };
   const per = (p: SupplierPrice) => { const it = itemOf(p.item_id); return it?.stock_mode === 'pieces' ? (it.price_basis === 'per_piece' ? ' / piece' : ' / kg') : it?.unit ? ` / ${it.unit}` : ''; };
-  const catalogCost = (p: SupplierPrice) => { const c = classes.find(x => x.id === p.class_id); return c ? Number(c.purchase_price) : Number(itemOf(p.item_id)?.purchase_price) || 0; };
   const change = (p: SupplierPrice) => {
     if (!p.prev) return <Text type="secondary">—</Text>;
     const d = ((p.price - p.prev.price) / p.prev.price) * 100;
@@ -43,7 +42,6 @@ export function SupplierPricesTab({ companyId, docs, items, classes, pieces, cur
     { title: 'Before', key: 'pv', align: 'right' as const, render: (_: any, p: SupplierPrice) => (p.prev ? <Text type="secondary">{num(p.prev.price)} <span style={{ fontSize: 12 }}>({fmtDate(p.prev.date)})</span></Text> : '—') },
     { title: 'Change', key: 'c', width: 100, render: (_: any, p: SupplierPrice) => change(p) },
     { title: 'Bills', key: 'n', width: 70, align: 'right' as const, render: (_: any, p: SupplierPrice) => p.bills },
-    { title: 'Catalog cost', key: 'cc', align: 'right' as const, render: (_: any, p: SupplierPrice) => <Text type="secondary">{num(catalogCost(p))}</Text> },
   ];
 
   const supplierRows = [...new Set(prices.filter(match).map(p => p.contact_id))]
@@ -55,9 +53,6 @@ export function SupplierPricesTab({ companyId, docs, items, classes, pieces, cur
 
   return (
     <div>
-      <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-        Everything you have bought from each supplier, with the latest price, worked out from their bills automatically. A new bill at a different price asks whether to update the catalog cost.
-      </Text>
       <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <Segmented value={view} onChange={v => setView(v as any)} options={[{ value: 'supplier', label: 'By supplier' }, { value: 'item', label: 'By item (compare suppliers)' }]} />
         <Input allowClear placeholder="Find a supplier or item" style={{ width: 260 }} value={search} onChange={e => setSearch(e.target.value)} />
