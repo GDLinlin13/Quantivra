@@ -504,6 +504,12 @@ export async function marketRate(currency: string, base: string, date?: string |
     try { const r = await fetch(url, { signal: ctl.signal }); return r.ok ? await r.json() : null; } catch { return null; } finally { clearTimeout(timer); }
   };
   const ok = (v: unknown) => (Number(v) > 0 ? Math.round(Number(v) * 1e6) / 1e6 : null);
+  // a Singapore-dollar company: the Monetary Authority of Singapore's published rates (a weekend or holiday takes the day before)
+  if (base === 'SGD' && currency !== 'SGD') {
+    const m = await get(`https://api.frankfurter.dev/v1/${date ? encodeURIComponent(date) : 'latest'}?base=${encodeURIComponent(currency)}&symbols=SGD&providers=MAS`);
+    const v = ok(m?.rates?.SGD);
+    if (v) return v;
+  }
   if (date) {
     const j = await get(`https://api.frankfurter.app/${encodeURIComponent(date)}?from=${encodeURIComponent(currency)}&to=${encodeURIComponent(base)}`);
     const v = ok(j?.rates?.[base]);
@@ -514,6 +520,8 @@ export async function marketRate(currency: string, base: string, date?: string |
 }
 
 export async function latestRate(companyId: number, currency: string, base?: string, date?: string | null): Promise<number | null> {
+  // Singapore-dollar company: the MAS rate for the date comes first (an older bill's rate would be out of date)
+  if (base === 'SGD' && currency !== 'SGD') { const mas = await marketRate(currency, base, date); if (mas) return mas; }
   const d = await supabase.from('fin_documents').select('fx_rate, issue_date').eq('company_id', companyId).eq('currency', currency)
     .not('fx_rate', 'is', null).order('issue_date', { ascending: false }).order('id', { ascending: false }).limit(1);
   const fromDoc = !d.error && d.data?.[0] ? Number((d.data[0] as any).fx_rate) : null;
