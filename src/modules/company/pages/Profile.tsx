@@ -27,6 +27,7 @@ export function CompanyProfilePage() {
   const [logo, setLogo] = useState<string | null>(null);
   const [accent, setAccent] = useState('#1677ff');
   const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [vals, setVals] = useState<Record<string, any>>({}); // mirror of the form, for the preview
 
   const load = useCallback(async () => {
@@ -191,7 +192,6 @@ export function CompanyProfilePage() {
     )),
   );
 
-  const [creating, setCreating] = useState(false);
   // the colour and the footer behind the letterhead, and the way to make a document on it
   const letterheadCommon = (
     <Card size="small" style={{ ...panel, marginBottom: 12 }} title={<span style={{ color: '#f0ede6' }}>Colour, footer and new documents</span>}>
