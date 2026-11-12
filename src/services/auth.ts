@@ -1,5 +1,6 @@
 import { supabase, setRememberMe } from '../utils/supabase';
 import { loginEmailFor } from '../utils/loginEmail';
+import { browserWasClosed } from '../utils/sessionGuard';
 import type { User } from '../types';
 
 // Who the signed-in person is inside Quantivra (platform admin, or a user of
@@ -116,6 +117,12 @@ export const authService = {
   /** The stored session, only if it still matches a live Supabase sign-in. */
   async restoreSession(): Promise<Session | null> {
     const stored = readSession();
+    // the browser was closed and opened again: sign in again
+    if (browserWasClosed() && (stored || (await supabase.auth.getSession()).data.session)) {
+      clearSession();
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {});   // only this browser; other devices stay signed in
+      return null;
+    }
     const { data } = await supabase.auth.getSession();
     let authUserId = data.session?.user?.id;
     let liveUser: { user_metadata?: Record<string, any> } | null = null;
