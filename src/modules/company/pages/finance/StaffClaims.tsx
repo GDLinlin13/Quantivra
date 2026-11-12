@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Select, message, Empty, Space, Typography } from 'antd';
-import { claimService, accountForCategory, type Claim } from '../../../../services/claims';
+import { Table, Button, Select, message, Empty, Space, Typography, Tag } from 'antd';
+import { claimService, claimAccountService, claimAccountOf, accountForCategory, type Claim } from '../../../../services/claims';
 import { money } from '../../../../data/documentLayouts';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import type { FinanceData } from './DocList';
@@ -20,12 +20,12 @@ export function StaffClaims({ data }: { data: FinanceData }) {
 
   const load = useCallback(async () => {
     try {
-      const list = (await claimService.list(companyId)).filter(c => c.status === 'approved' && !c.document_id && !c.payroll_run_id
-        // claims in the company's currency are paid back in the next payroll run (once database update 058 is in)
-        && (!('payroll_run_id' in c) || c.currency !== currency));
+      // approved by the approver, not yet recorded in Finance and not taken by a payroll run
+      const list = (await claimService.list(companyId)).filter(c => c.status === 'approved' && !c.document_id && !c.payroll_run_id);
       setClaims(list);
-      setAccountOf(Object.fromEntries(list.map(c => [c.id, accountForCategory(c.category, accounts)])));
-      setChosen(list.map(c => c.id));
+      const byCategory = await claimAccountService.get(companyId).catch(() => ({} as Record<string, number>));
+      setAccountOf(Object.fromEntries(list.map(c => [c.id, claimAccountOf(c, byCategory) ?? accountForCategory(c.category, accounts)])));
+      setChosen(list.filter(c => !c.finance_approved_at).map(c => c.id));
       setError(null);
     } catch (e: any) { setError(e.message); setClaims([]); }
   }, [companyId, accounts, currency]);
@@ -50,13 +50,25 @@ export function StaffClaims({ data }: { data: FinanceData }) {
     load();
   };
 
+  // Finance approves a claim (and its account): payroll then pays it in the next run unless Finance records / pays it first
+  const approve = async () => {
+    setBusy(true);
+    try {
+      await claimService.financeApprove(chosen, id => accountOf[id] ?? null);
+      message.success(`${chosen.length} claim${chosen.length > 1 ? 's' : ''} approved by Finance`);
+      await load();
+    } catch (e: any) { message.error(e.message); }
+    setBusy(false);
+  };
+
   if (error) return <Text type="secondary">{error}</Text>;
   return (
     <div>
       {canWrite && !!claims?.length && (
-        <Space style={{ marginBottom: 12 }}>
-          <Button type="primary" loading={busy} disabled={!chosen.length} onClick={book}>Record {chosen.length} in Finance</Button>
-          <Text type="secondary">One expense per person and currency, owed to them until paid.</Text>
+        <Space style={{ marginBottom: 12 }} wrap>
+          <Button type="primary" loading={busy} disabled={!chosen.length} onClick={approve}>Approve {chosen.length}</Button>
+          <Button loading={busy} disabled={!chosen.length} onClick={book}>Record {chosen.length} in Finance</Button>
+          <Text type="secondary">Approved claims go into the next payroll run, unless you record and pay them in Finance before then.</Text>
         </Space>
       )}
       <Table rowKey="id" size="small" loading={claims === null} dataSource={claims || []} pagination={false}
@@ -68,6 +80,8 @@ export function StaffClaims({ data }: { data: FinanceData }) {
           { title: 'Category', dataIndex: 'category' },
           { title: 'Description', dataIndex: 'description', render: (v: string | null) => v || '—' },
           { title: 'Amount', key: 'a', align: 'right' as const, render: (_, c) => money(c.amount, c.currency) },
+          { title: 'Finance', key: 'fa', width: 170, render: (_, c) => (c.finance_approved_at
+            ? <Tag color="green">{c.currency === currency ? 'Approved · next payroll' : 'Approved'}</Tag> : <Tag>To approve</Tag>) },
           { title: 'Expense account', key: 'acc', width: 280, render: (_, c) => (
             <Select style={{ width: '100%' }} showSearch optionFilterProp="label" disabled={!canWrite} options={expenseAccounts}
               value={accountOf[c.id] ?? undefined} onChange={v => setAccountOf(m => ({ ...m, [c.id]: v }))} />

@@ -13,6 +13,7 @@ import {
   type Contact, type ContactPerson, type ContactAddress, type FinDocument, type DocLine, type DocType, type FinanceSettings, type Account,
 } from '../data/finance';
 import { splitByShare, payrollSplit } from '../data/ledger';
+import { canonicalCategory } from '../data/claimAccounts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const must = (r: { data: any; error: any }): any => { if (r.error) throw new Error(r.error.message); return r.data; };
@@ -672,11 +673,17 @@ export async function loadLedgerInput(companyId: number) {
       if (mine.length) r.split = payrollSplit(mine, directors, country);
     }
     // staff claims paid back in these runs (database update 058): booked by category, not as salaries
-    const paidBack = await supabase.from('claims').select('payroll_run_id, category, amount').in('payroll_run_id', runs.map(r => r.id))
+    const runIds = runs.map(r => r.id);
+    let paidBack: any[] = await supabase.from('claims').select('payroll_run_id, category, amount, account_id').in('payroll_run_id', runIds)
+      .then(r => (r.error ? null : r.data || [])) as any;
+    if (paidBack === null) paidBack = await supabase.from('claims').select('payroll_run_id, category, amount').in('payroll_run_id', runIds)   // before update 059
       .then(r => (r.error ? [] : r.data || []));
+    const byCategory = await supabase.from('company_settings').select('value')
+      .eq('company_id', companyId).eq('category', 'company').eq('key', 'claim_accounts').maybeSingle()
+      .then(r => ((r.data?.value as Record<string, number>) || {}));
     for (const r of runs) {
-      const mine = (paidBack as any[]).filter(c => Number(c.payroll_run_id) === r.id);
-      if (mine.length) r.reimbursements = mine.map(c => ({ category: c.category, amount: Number(c.amount) }));
+      const mine = paidBack.filter(c => Number(c.payroll_run_id) === r.id);
+      if (mine.length) r.reimbursements = mine.map(c => ({ category: c.category, amount: Number(c.amount), account_id: c.account_id ?? byCategory[canonicalCategory(c.category)] ?? null }));
     }
   }
   const byDoc = new Map<number, any[]>();

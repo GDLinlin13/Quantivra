@@ -13,12 +13,17 @@ export interface Claim {
   document_id: number | null; created_at?: string;
   /** the payroll run that paid it back (migration 058) */
   payroll_run_id?: number | null;
+  /** the expense account chosen for this claim (migration 059) */
+  account_id?: number | null;
+  /** Finance has approved it for payment (migration 060); only then can payroll take it */
+  finance_approved_at?: string | null;
 }
 export interface ClaimReceipt { id: number; company_id: number; claim_id: number; path: string; file_name: string; content_type: string | null; size_bytes: number | null }
 
-export const CLAIM_CATEGORIES = ['Transport', 'Travel', 'Meals', 'Entertainment', 'Phone', 'Medical', 'Office supplies', 'Training', 'Others'];
+export { CLAIM_CATEGORIES, canonicalCategory } from '../data/claimAccounts';
 
-export { accountForCategory } from '../data/claimAccounts';
+import { accountForCategory, canonicalCategory } from '../data/claimAccounts';
+export { accountForCategory };
 
 const must = (r: { data: any; error: any }): any => {
   if (r.error) throw new Error(/claims|does not exist/i.test(r.error.message) && /relation|exist/i.test(r.error.message)
@@ -50,6 +55,18 @@ export const claimService = {
   async takeForPayroll(runId: number, claimIds: number[]) {
     const r = await supabase.rpc('payroll_take_claims', { p_run_id: runId, p_claim_ids: claimIds });
     if (r.error && !/payroll_take_claims|function/i.test(r.error.message)) throw new Error(r.error.message);
+  },
+  /** The expense account for one claim (database update 059). */
+  async setAccount(id: number, accountId: number | null) {
+    const r = await supabase.from('claims').update({ account_id: accountId }).eq('id', id);
+    if (r.error) throw new Error(/account_id/i.test(r.error.message) ? 'This needs database update 059 — ask your administrator to run it in Supabase.' : r.error.message);
+  },
+  /** Finance approves claims (with the expense account) so payroll can pay them if Finance has not by then (database update 060). */
+  async financeApprove(ids: number[], accountOf: (id: number) => number | null) {
+    for (const id of ids) {
+      const r = await supabase.from('claims').update({ finance_approved_at: new Date().toISOString(), account_id: accountOf(id) }).eq('id', id);
+      if (r.error) throw new Error(/finance_approved/i.test(r.error.message) ? 'This needs database update 060 — ask your administrator to run it in Supabase.' : r.error.message);
+    }
   },
   async cancel(id: number) { must(await supabase.from('claims').update({ status: 'cancelled' }).eq('id', id)); },
   async remove(id: number) {
@@ -118,3 +135,20 @@ export const claimService = {
     return id;
   },
 };
+
+/** Claims → Category accounts: the expense account each claim category goes to (the "Others" claims are picked one by one). */
+export const claimAccountService = {
+  async get(companyId: number): Promise<Record<string, number>> {
+    const { data } = await supabase.from('company_settings').select('value')
+      .eq('company_id', companyId).eq('category', 'company').eq('key', 'claim_accounts').maybeSingle();
+    return (data?.value as Record<string, number>) || {};
+  },
+  async save(companyId: number, map: Record<string, number>) {
+    const r = await supabase.from('company_settings').upsert(
+      { company_id: companyId, category: 'company', key: 'claim_accounts', value: map }, { onConflict: 'company_id,category,key' });
+    if (r.error) throw new Error(r.error.message);
+  },
+};
+/** The account a claim goes to: the one chosen on it, else its category's. Empty when neither is set. */
+export const claimAccountOf = (c: { account_id?: number | null; category: string }, map: Record<string, number>): number | null =>
+  c.account_id ?? map[canonicalCategory(c.category)] ?? null;
