@@ -96,11 +96,11 @@ export function PlatformUsersPage() {
   })();
 
   const columns = [
-    { title: 'Username', dataIndex: 'username', key: 'username', render: (v: string) => v || '-' },
-    { title: 'Email', dataIndex: 'email', key: 'email', render: (v: string) => v || '-' },
-    { title: 'Name', dataIndex: 'full_name', key: 'full_name' },
     { title: 'Company', key: 'company', render: (_: any, r: any) => <>{r.companies?.name || r.company_id}{r.others?.length ? <span style={{ color: 'rgba(240,237,230,0.45)', fontSize: 12 }}>{`  +${r.others.length} more`}</span> : null}</>,
       filters: companyNames.map(n => ({ text: n, value: n })), onFilter: (v: any, r: any) => r.companies?.name === v },
+    { title: 'Name', dataIndex: 'full_name', key: 'full_name' },
+    { title: 'Username', dataIndex: 'username', key: 'username', render: (v: string) => v || '-' },
+    { title: 'Email', dataIndex: 'email', key: 'email', render: (v: string) => v || '-' },
     { title: 'Status', dataIndex: 'is_active', key: 'status', render: (v: boolean) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Suspended'}</Tag> },
     { title: 'Created', dataIndex: 'created_at', key: 'created', render: (v: string) => new Date(v).toLocaleDateString() },
     {
