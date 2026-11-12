@@ -325,8 +325,8 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     try {
       const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}),
         // the delivery address goes with a document that has products (migration 053)
-        // left blank, they follow the customer's own name and address
-        ...(wantsAddress ? (() => { const c = contacts.find(x => x.id === doc.contact_id); return { delivery_name: (doc.delivery_name || '').trim() || c?.name || null, delivery_address: (doc.delivery_address || '').trim() || c?.address || null }; })()
+        // left blank stays blank (the printed invoice then shows the customer's name and address)
+        ...(wantsAddress ? { delivery_name: (doc.delivery_name || '').trim() || null, delivery_address: (doc.delivery_address || '').trim() || null }
           : doc.delivery_address || doc.delivery_name || 'delivery_address' in doc ? { delivery_address: null, delivery_name: null } : {}) } as any, toSave, { keepNumber: typedNumber });
       // pieces bought: one piece per line, with its weight
       if (!sales && lines.some(isPieces)) await catalogService.syncBillPieces(companyId, id, doc.issue_date!, lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes);
