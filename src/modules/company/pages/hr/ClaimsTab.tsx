@@ -37,7 +37,7 @@ function usePaidState(claims: Claim[], companyCurrency = '') {
   return (c: Claim) => {
     if (c.status !== 'approved') return null;
     if (c.payroll_run_id) return <Tag color="green">In payroll</Tag>;
-    if (!c.document_id) return <Tag>{'payroll_run_id' in c && c.currency === companyCurrency ? 'Next payroll run' : 'Waiting for Finance'}</Tag>;
+    if (!c.document_id) return <Tag>{c.finance_approved_at && c.currency === companyCurrency ? 'Next payroll run' : 'Waiting for Finance'}</Tag>;
     const due = paid.get(c.document_id);
     return due != null && due <= 0.004 ? <Tag color="green">Paid</Tag> : <Tag color="blue">To be paid</Tag>;
   };

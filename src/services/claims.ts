@@ -15,6 +15,8 @@ export interface Claim {
   payroll_run_id?: number | null;
   /** the expense account chosen for this claim (migration 059) */
   account_id?: number | null;
+  /** Finance has approved it for payment (migration 060); only then can payroll take it */
+  finance_approved_at?: string | null;
 }
 export interface ClaimReceipt { id: number; company_id: number; claim_id: number; path: string; file_name: string; content_type: string | null; size_bytes: number | null }
 
@@ -58,6 +60,13 @@ export const claimService = {
   async setAccount(id: number, accountId: number | null) {
     const r = await supabase.from('claims').update({ account_id: accountId }).eq('id', id);
     if (r.error) throw new Error(/account_id/i.test(r.error.message) ? 'This needs database update 059 — ask your administrator to run it in Supabase.' : r.error.message);
+  },
+  /** Finance approves claims (with the expense account) so payroll can pay them if Finance has not by then (database update 060). */
+  async financeApprove(ids: number[], accountOf: (id: number) => number | null) {
+    for (const id of ids) {
+      const r = await supabase.from('claims').update({ finance_approved_at: new Date().toISOString(), account_id: accountOf(id) }).eq('id', id);
+      if (r.error) throw new Error(/finance_approved/i.test(r.error.message) ? 'This needs database update 060 — ask your administrator to run it in Supabase.' : r.error.message);
+    }
   },
   async cancel(id: number) { must(await supabase.from('claims').update({ status: 'cancelled' }).eq('id', id)); },
   async remove(id: number) {
