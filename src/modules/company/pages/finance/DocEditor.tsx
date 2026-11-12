@@ -234,11 +234,12 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       else if (!cls) p.unit_price = Number(sales ? it.sale_price : it.purchase_price) || 0;
     }
     // the class goes in the Description (unless something else was typed there), so Qty stays readable
-    const mine = own.map(c => classLabel(c));
+    const wd = it.weight_decimals ?? 3;
+    const mine = own.map(c => classLabel(c, wd));
     const desc = (lines[i]?.description || '').trim();
-    const autoDesc = !desc || mine.includes(desc) ? (cls ? classLabel(cls) : '') : desc;
+    const autoDesc = !desc || mine.includes(desc) ? (cls ? classLabel(cls, wd) : '') : desc;
     setLine(i, { piece_id: pieceId, weight, quantity: p.quantity, unit_price: inDocCurrency(p.unit_price, itemCur), description: autoDesc });
-    if (weight > 0 && !cls && own.length) message.warning(`No weight class for ${kgText(weight)} kg — add one in the catalog, or type the price`);
+    if (weight > 0 && !cls && own.length) message.warning(`No weight class for ${kgText(weight, wd)} kg — add one in the catalog, or type the price`);
   };
   const payFrom = accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash'));
   const banks = paymentAccounts(branding?.templates.invoice);
@@ -563,13 +564,13 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
               const list = pieces.filter(p => p.item_id === it.id && (p.id === l.piece_id || (!pieceSold(p.id) && !taken.has(p.id))))
                 .sort((a, b) => a.weight - b.weight);
               return <Select style={{ width: '100%' }} showSearch optionFilterProp="label" placeholder="Choose a piece" value={l.piece_id ?? undefined}
-                optionLabelProp="short" options={list.map(p => { const c = classes.find(x => x.id === p.class_id); return { value: p.id, short: `${kgText(p.weight)} kg`, label: `${kgText(p.weight)} kg${c ? ` · ${classLabel(c)}` : ''}` }; })}
+                optionLabelProp="short" options={list.map(p => { const c = classes.find(x => x.id === p.class_id); return { value: p.id, short: `${kgText(p.weight, it.weight_decimals ?? 3)} kg`, label: `${kgText(p.weight, it.weight_decimals ?? 3)} kg${c ? ` · ${classLabel(c, it.weight_decimals ?? 3)}` : ''}` }; })}
                 notFoundContent="No pieces in stock"
                 onChange={v => { const p = pieces.find(x => x.id === v); if (p) priceByWeight(i, it, p.weight, p.id); }} />;
             }
             if (it && !sales) {
               return <Space.Compact style={{ width: '100%' }}>
-                <InputNumber style={{ width: '100%' }} min={0} precision={3} placeholder="Weight" value={weightOf(l) || undefined} disabled={pieceSold(l.piece_id)}
+                <InputNumber style={{ width: '100%' }} min={0} precision={it.weight_decimals ?? 3} placeholder="Weight" value={weightOf(l) || undefined} disabled={pieceSold(l.piece_id)}
                   onChange={v => priceByWeight(i, it, Number(v) || 0, l.piece_id ?? null)} />
                 <Space.Addon>kg</Space.Addon>
               </Space.Compact>;
@@ -588,7 +589,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
           { title: 'Unit price', width: 120, render: (_, l, i) => {
             const it = l.item_id ? items.find(x => x.id === l.item_id) : null;
             const per = it && (it.stock_mode === 'loose' || (it.stock_mode === 'pieces' && basisOf(it, sales) !== 'per_piece')) ? `/ ${it.stock_mode === 'pieces' ? 'kg' : it.unit || ''}` : undefined;
-            return <AmountInput style={{ width: '100%' }} precision={2} suffix={per} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} />;
+            return <AmountInput style={{ width: '100%' }} precision={it?.price_decimals ?? 2} suffix={per} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} />;
           } },
           { title: 'Disc %', width: 80, render: (_, l, i) => <InputNumber style={{ width: '100%' }} min={0} max={100} value={l.discount_pct} onChange={v => setLine(i, { discount_pct: Number(v) || 0 })} /> },
           ...(taxOn ? [{ title: `${taxName} %`, width: 90, render: (_: any, l: DocLine, i: number) => (

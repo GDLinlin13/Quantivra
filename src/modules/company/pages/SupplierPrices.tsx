@@ -24,7 +24,7 @@ export function SupplierPricesTab({ companyId, docs, items, classes, pieces, cur
   const itemOf = (id: number) => items.find(i => i.id === id);
   const label = (p: SupplierPrice) => {
     const it = itemOf(p.item_id), c = classes.find(x => x.id === p.class_id);
-    return <>{it?.name || `Item ${p.item_id}`}{c ? <Text type="secondary"> — {classLabel(c)}</Text> : null}</>;
+    return <>{it?.name || `Item ${p.item_id}`}{c ? <Text type="secondary"> — {classLabel(c, it?.weight_decimals ?? 3)}</Text> : null}</>;
   };
   const per = (p: SupplierPrice) => { const it = itemOf(p.item_id); return it?.stock_mode === 'pieces' ? (it.price_basis === 'per_piece' ? ' / piece' : ' / kg') : it?.unit ? ` / ${it.unit}` : ''; };
   const change = (p: SupplierPrice) => {

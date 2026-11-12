@@ -19,6 +19,8 @@ export interface CatalogItem {
   sale_basis?: 'per_kg' | 'per_piece' | null;
   /** loose: the small unit ("g") and how many make one item unit (1 kg = 1000 g) */
   loose_unit?: string | null; loose_factor?: number | null;
+  /** decimals for weights in kg (0–3) and for prices (2–4); migration 055 */
+  weight_decimals?: number; price_decimals?: number;
 }
 export type StockMode = 'normal' | 'pieces' | 'loose';
 
@@ -27,11 +29,11 @@ export interface WeightClass { id?: number; item_id?: number; min_kg: number; ma
 /** One piece bought: its own weight, sold once. `document_id` is the bill it came in on (empty = received by hand). */
 export interface Piece { id: number; item_id: number; weight: number; class_id: number | null; document_id: number | null; received_date: string; note: string | null }
 
-export const kgText = (n: number) => `${Math.round((Number(n) || 0) * 1000) / 1000}`;
+export const kgText = (n: number, d = 3) => `${Math.round((Number(n) || 0) * 10 ** d) / 10 ** d}`;
 
 /** "2 – 2.99 kg", "10 kg and above" */
-export function classLabel(c: Pick<WeightClass, 'min_kg' | 'max_kg'>): string {
-  return c.max_kg == null ? `${kgText(c.min_kg)} kg and above` : `${kgText(c.min_kg)} – ${kgText(c.max_kg)} kg`;
+export function classLabel(c: Pick<WeightClass, 'min_kg' | 'max_kg'>, d = 3): string {
+  return c.max_kg == null ? `${kgText(c.min_kg, d)} kg and above` : `${kgText(c.min_kg, d)} – ${kgText(c.max_kg, d)} kg`;
 }
 
 /**
