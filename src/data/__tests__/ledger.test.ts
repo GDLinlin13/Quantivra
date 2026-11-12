@@ -103,6 +103,18 @@ describe('ledger', () => {
     expect(splitByShare(1849.5, due[0].statParts).map(p => p.amount)).toEqual([999, 842.5, 8]);
   });
 
+  it('staff claims paid in a payroll run are booked to their category, not to salaries', () => {
+    const run = { ...input.payroll[0], reimbursements: [{ category: 'Training', amount: 200 }, { category: 'Meals', amount: 50 }] };
+    const lines = payrollLines(run as any, accounts);
+    const debits = lines.filter(l => l.debit > 0).map(l => [l.description, l.debit]);
+    expect(debits.some(d => String(d[0]).startsWith('Staff claims'))).toBe(true);
+    const total = lines.reduce((t, l) => t + l.debit - l.credit, 0);
+    expect(Math.round(total * 100)).toBe(0);                          // still balances
+    const plain = payrollLines(input.payroll[0] as any, accounts);
+    const sum = (ls: typeof lines) => ls.filter(l => l.debit > 0).reduce((t, l) => t + l.debit, 0);
+    expect(Math.round(sum(lines) * 100)).toBe(Math.round(sum(plain) * 100));   // the same total cost, split differently
+  });
+
   it('upgrades an older chart of accounts once', () => {
     const old = accounts.filter(a => !['2220', '2230', '6005', '6008', '6015', '6810', '6820', '6830'].includes(a.code))
       .map(a => (a.code === '2210' ? { ...a, name: 'CPF and statutory payable' } : a.code === '6000' ? { ...a, name: 'My wages' } : a));
