@@ -3,7 +3,7 @@ import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Ta
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { docService, paymentService, catalogService, priceListService, supplierBills, contactService as contactsApi, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
+import { docService, paymentService, catalogService, priceListService, supplierBills, loadLedgerInput, contactService as contactsApi, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
 import { ContactDrawer } from './ContactsManager';
 import { ItemDrawer } from '../Catalog';
 import { companyFileService } from '../../../../services/finance';
@@ -14,7 +14,7 @@ import {
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
-import { basisOf, costChanges, supplierPrices, classOf, classLabel, piecePrice, listPrice, kgText, type CatalogItem, type WeightClass, type Piece, type PriceListRow } from '../../../../data/catalog';
+import { basisOf, costChanges, supplierPrices, classOf, classLabel, piecePrice, listPrice, kgText, onHand, stockMoves, piecesInStock, type CatalogItem, type WeightClass, type Piece, type PriceListRow } from '../../../../data/catalog';
 import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
@@ -200,8 +200,19 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   };
 
   // sales documents offer what we sell, purchases what we buy (plus anything already on the lines)
+  // an invoice does not offer products we track with nothing left in stock
+  const [onHandNow, setOnHandNow] = useState<Map<number, number> | null>(null);
+  const tracksStock = sales && docType === 'invoice' && items.some(i => i.kind === 'product' && i.track_stock);
+  useEffect(() => {
+    if (!tracksStock) { setOnHandNow(null); return; }
+    Promise.all([loadLedgerInput(companyId), catalogService.adjustments(companyId), catalogService.pieces(companyId)]).then(([input, adj, ps]) => {
+      setOnHandNow(new Map(items.filter(i => i.kind === 'product' && i.track_stock).map(i => [i.id, i.stock_mode === 'pieces'
+        ? piecesInStock(i.id, ps, input.docs as any).length : onHand(stockMoves(i, input.docs, adj, ps))])));
+    }).catch(() => setOnHandNow(null));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, tracksStock, items]);
   const catalog = items.filter(it => lines.some(l => l.item_id === it.id)
-    || (!it.archived && (it.used_for || 'both') !== (sales ? 'purchases' : 'sales')));
+    || (!it.archived && (it.used_for || 'both') !== (sales ? 'purchases' : 'sales') && !(onHandNow && it.track_stock && it.kind === 'product' && (onHandNow.get(it.id) ?? 1) <= 0)));
   const pickItem = (i: number, id: number | null, from: CatalogItem[] = items) => {
     const it = from.find(x => x.id === id);
     if (!it) { setLine(i, { item_id: null }); return; }
