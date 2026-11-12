@@ -497,9 +497,10 @@ export function currencySymbol(code: string): string {
 }
 
 /** An amount in the chosen style; minus signs go in front ("-$380.95"). */
-export function money(n: number, c = 'SGD', format: AmountFormat | string | null = 'code', maxDecimals = 2): string {
+export function money(n: number, c = 'SGD', format: AmountFormat | string | null = 'code', wholeWhenNoCents = false): string {
   const v = Number(n || 0);
-  const num = Math.abs(v).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: Math.max(2, maxDecimals) });
+  const whole = wholeWhenNoCents && Math.round(Math.abs(v) * 100) % 100 === 0;
+  const num = Math.abs(v).toLocaleString('en', { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 });
   const sign = v < 0 ? '-' : '';
   switch (format) {
     case 'symbol': return `${sign}${currencySymbol(c)}${num}`;

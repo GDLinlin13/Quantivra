@@ -208,7 +208,7 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, onCl
       const { purchase_currency: _pc, ...rest } = { ...item, ...v } as any;
       // normal: any amount of the unit can be bought or sold (100 kg in, 1 kg or 0.1 kg out); stock by weight needs database update 046, so plain items never send it
       if ((rest.stock_mode ?? 'normal') !== 'pieces') { rest.stock_mode = 'normal'; rest.loose_unit = null; rest.loose_factor = null; }
-      if (rest.stock_mode === 'normal' && !('stock_mode' in item)) { delete rest.stock_mode; delete rest.price_basis; delete rest.sale_basis; delete rest.loose_unit; delete rest.loose_factor; delete rest.weight_decimals; delete rest.price_decimals; }
+      if (rest.stock_mode === 'normal' && !('stock_mode' in item)) { delete rest.stock_mode; delete rest.price_basis; delete rest.sale_basis; delete rest.loose_unit; delete rest.loose_factor; delete rest.weight_decimals; delete rest.show_cents; }
       if (rest.stock_mode === 'pieces') {
         if (classes.some(c => c.min_kg == null || (c.max_kg != null && Number(c.max_kg) < Number(c.min_kg)))) throw new Error('Check the weight classes: “to” must not be below “from”');
       }
@@ -300,8 +300,8 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, onCl
                     <Form.Item name="weight_decimals" label="Weight decimals" initialValue={3}>
                       <Select style={{ width: 130 }} options={[0, 1, 2, 3].map(n => ({ value: n, label: String(n) }))} />
                     </Form.Item>
-                    <Form.Item name="price_decimals" label="Price decimals" initialValue={2}>
-                      <Select style={{ width: 130 }} options={[2, 3, 4].map(n => ({ value: n, label: String(n) }))} />
+                    <Form.Item name="show_cents" label="Always show cents" valuePropName="checked" initialValue={true}>
+                      <Switch />
                     </Form.Item>
                   </Space>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 4 }}>

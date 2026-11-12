@@ -144,9 +144,9 @@ function PriceListDrawer({ companyId, list, kind, company, items, classes, rows,
         <Table rowKey="key" size="small" pagination={false} dataSource={shown}
           columns={[
             { title: 'Item', key: 'i', render: (_, l: Line) => <>{l.item.code ? <Text type="secondary">{l.item.code} · </Text> : null}{l.item.name}{l.cls ? <Text type="secondary"> — {classLabel(l.cls, l.item.weight_decimals ?? 3)}</Text> : null}</> },
-            ...(isStandard ? [] : [{ title: 'Standard price', key: 'n', align: 'right' as const, width: 170, render: (_: any, l: Line) => { const v = standard(l); return <Text type="secondary">{v == null ? '—' : `${curOf(l.item, kind, company)} ${v.toLocaleString(undefined, { maximumFractionDigits: l.item.price_decimals ?? 2 })} ${unitOf(l, perPiece(l.item, kind))}`}</Text>; } }]),
+            ...(isStandard ? [] : [{ title: 'Standard price', key: 'n', align: 'right' as const, width: 170, render: (_: any, l: Line) => { const v = standard(l); return <Text type="secondary">{v == null ? '—' : `${curOf(l.item, kind, company)} ${v.toLocaleString(undefined, { minimumFractionDigits: l.item.show_cents === false && Math.round(v * 100) % 100 === 0 ? 0 : 2, maximumFractionDigits: l.item.show_cents === false && Math.round(v * 100) % 100 === 0 ? 0 : 2 })} ${unitOf(l, perPiece(l.item, kind))}`}</Text>; } }]),
             { title: 'List price', key: 'p', width: 170, render: (_, l: Line) => (
-              <AmountInput min={0} precision={l.item.price_decimals ?? 2} style={{ width: '100%' }} placeholder={isStandard ? '' : 'standard'} disabled={!canWrite} value={prices[l.key] ?? undefined}
+              <AmountInput min={0} precision={l.item.show_cents === false ? undefined : 2} style={{ width: '100%' }} placeholder={isStandard ? '' : 'standard'} disabled={!canWrite} value={prices[l.key] ?? undefined}
                 onChange={v => setPrices(p => ({ ...p, [l.key]: v == null || (v as any) === '' ? null : Number(v) }))} />) },
           ]} />
       </Space>
@@ -203,7 +203,7 @@ function PriceListView({ list, items, classes, rows, customers, currency, compan
                   <tr key={l.key}>
                     <td style={td}>{l.item.name}</td>
                     <td style={td}>{l.cls ? classLabel(l.cls, l.item.weight_decimals ?? 3) : ''}</td>
-                    <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>{money(price(l), l.item.currency || currency, 'code', l.item.price_decimals ?? 2)} <span style={{ color: '#666', fontSize: 11 }}>{unitOf(l, perPiece(l.item))}</span></td>
+                    <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>{money(price(l), l.item.currency || currency, 'code', l.item.show_cents === false)} <span style={{ color: '#666', fontSize: 11 }}>{unitOf(l, perPiece(l.item))}</span></td>
                   </tr>
                 ))}
                 {!lines.length && <tr><td colSpan={3} style={{ ...td, color: '#666' }}>No prices on this list yet.</td></tr>}

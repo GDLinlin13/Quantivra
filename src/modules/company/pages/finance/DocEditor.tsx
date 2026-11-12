@@ -589,7 +589,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
           { title: 'Unit price', width: 120, render: (_, l, i) => {
             const it = l.item_id ? items.find(x => x.id === l.item_id) : null;
             const per = it && (it.stock_mode === 'loose' || (it.stock_mode === 'pieces' && basisOf(it, sales) !== 'per_piece')) ? `/ ${it.stock_mode === 'pieces' ? 'kg' : it.unit || ''}` : undefined;
-            return <AmountInput style={{ width: '100%' }} precision={it?.price_decimals ?? 2} suffix={per} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} />;
+            return <AmountInput style={{ width: '100%' }} precision={it?.show_cents === false ? undefined : 2} suffix={per} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} />;
           } },
           { title: 'Disc %', width: 80, render: (_, l, i) => <InputNumber style={{ width: '100%' }} min={0} max={100} value={l.discount_pct} onChange={v => setLine(i, { discount_pct: Number(v) || 0 })} /> },
           ...(taxOn ? [{ title: `${taxName} %`, width: 90, render: (_: any, l: DocLine, i: number) => (

@@ -45,7 +45,7 @@ export function documentData(doc: FinDocument, lines: DocLine[], contact: Contac
   };
   const lists: ListValues = {
     lines: lines.map((l, i) => ({
-      no: String(i + 1), description: l.description, qty: qtyText(l.quantity), unit_price: fmtMoney(l.unit_price, cur, inv?.amountFormat, items.find(x => x.id === l.item_id)?.price_decimals || 2),
+      no: String(i + 1), description: l.description, qty: qtyText(l.quantity), unit_price: fmtMoney(l.unit_price, cur, inv?.amountFormat, items.find(x => x.id === l.item_id)?.show_cents === false),
       discount: Number(l.discount_pct) ? `${Number(l.discount_pct)}%` : '', amount: M(t.lines[i]),
     })),
     discounts: (doc.discounts || []).map((d, i) => ({ name: d.kind === 'percent' ? `${d.name || 'Discount'} (${d.value}%)` : (d.name || 'Discount'), amount: M(t.discounts[i]) })).filter((_, i) => t.discounts[i] > 0),
