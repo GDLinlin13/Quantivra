@@ -21,8 +21,8 @@ const payments = [{ id: 1, number: 'RCT-1', payment_date: '2026-02-20', method: 
 const allocations = [{ payment_id: 1, document_id: 1, amount: 600 }, { payment_id: 2, document_id: 2, amount: 200 }];
 
 describe('buildStatement', () => {
-  it('lists invoices, credit notes and payments with a running balance', () => {
-    const s = buildStatement({ contactId: 7, currency: 'SGD', from: null, to: '2026-04-30', docs, payments, allocations });
+  it('a period lists every invoice, credit note and payment with a running balance', () => {
+    const s = buildStatement({ contactId: 7, currency: 'SGD', from: '2026-01-01', to: '2026-04-30', docs, payments, allocations });
     expect(s.rows.map(r => [r.date, r.kind, r.number, r.balance])).toEqual([
       ['2026-01-10', 'invoice', 'INV-1', 1000],
       ['2026-02-20', 'payment', 'RCT-1', 400],
@@ -66,13 +66,31 @@ describe('buildStatement', () => {
 
   it('one payment against two invoices is one row', () => {
     const s = buildStatement({
-      contactId: 7, currency: 'SGD', from: null, to: '2026-05-01', docs, payments,
+      contactId: 7, currency: 'SGD', from: '2026-01-01', to: '2026-05-01', docs, payments,
       allocations: [{ payment_id: 1, document_id: 1, amount: 700 }, { payment_id: 1, document_id: 2, amount: 300 }],
     });
     const pay = s.rows.filter(r => r.kind === 'payment');
     expect(pay).toHaveLength(1);
     expect(pay[0].credit).toBe(1000);
     expect(pay[0].description).toBe('Payment received — INV-1, INV-2');
+  });
+});
+
+describe('as at a date: only what is outstanding', () => {
+  it('lists the invoices still owing at that date, at what is owed, with no payments', () => {
+    const s = buildStatement({ contactId: 7, currency: 'SGD', from: null, to: '2026-04-30', docs, payments, allocations });
+    expect(s.rows.map(r => [r.kind, r.number, r.debit, r.credit, r.balance])).toEqual([
+      ['invoice', 'INV-1', 400, 0, 400],
+      ['invoice', 'INV-2', 300, 0, 700],
+      ['credit_note', 'CN-1', 0, 100, 600],
+    ]);
+    expect(s.rows[0].description).toBe('Part paid — invoice total 1000.00');
+    expect(s.closing).toBe(600);                                   // the same amount due as the full statement
+  });
+  it('leaves out an invoice paid in full by that date, and counts it again for an earlier date', () => {
+    const paidUp = [{ payment_id: 1, document_id: 1, amount: 1000 }];
+    expect(buildStatement({ contactId: 7, currency: 'SGD', from: null, to: '2026-04-30', docs, payments, allocations: paidUp }).rows.some(r => r.number === 'INV-1')).toBe(false);
+    expect(buildStatement({ contactId: 7, currency: 'SGD', from: null, to: '2026-02-10', docs, payments, allocations: paidUp }).rows.map(r => r.number)).toEqual(['INV-1']);
   });
 });
 

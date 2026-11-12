@@ -24,8 +24,9 @@ export interface Soa {
 const KIND_ORDER: Record<SoaKind, number> = { invoice: 0, credit_note: 1, payment: 2 };
 
 /**
- * One statement for one customer in one currency, up to `to` (the statement date). With `from`, earlier
- * items are rolled into the opening balance; without it, every item is listed.
+ * One statement for one customer in one currency, up to `to` (the statement date). With `from` (a period), earlier
+ * items are rolled into the opening balance and every invoice and payment in the period is listed; without it
+ * (as at a date), only the invoices still outstanding on that date are listed, at what is still owed.
  * Drafts and voided documents are left out. A payment appears on the day it was received, for the part of it
  * that settled this customer's invoices in this currency.
  */
@@ -39,9 +40,26 @@ export function buildStatement(input: {
   const byId = new Map(mine.map(d => [d.id, d]));
   const paymentById = new Map(input.payments.map(p => [p.id, p]));
 
+  // what each invoice has been paid by the statement date
+  const paidBy = new Map<number, number>();
+  for (const a of input.allocations) {
+    const p = paymentById.get(a.payment_id);
+    if (!p || p.payment_date > to) continue;
+    paidBy.set(a.document_id, r2((paidBy.get(a.document_id) || 0) + Number(a.amount)));
+  }
+  // "As at" a date (no period): only what is still outstanding on that date; a period lists every invoice and payment
+  const outstandingOnly = !from;
+
   type Item = Omit<SoaRow, 'balance'> & { order: number };
   const items: Item[] = [];
   for (const d of mine) {
+    if (outstandingOnly && d.doc_type === 'invoice' && d.issue_date <= to) {
+      const open = r2(Number(d.total) - (paidBy.get(d.id) || 0));
+      if (Math.abs(open) < 0.005) continue;            // fully paid by then: not on the statement
+      items.push({ date: d.issue_date, kind: 'invoice', number: d.number, reference: d.reference || '',
+        description: open < r2(Number(d.total)) - 0.004 ? `Part paid — invoice total ${r2(Number(d.total)).toFixed(2)}` : '', debit: open, credit: 0, order: KIND_ORDER.invoice });
+      continue;
+    }
     items.push(d.doc_type === 'invoice'
       ? { date: d.issue_date, kind: 'invoice', number: d.number, reference: d.reference || '', description: '', debit: r2(Number(d.total)), credit: 0, order: KIND_ORDER.invoice }
       : { date: d.issue_date, kind: 'credit_note', number: d.number, reference: d.reference || '', description: 'Credit note', debit: 0, credit: r2(Number(d.total)), order: KIND_ORDER.credit_note });
@@ -56,7 +74,7 @@ export function buildStatement(input: {
     if (!g.docs.includes(d.number)) g.docs.push(d.number);
     perPayment.set(a.payment_id, g);
   }
-  for (const [pid, g] of perPayment) {
+  for (const [pid, g] of outstandingOnly ? [] : perPayment) {
     const p = paymentById.get(pid)!;
     items.push({
       date: p.payment_date, kind: 'payment', number: p.number || '', reference: p.reference || p.method || '',
@@ -75,12 +93,6 @@ export function buildStatement(input: {
   const closing = r2(opening + charges - credits);
 
   // ageing at the statement date: what each invoice still owes, by how long past its due date; credits count as current
-  const paidBy = new Map<number, number>();
-  for (const a of input.allocations) {
-    const p = paymentById.get(a.payment_id);
-    if (!p || p.payment_date > to) continue;
-    paidBy.set(a.document_id, r2((paidBy.get(a.document_id) || 0) + Number(a.amount)));
-  }
   const ageing: Ageing = { current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90plus: 0 };
   const asAt = Date.parse(to);
   for (const d of mine) {

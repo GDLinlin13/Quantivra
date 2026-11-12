@@ -36,7 +36,7 @@ export function statementData(s: Soa, contact: Contact | null, person: ContactPe
     document_title: 'STATEMENT OF ACCOUNT', statement_no: number, company_gst_no: settings.gstRegistered ? (settings.gstNumber || '') : '',
     payment_terms: termsText(contact?.payment_terms_days ?? inv?.paymentTermsDays ?? 30),
     statement_date: fmtDate(s.to), period_from: fmtDate(s.from), period_to: fmtDate(s.to),
-    period: s.from ? `${longDate(s.from)} to ${longDate(s.to)}` : `All items up to ${longDate(s.to)}`,
+    period: s.from ? `${longDate(s.from)} to ${longDate(s.to)}` : `Outstanding as at ${longDate(s.to)}`,
     customer_name: contact?.name || '', customer_address: contact?.address || '',
     customer_contact: person?.name || '', customer_phone: person?.phone || contact?.phone || '', customer_email: person?.email || contact?.email || '',
     opening_balance: M(s.opening), total_charges: M(s.charges), total_credits: M(s.credits), closing_balance: M(s.closing), overdue_amount: M(s.overdue),
@@ -206,7 +206,7 @@ function StatementModal({ data, contactId, currency, payments, allocations, onCl
       <Space wrap style={{ marginBottom: 12 }}>
         {currencies.length > 1 && <Select style={{ width: 90 }} value={cur} onChange={setCur} options={currencies.map(c => ({ value: c, label: c }))} />}
         <Segmented value={from ? 'period' : 'all'} onChange={v => (v === 'all' ? setFrom(null) : month(0))}
-          options={[{ value: 'all', label: 'Everything' }, { value: 'period', label: 'A period' }]} />
+          options={[{ value: 'all', label: 'As at a date' }, { value: 'period', label: 'A period' }]} />
         {from && <DatePicker value={from} allowClear={false} onChange={v => v && setFrom(v)} placeholder="From" />}
         <DatePicker value={to} allowClear={false} onChange={v => v && setTo(v)} placeholder="Statement date" />
         {from && <><Button size="small" onClick={() => month(0)}>This month</Button><Button size="small" onClick={() => month(1)}>Last month</Button></>}
