@@ -13,6 +13,7 @@ import {
   type Contact, type ContactPerson, type ContactAddress, type FinDocument, type DocLine, type DocType, type FinanceSettings, type Account,
 } from '../data/finance';
 import { splitByShare, payrollSplit } from '../data/ledger';
+import { canonicalCategory } from '../data/claimAccounts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const must = (r: { data: any; error: any }): any => { if (r.error) throw new Error(r.error.message); return r.data; };
@@ -682,7 +683,7 @@ export async function loadLedgerInput(companyId: number) {
       .then(r => ((r.data?.value as Record<string, number>) || {}));
     for (const r of runs) {
       const mine = paidBack.filter(c => Number(c.payroll_run_id) === r.id);
-      if (mine.length) r.reimbursements = mine.map(c => ({ category: c.category, amount: Number(c.amount), account_id: c.account_id ?? byCategory[c.category] ?? null }));
+      if (mine.length) r.reimbursements = mine.map(c => ({ category: c.category, amount: Number(c.amount), account_id: c.account_id ?? byCategory[canonicalCategory(c.category)] ?? null }));
     }
   }
   const byDoc = new Map<number, any[]>();

@@ -3,6 +3,7 @@ import { Card, Button, Modal, Form, Select, DatePicker, Input, message, Table, T
 import { PlusOutlined, PaperClipOutlined, UploadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { claimService, claimAccountService, claimAccountOf, CLAIM_CATEGORIES, type Claim, type ClaimReceipt } from '../../../../services/claims';
+import { defaultAccountFor } from '../../../../data/claimAccounts';
 import { leaveService, hrService, type Employee } from '../../../../services/hr';
 import { ATTACH_TYPES, accountService } from '../../../../services/finance';
 import type { Account } from '../../../../data/finance';
@@ -265,7 +266,7 @@ export function ClaimsTab({ companyId }: { companyId: number }) {
           { title: 'Amount', key: 'a', align: 'right' as const, render: (_, c) => money(c.amount, c.currency) },
           { title: 'Account', key: 'ac', width: 220, render: (_, c) => {
             if (c.status === 'rejected' || c.status === 'cancelled') return '—';
-            const chosen = claimAccountOf(c, byCategory);
+            const chosen = claimAccountOf(c, byCategory) ?? defaultAccountFor(c.category, accounts);
             return (
               <Select size="small" style={{ width: '100%' }} showSearch optionFilterProp="label" allowClear disabled={!canWrite} placeholder="Choose account"
                 status={chosen ? undefined : 'warning'} value={chosen ?? undefined} options={expenseOptions}
@@ -307,7 +308,7 @@ export function ClaimsTab({ companyId }: { companyId: number }) {
         <Input.TextArea autoSize={{ minRows: 2 }} placeholder="Reason (shown to the employee)" value={note} onChange={e => setNote(e.target.value)} />
       </Modal>
       {editing && <ClaimModal companyId={companyId} employeeId={editing.employee_id!} currency={currency} claim={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setNewFor(null); load(); }} />}
-      {catOpen && <CategoryAccountsModal companyId={companyId} accounts={expenseOptions} map={byCategory} onClose={() => setCatOpen(false)} onSaved={m => { setByCategory(m); setCatOpen(false); }} />}
+      {catOpen && <CategoryAccountsModal companyId={companyId} accounts={expenseOptions} map={Object.fromEntries(CLAIM_CATEGORIES.map(c => [c, byCategory[c] ?? defaultAccountFor(c, accounts)]).filter(([, v]) => v)) as Record<string, number>} onClose={() => setCatOpen(false)} onSaved={m => { setByCategory(m); setCatOpen(false); }} />}
       {viewing && <FileViewer name={viewing.file_name} load={() => claimService.receiptBlob(viewing.path)} onClose={() => setViewing(null)} />}
     </div>
   );

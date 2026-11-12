@@ -18,9 +18,10 @@ export interface Claim {
 }
 export interface ClaimReceipt { id: number; company_id: number; claim_id: number; path: string; file_name: string; content_type: string | null; size_bytes: number | null }
 
-export const CLAIM_CATEGORIES = ['Transport', 'Travel', 'Meals', 'Entertainment', 'Phone', 'Medical', 'Office supplies', 'Training', 'Others'];
+export { CLAIM_CATEGORIES, canonicalCategory } from '../data/claimAccounts';
 
-export { accountForCategory } from '../data/claimAccounts';
+import { accountForCategory, canonicalCategory } from '../data/claimAccounts';
+export { accountForCategory };
 
 const must = (r: { data: any; error: any }): any => {
   if (r.error) throw new Error(/claims|does not exist/i.test(r.error.message) && /relation|exist/i.test(r.error.message)
@@ -141,4 +142,4 @@ export const claimAccountService = {
 };
 /** The account a claim goes to: the one chosen on it, else its category's. Empty when neither is set. */
 export const claimAccountOf = (c: { account_id?: number | null; category: string }, map: Record<string, number>): number | null =>
-  c.account_id ?? map[c.category] ?? null;
+  c.account_id ?? map[canonicalCategory(c.category)] ?? null;
