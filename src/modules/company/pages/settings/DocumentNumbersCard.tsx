@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Card, Table, Input, InputNumber, Select, Button, Space, Typography, message, Tooltip, Switch } from 'antd';
+import { Card, Table, Input, InputNumber, Select, Button, Space, Typography, message, Tooltip, Tag, Divider } from 'antd';
 import { PlusOutlined, DeleteOutlined, WarningOutlined } from '@ant-design/icons';
 import { supabase } from '../../../../utils/supabase';
 import { formatDocumentNumber, validateFormat, DOCUMENT_LABELS, type NumberingFormat } from '../../../../utils/numbering';
+import { brandingService, DEFAULT_TEMPLATES, type Templates } from '../../../../services/branding';
+import {
+  formatFileName, formatDocFileName, FILE_NAME_TOKENS, DOC_FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME, DEFAULT_DOC_FILE_NAME,
+} from '../../../../utils/payslipFiles';
+import { DEFAULT_STATEMENT_FILE_NAME } from '../finance/Statements';
 
 const { Text, Title } = Typography;
-/** documents whose number can be typed in on each one instead (the editor has a box for it) */
+/** documents whose number can be typed in on each one: write Manual as the format (the editor then has a box for it) */
 const CAN_TYPE = ['invoice', 'quotation', 'credit_note'];
+const isManualText = (v: string) => v.trim().toLowerCase() === 'manual';
 
 const DEFAULTS: NumberingFormat[] = [
   { entity: 'employee', format: 'EMP-{0000}', next: 1, reset: 'never' },
@@ -14,9 +20,10 @@ const DEFAULTS: NumberingFormat[] = [
   { entity: 'leave', format: 'LEV-{YYYY}-{0000}', next: 1, reset: 'yearly' },
 ];
 
-/** Each company's own document numbering (invoice, employee ID, …). */
-export function DocumentNumbersCard({ companyId }: { companyId: number }) {
+/** Each company's own document numbering (invoice, employee ID, …) and the names of the files it downloads. */
+export function DocumentNumbersCard({ companyId, companyName }: { companyId: number; companyName?: string }) {
   const [rows, setRows] = useState<NumberingFormat[]>([]);
+  const [templates, setTemplates] = useState<Templates>(DEFAULT_TEMPLATES);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -26,24 +33,57 @@ export function DocumentNumbersCard({ companyId }: { companyId: number }) {
         const saved = Array.isArray(data?.value) ? data!.value as NumberingFormat[] : DEFAULTS;
         // statements are numbered too: the row is there to set up even before the first one is printed
         const list = saved.some(r => r.entity === 'soa') ? saved : [...saved, { entity: 'soa', format: 'SOA-{YYYY}-{0000}', next: 1, reset: 'yearly' as const }];
-        setRows(list.map(r => ({ reset: /\{YY(YY)?\}/.test(r.format) ? 'yearly' : 'never', ...r })));
+        // a number typed in on each document shows as "Manual"
+        setRows(list.map(r => ({ reset: /\{YY(YY)?\}/.test(r.format) ? 'yearly' : 'never', ...r, ...(r.manual ? { format: 'Manual' } : {}) })));
       });
+    brandingService.get(companyId).then(b => setTemplates(b.templates)).catch(() => null);
   }, [companyId]);
 
   const update = (i: number, patch: Partial<NumberingFormat>) =>
     setRows(rs => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const setFormat = (i: number, text: string) => {
+    if (isManualText(text) && CAN_TYPE.includes(rows[i].entity)) update(i, { manual: true, format: 'Manual' });
+    else update(i, { manual: false, format: text });
+  };
+  const setName = (key: 'payslip' | 'invoice' | 'soa', field: string, value: string) =>
+    setTemplates(t => ({ ...t, [key]: { ...t[key], [field]: value } }));
 
   const save = async () => {
-    const bad = rows.find(r => !r.entity.trim() || validateFormat(r.format).length);
+    const bad = rows.find(r => !r.entity.trim() || (!r.manual && validateFormat(r.format).length));
     if (bad) { message.error(`Fix the format for "${DOCUMENT_LABELS[bad.entity] || bad.entity || 'new document'}" first`); return; }
+    if (rows.some(r => !r.manual && isManualText(r.format))) { message.error('Only invoices, quotations and credit notes can be typed in by hand'); return; }
     setSaving(true);
-    const { error } = await supabase.from('company_settings').upsert(
-      { company_id: companyId, category: 'company', key: 'numbering_formats', value: rows },
-      { onConflict: 'company_id,category,key' },
-    );
+    try {
+      const { error } = await supabase.from('company_settings').upsert(
+        { company_id: companyId, category: 'company', key: 'numbering_formats', value: rows },
+        { onConflict: 'company_id,category,key' },
+      );
+      if (error) throw new Error(error.message);
+      // the file names live with the templates; the latest copy is read first so nothing else in them is overwritten
+      const fresh = (await brandingService.get(companyId)).templates;
+      await brandingService.save(companyId, { templates: {
+        ...fresh,
+        payslip: { ...fresh.payslip, fileName: templates.payslip.fileName, combinedFileName: templates.payslip.combinedFileName },
+        invoice: { ...fresh.invoice, fileName: templates.invoice.fileName },
+        soa: { ...fresh.soa, fileName: templates.soa.fileName },
+      } });
+      message.success('Saved');
+    } catch (e: any) { message.error(e.message); }
     setSaving(false);
-    if (error) message.error(error.message); else message.success('Document numbers saved');
   };
+
+  const co = companyName || 'Company';
+  const slipCtx = { name: 'Alice Tan', id: 'EMP-001', designation: 'Senior Designer', year: 2026, month: 5, company: co };
+  const docCtx = { type: 'Invoice', number: 'INV-0001', customer: 'Sample Customer Limited', reference: 'PO-123', date: '2026-06-01', company: co };
+  const chips = (tokens: { token: string; label: string }[], current: string | undefined, fallback: string, onPick: (v: string) => void) => (
+    <div style={{ marginTop: 4 }}>
+      {tokens.map(tk => (
+        <Tooltip key={tk.token} title={tk.label}>
+          <Tag style={{ cursor: 'pointer', marginBottom: 4 }} onClick={() => onPick(`${current ?? fallback}${tk.token}`)}>{tk.token}</Tag>
+        </Tooltip>
+      ))}
+    </div>
+  );
 
   return (
     <Card style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, maxWidth: 900, marginTop: 24 }}>
@@ -63,11 +103,11 @@ export function DocumentNumbersCard({ companyId }: { companyId: number }) {
           },
           {
             title: 'Format', key: 'format', render: (_, r, i) => {
-              const issues = validateFormat(r.format);
+              const issues = r.manual ? [] : validateFormat(r.format);
               return (
                 <Space>
-                  <Input value={r.format} disabled={r.manual} style={{ fontFamily: 'monospace', width: 200 }} status={issues.length ? 'error' : undefined}
-                    onChange={e => update(i, { format: e.target.value })} />
+                  <Input value={r.format} style={{ fontFamily: 'monospace', width: 200 }} status={issues.length ? 'error' : undefined}
+                    onChange={e => setFormat(i, e.target.value)} />
                   {issues.length > 0 && <Tooltip title={issues.join('. ')}><WarningOutlined style={{ color: '#ff9aa2' }} /></Tooltip>}
                 </Space>
               );
@@ -80,18 +120,42 @@ export function DocumentNumbersCard({ companyId }: { companyId: number }) {
                 options={[{ value: 'never', label: 'Never' }, { value: 'yearly', label: 'Every year' }, { value: 'monthly', label: 'Every month' }]} />
             ),
           },
-          {
-            title: 'Typed in', key: 'manual', render: (_, r, i) => CAN_TYPE.includes(r.entity)
-              ? <Switch checked={!!r.manual} onChange={v => update(i, { manual: v })} /> : null,
-          },
           { title: 'Next one will be', key: 'preview', render: (_, r) => r.manual ? <Text type="secondary">Typed in on each one</Text> : <Text code>{validateFormat(r.format).length ? '—' : formatDocumentNumber(r.format, r.next)}</Text> },
           { title: '', key: 'del', render: (_, _r, i) => <Button size="small" icon={<DeleteOutlined />} onClick={() => setRows(rs => rs.filter((_, j) => j !== i))} /> },
         ]}
       />
-      <Space style={{ marginTop: 12 }}>
-        <Button icon={<PlusOutlined />} onClick={() => setRows(rs => [...rs, { entity: '', format: 'DOC-{YYYY}-{0000}', next: 1, reset: 'yearly' }])}>Add document</Button>
-        <Button type="primary" loading={saving} onClick={save} style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>Save document numbers</Button>
-      </Space>
+      <Button icon={<PlusOutlined />} style={{ marginTop: 12 }} onClick={() => setRows(rs => [...rs, { entity: '', format: 'DOC-{YYYY}-{0000}', next: 1, reset: 'yearly' }])}>Add document</Button>
+
+      <Divider style={{ borderColor: 'rgba(255,255,255,0.08)' }} />
+      <Title level={5} style={{ color: '#f0ede6', marginTop: 0 }}>Download file names</Title>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16 }}>
+        <div>
+          <Text style={{ color: 'rgba(240,237,230,0.8)' }}>Each payslip</Text>
+          <Input value={templates.payslip.fileName ?? ''} placeholder={DEFAULT_FILE_NAME} style={{ marginTop: 4 }} onChange={e => setName('payslip', 'fileName', e.target.value)} />
+          <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>e.g. {formatFileName(templates.payslip.fileName, slipCtx)}</Text>
+          {chips(FILE_NAME_TOKENS, templates.payslip.fileName, DEFAULT_FILE_NAME, v => setName('payslip', 'fileName', v))}
+        </div>
+        <div>
+          <Text style={{ color: 'rgba(240,237,230,0.8)' }}>All payslips in one file (or the .zip)</Text>
+          <Input value={templates.payslip.combinedFileName ?? ''} placeholder={DEFAULT_COMBINED_FILE_NAME} style={{ marginTop: 4 }} onChange={e => setName('payslip', 'combinedFileName', e.target.value)} />
+          <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>e.g. {formatFileName(templates.payslip.combinedFileName, slipCtx, DEFAULT_COMBINED_FILE_NAME)}</Text>
+          {chips(FILE_NAME_TOKENS, templates.payslip.combinedFileName, DEFAULT_COMBINED_FILE_NAME, v => setName('payslip', 'combinedFileName', v))}
+        </div>
+        <div>
+          <Text style={{ color: 'rgba(240,237,230,0.8)' }}>Invoices, quotations and credit notes</Text>
+          <Input value={templates.invoice.fileName ?? ''} placeholder={DEFAULT_DOC_FILE_NAME} style={{ marginTop: 4 }} onChange={e => setName('invoice', 'fileName', e.target.value)} />
+          <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>e.g. {formatDocFileName(templates.invoice.fileName, docCtx)}</Text>
+          {chips(DOC_FILE_NAME_TOKENS, templates.invoice.fileName, DEFAULT_DOC_FILE_NAME, v => setName('invoice', 'fileName', v))}
+        </div>
+        <div>
+          <Text style={{ color: 'rgba(240,237,230,0.8)' }}>Statements of account</Text>
+          <Input value={templates.soa.fileName ?? ''} placeholder={DEFAULT_STATEMENT_FILE_NAME} style={{ marginTop: 4 }} onChange={e => setName('soa', 'fileName', e.target.value)} />
+          <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>e.g. {formatDocFileName(templates.soa.fileName || DEFAULT_STATEMENT_FILE_NAME, { ...docCtx, type: 'Statement of account', number: 'SOA-2026-0001', reference: '' })}</Text>
+          {chips(DOC_FILE_NAME_TOKENS, templates.soa.fileName, DEFAULT_STATEMENT_FILE_NAME, v => setName('soa', 'fileName', v))}
+        </div>
+      </div>
+
+      <Button type="primary" loading={saving} onClick={save} style={{ marginTop: 16, background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>Save document numbers and file names</Button>
     </Card>
   );
 }

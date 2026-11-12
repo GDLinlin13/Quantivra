@@ -80,6 +80,7 @@ function CompanyLayoutInner() {
       <Sider
         theme="dark"
         collapsible
+        width={240}
         collapsed={collapsed}
         onCollapse={setCollapsed}
         style={{ background: '#111518', borderRight: '1px solid rgba(255,255,255,0.06)' }}
@@ -87,7 +88,7 @@ function CompanyLayoutInner() {
         <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px' }}>
           {collapsed
             ? <RainbowTitle text={(companyName || 'Q').charAt(0)} maxWidth={40} maxFontSize={20} />
-            : <RainbowTitle text={companyName || ''} maxWidth={188} />}
+            : <RainbowTitle text={companyName || ''} maxWidth={216} />}
         </div>
         <Menu
           theme="dark"
