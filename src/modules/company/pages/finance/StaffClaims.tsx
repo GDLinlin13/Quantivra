@@ -20,13 +20,15 @@ export function StaffClaims({ data }: { data: FinanceData }) {
 
   const load = useCallback(async () => {
     try {
-      const list = (await claimService.list(companyId)).filter(c => c.status === 'approved' && !c.document_id);
+      const list = (await claimService.list(companyId)).filter(c => c.status === 'approved' && !c.document_id && !c.payroll_run_id
+        // claims in the company's currency are paid back in the next payroll run (once database update 058 is in)
+        && (!('payroll_run_id' in c) || c.currency !== currency));
       setClaims(list);
       setAccountOf(Object.fromEntries(list.map(c => [c.id, accountForCategory(c.category, accounts)])));
       setChosen(list.map(c => c.id));
       setError(null);
     } catch (e: any) { setError(e.message); setClaims([]); }
-  }, [companyId, accounts]);
+  }, [companyId, accounts, currency]);
   useEffect(() => { load(); }, [load]);
 
   const name = (id: number) => employees.find(e => e.id === id)?.full_name || '—';

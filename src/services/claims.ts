@@ -11,6 +11,8 @@ export interface Claim {
   description: string | null; amount: number; currency: string; status: ClaimStatus;
   decided_by: number | null; decided_at: string | null; decision_note: string | null;
   document_id: number | null; created_at?: string;
+  /** the payroll run that paid it back (migration 058) */
+  payroll_run_id?: number | null;
 }
 export interface ClaimReceipt { id: number; company_id: number; claim_id: number; path: string; file_name: string; content_type: string | null; size_bytes: number | null }
 
@@ -50,6 +52,16 @@ export const claimService = {
     };
     if (c.id) { must(await supabase.from('claims').update(row).eq('id', c.id)); return c.id; }
     return must(await supabase.from('claims').insert({ ...row, status: 'pending' }).select('id').single()).id;
+  },
+  /** The approved claims a payroll run will pay back (company currency, not in Finance, not in another run). Empty before database update 058. */
+  async waitingForPayroll(companyId: number, runId?: number | null): Promise<{ claim_id: number; employee_id: number; category: string; description: string | null; amount: number }[]> {
+    const r = await supabase.rpc('payroll_claims_waiting', { p_company_id: companyId, p_run_id: runId ?? null });
+    if (r.error) return [];
+    return (r.data || []).map((x: any) => ({ ...x, claim_id: Number(x.claim_id), employee_id: Number(x.employee_id), amount: Number(x.amount) }));
+  },
+  async takeForPayroll(runId: number, claimIds: number[]) {
+    const r = await supabase.rpc('payroll_take_claims', { p_run_id: runId, p_claim_ids: claimIds });
+    if (r.error && !/payroll_take_claims|function/i.test(r.error.message)) throw new Error(r.error.message);
   },
   async cancel(id: number) { must(await supabase.from('claims').update({ status: 'cancelled' }).eq('id', id)); },
   async remove(id: number) {

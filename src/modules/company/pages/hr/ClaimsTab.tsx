@@ -24,7 +24,7 @@ async function companyCurrency(companyId: number): Promise<string> {
 }
 
 /** Paid / waiting for payment, from the staff-claim expense Finance made. */
-function usePaidState(claims: Claim[]) {
+function usePaidState(claims: Claim[], companyCurrency = '') {
   const [paid, setPaid] = useState<Map<number, number>>(new Map());
   useEffect(() => {
     const ids = [...new Set(claims.map(c => c.document_id).filter(Boolean))] as number[];
@@ -34,7 +34,8 @@ function usePaidState(claims: Claim[]) {
   }, [claims]);
   return (c: Claim) => {
     if (c.status !== 'approved') return null;
-    if (!c.document_id) return <Tag>Waiting for Finance</Tag>;
+    if (c.payroll_run_id) return <Tag color="green">In payroll</Tag>;
+    if (!c.document_id) return <Tag>{'payroll_run_id' in c && c.currency === companyCurrency ? 'Next payroll run' : 'Waiting for Finance'}</Tag>;
     const due = paid.get(c.document_id);
     return due != null && due <= 0.004 ? <Tag color="green">Paid</Tag> : <Tag color="blue">To be paid</Tag>;
   };
@@ -121,7 +122,7 @@ export function MyClaimsTab({ companyId }: { companyId: number }) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<Claim> | null>(null);
   const [viewing, setViewing] = useState<ClaimReceipt | null>(null);
-  const paidState = usePaidState(claims);
+  const paidState = usePaidState(claims, currency);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -203,7 +204,7 @@ export function ClaimsTab({ companyId }: { companyId: number }) {
   const [note, setNote] = useState('');
   const [viewing, setViewing] = useState<ClaimReceipt | null>(null);
   const [chain, setChain] = useState<Map<number, RequestStatus>>(new Map());
-  const paidState = usePaidState(claims);
+  const paidState = usePaidState(claims, currency);
 
   const load = useCallback(async () => {
     setLoading(true);

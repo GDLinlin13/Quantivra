@@ -3,6 +3,7 @@ import { calculatePayroll } from '../engine';
 import type { CountryPackDef } from '../data/country-packs/schema';
 import type { EmployeePayrollInput, PayrollPeriod, PayrollRunResult } from '../engine/types';
 import { hrService, type Employee } from './hr';
+import { claimService } from './claims';
 import dayjs from 'dayjs';
 import { payrollResidency } from '../data/residency-options';
 import { toEngineItems, PAY_ITEM_BY_CODE, isOvertime, type PayItemRow } from '../data/payItems';
@@ -160,6 +161,13 @@ export const payrollService = {
 
     const absorbedSchemes = await statutorySettingsService.absorbedList(companyId);
     const items = await payItemService.listForPeriod(companyId, year, month);
+    // approved claims are paid back in this run, as reimbursements (no CPF, not taxed)
+    const activeIds = new Set(employees.map(e => Number(e.id)));
+    const claimsIn = (await claimService.waitingForPayroll(companyId, existing.data?.id)).filter(c => activeIds.has(c.employee_id));
+    for (const c of claimsIn) {
+      items.push({ company_id: companyId, employee_id: c.employee_id, item_code: 'REIMBURSEMENT', amount: c.amount,
+        note: `${c.category}${c.description ? ` – ${c.description}` : ''}`, recurring: false, period_year: year, period_month: month });
+    }
     const itemsFor = (id: number) => items.filter(i => Number(i.employee_id) === Number(id));
 
     const result = calculatePayroll({
@@ -220,6 +228,7 @@ export const payrollService = {
     });
     const { error: slipErr } = await supabase.from('payslips').insert(slips);
     if (slipErr) throw new Error(slipErr.message);
+    await claimService.takeForPayroll(runId, claimsIn.map(c => c.claim_id));
     // keep the bank account each payslip was paid to (database update 038; a re-run keeps the first one)
     const kept = await supabase.rpc('payroll_keep_bank', { p_run_id: runId });
     if (kept.error && !/payroll_keep_bank|function/i.test(kept.error.message)) throw new Error(kept.error.message);
