@@ -1214,6 +1214,17 @@ BEGIN; :as_a
 DELETE FROM user_profiles WHERE auth_user_id = 'aaaaaaaa-0000-0000-0000-000000000001';
 COMMIT;
 
+\echo '9v. claims in payroll: only the company, and only with pay access'
+BEGIN; :as_b
+DO $$
+BEGIN
+  BEGIN PERFORM * FROM payroll_claims_waiting(1); RAISE EXCEPTION 'FAIL: B listed A payroll claims';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM payroll_take_claims(999999, ARRAY[1]::bigint[]); RAISE EXCEPTION 'FAIL: B took claims into a run';
+  EXCEPTION WHEN insufficient_privilege OR no_data_found THEN NULL; WHEN SQLSTATE 'P0002' THEN NULL; END;
+END $$;
+ROLLBACK;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;

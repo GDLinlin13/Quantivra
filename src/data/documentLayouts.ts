@@ -511,8 +511,9 @@ export function money(n: number, c = 'SGD', format: AmountFormat | string | null
     case 'symbol_space': return `${sign}${currencySymbol(c)} ${num}`;
     case 'code_after': return `${sign}${num} ${c}`;
     case 'number': return `${sign}${num}`;
-    case 'accounting_symbol': return `${sign}${currencySymbol(c)}${AMOUNT_SPLIT}${num}`;
-    case 'accounting_code': return `${sign}${c}${AMOUNT_SPLIT}${num}`;
+    // the symbol stays at the left edge so they line up; the minus goes with the number
+    case 'accounting_symbol': return `${currencySymbol(c)}${AMOUNT_SPLIT}${sign}${num}`;
+    case 'accounting_code': return `${c}${AMOUNT_SPLIT}${sign}${num}`;
     default: return `${sign}${c} ${num}`;
   }
 }

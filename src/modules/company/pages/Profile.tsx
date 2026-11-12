@@ -28,6 +28,7 @@ export function CompanyProfilePage() {
   const [accent, setAccent] = useState('#1677ff');
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [bankSel, setBankSel] = useState<number | null>(null);   // which payment is open in the invoice settings
   const [vals, setVals] = useState<Record<string, any>>({}); // mirror of the form, for the preview
 
   const load = useCallback(async () => {
@@ -120,10 +121,9 @@ export function CompanyProfilePage() {
     </div>
   );
   const previewBox = (label: string, children: ReactNode) => (
-    <>
-      <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>{label}</Text>
-      <div style={{ background: '#fff', borderRadius: 8, padding: 24, marginTop: 8 }}>{children}</div>
-    </>
+    <Card size="small" style={panel} title={<span style={{ color: '#f0ede6' }}>{label}</span>}>
+      <div style={{ background: '#fff', borderRadius: 8, padding: 24 }}>{children}</div>
+    </Card>
   );
   const row = (a: ReactNode, b: ReactNode, opts: { bold?: boolean; line?: boolean; muted?: boolean } = {}) => (
     <tr>
@@ -245,49 +245,64 @@ export function CompanyProfilePage() {
     </Form>
   );
 
-  const invoiceSettings = (
-    <Form layout="vertical" component={false}>
-      <Form.Item label="Payment terms (days)" style={{ marginTop: 8, maxWidth: 200 }}>
-        <InputNumber min={0} style={{ width: '100%' }} value={tpl.invoice.paymentTermsDays} onChange={x => setTplField('invoice', 'paymentTermsDays', x ?? 30)} />
-      </Form.Item>
-      <Form.Item label="Payment details">
-        {banks.map((b, bi) => (
-          <div key={bi} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: 10, marginBottom: 10 }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
-              <Input style={{ width: 240 }} value={b.title} placeholder="Payment name" onChange={e => setBank(bi, { title: e.target.value })} />
-              <Switch size="small" checked={!!b.isDefault || banks.length === 1}
-                onChange={on => setBanks(banks.map((x, j) => ({ ...x, isDefault: on ? j === bi : (j === 0 && bi !== 0) })))} />
-              <Text style={{ color: 'rgba(240,237,230,0.7)', fontSize: 12 }}>Default</Text>
-              {banks.length > 1 && (
-                <Popconfirm title="Remove this bank account?" onConfirm={() => {
-                  const rest = banks.filter((_, j) => j !== bi);
-                  if (!rest.some(x => x.isDefault) && rest[0]) rest[0] = { ...rest[0], isDefault: true };
-                  setBanks(rest);
-                }}>
-                  <Button size="small" danger icon={<DeleteOutlined />} style={{ marginLeft: 'auto' }}>Remove bank</Button>
-                </Popconfirm>
-              )}
-            </div>
-            {b.lines.map((r, li) => (
-              <div key={li} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                <Input style={{ width: 170 }} value={r.label} placeholder={li === 0 ? 'Payment Label' : undefined} onChange={e => setBankLine(bi, li, { label: e.target.value })} />
-                <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} style={{ flex: 1 }} value={r.value} placeholder={li === 0 ? 'Payment Value' : undefined} onChange={e => setBankLine(bi, li, { value: e.target.value })} />
-                <Button icon={<DeleteOutlined />} onClick={() => setBank(bi, { lines: b.lines.filter((_, j) => j !== li) })} />
-              </div>
-            ))}
-            <Button size="small" icon={<PlusOutlined />} onClick={() => setBank(bi, { lines: [...b.lines, { label: '', value: '' }] })}>Add a line</Button>
+  const bankBox = (bi: number) => {
+    const b = banks[bi];
+    if (!b) return null;
+    return (
+      <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: 10, marginTop: 4, marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+          <Input style={{ width: 240 }} value={b.title} placeholder="Payment name" onChange={e => setBank(bi, { title: e.target.value })} />
+          <Switch size="small" checked={!!b.isDefault || banks.length === 1}
+            onChange={on => setBanks(banks.map((x, j) => ({ ...x, isDefault: on ? j === bi : (j === 0 && bi !== 0) })))} />
+          <Text style={{ color: 'rgba(240,237,230,0.7)', fontSize: 12 }}>Default</Text>
+          {banks.length > 1 && (
+            <Popconfirm title="Remove this payment?" onConfirm={() => {
+              const rest = banks.filter((_, j) => j !== bi);
+              if (!rest.some(x => x.isDefault) && rest[0]) rest[0] = { ...rest[0], isDefault: true };
+              setBanks(rest); setBankSel(null);
+            }}>
+              <Button size="small" danger icon={<DeleteOutlined />} style={{ marginLeft: 'auto' }}>Remove bank</Button>
+            </Popconfirm>
+          )}
+        </div>
+        {b.lines.map((r, li) => (
+          <div key={li} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+            <Input style={{ width: 170 }} value={r.label} placeholder={li === 0 ? 'Payment Label' : undefined} onChange={e => setBankLine(bi, li, { label: e.target.value })} />
+            <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} style={{ flex: 1 }} value={r.value} placeholder={li === 0 ? 'Payment Value' : undefined} onChange={e => setBankLine(bi, li, { value: e.target.value })} />
+            <Button icon={<DeleteOutlined />} onClick={() => setBank(bi, { lines: b.lines.filter((_, j) => j !== li) })} />
           </div>
         ))}
-        <Button icon={<PlusOutlined />} onClick={() => setBanks([...banks, { title: '', lines: [{ label: '', value: '' }] }])}>Add another bank</Button>
-      </Form.Item>
+        <Button size="small" icon={<PlusOutlined />} onClick={() => setBank(bi, { lines: [...b.lines, { label: '', value: '' }] })}>Add a line</Button>
+      </div>
+    );
+  };
+
+  // Footer note, payment terms and the payment details on one row; a payment's boxes open when it is chosen
+  const invoiceSettings = (
+    <Form layout="vertical" component={false}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, alignItems: 'start' }}>
+        <Form.Item label="Invoice footer note" style={{ marginBottom: 8 }}>
+          <Input.TextArea rows={2} value={tpl.invoice.footerNote} onChange={e => setTplField('invoice', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Company Settings" />
+        </Form.Item>
+        <Form.Item label="Payment terms (days)" style={{ marginBottom: 8 }}>
+          <InputNumber min={0} style={{ width: '100%' }} value={tpl.invoice.paymentTermsDays} onChange={x => setTplField('invoice', 'paymentTermsDays', x ?? 30)} />
+        </Form.Item>
+        <Form.Item label="Payment details" style={{ marginBottom: 8 }}>
+          <Select allowClear style={{ width: '100%' }} placeholder="Choose a payment" value={bankSel ?? undefined}
+            onChange={(v: number | 'add' | undefined) => {
+              if (v === 'add') { setBanks([...banks, { title: '', lines: [{ label: '', value: '' }] }]); setBankSel(banks.length); }
+              else setBankSel(v === undefined || v === null ? null : Number(v));
+            }}
+            options={[...banks.map((b, i) => ({ value: i as number | 'add', label: `${b.title || `Payment ${i + 1}`}${b.isDefault || banks.length === 1 ? ' (default)' : ''}` })),
+              { value: 'add' as number | 'add', label: '+ Add bank' }]} />
+        </Form.Item>
+      </div>
+      {bankSel != null && bankBox(bankSel)}
       {(tpl.invoice.bankDetails || '').trim() && (
         <Form.Item label="Older payment details (free text)">
           <Input.TextArea rows={2} value={tpl.invoice.bankDetails} onChange={e => setTplField('invoice', 'bankDetails', e.target.value)} />
         </Form.Item>
       )}
-      <Form.Item label="Invoice footer note">
-        <Input.TextArea rows={2} value={tpl.invoice.footerNote} onChange={e => setTplField('invoice', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Company Settings" />
-      </Form.Item>
     </Form>
   );
 
@@ -367,7 +382,7 @@ export function CompanyProfilePage() {
             key: 'invoice-template', label: 'Invoice',
             children: templateTab('invoice', 'Invoices', tpl.invoice.layout?.enabled ? null : invoicePrebuilt,
               undefined,
-              <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>Invoice settings</span>}>
+              <Card size="small" style={{ ...panel, marginBottom: 12 }} title={<span style={{ color: '#f0ede6' }}>Invoice settings</span>}>
                 {invoiceSettings}
               </Card>),
           },

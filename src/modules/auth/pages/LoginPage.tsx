@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, Form, Input, Button, Checkbox } from 'antd';
+import { Card, Form, Input, Button } from 'antd';
 import { UserOutlined, LockOutlined, BankOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -11,7 +11,7 @@ export function LoginPage() {
   const [form] = Form.useForm();
   const [params] = useSearchParams();
   const [loading, setLoading] = useState(false);
-  const [remember, setRemember] = useState(false);
+  const remember = false;   // signing in lasts until the browser is closed
   const [error, setError] = useState('');
 
   const handleLogin = async (values: { username: string; password: string; company_code?: string }) => {
@@ -135,12 +135,6 @@ export function LoginPage() {
               {error}
             </div>
           )}
-          <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Checkbox checked={remember} onChange={e => setRemember(e.target.checked)}
-              style={{ color: 'rgba(240,237,230,0.5)', fontSize: 13 }}>
-              Remember me
-            </Checkbox>
-          </div>
           <Form.Item style={{ marginTop: 28 }}>
             <Button type="primary" htmlType="submit" loading={loading} block size="large"
               style={{

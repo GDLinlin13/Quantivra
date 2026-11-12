@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { RainbowTitle } from '../components/RainbowTitle';
-import { Layout, Menu, Button, Typography } from 'antd';
+import { Layout, Menu, Typography } from 'antd';
 import { UserMenu } from '../components/UserMenu';
+import { NotificationBell } from '../components/NotificationBell';
 import {
   DashboardOutlined, TeamOutlined, UserOutlined, SafetyOutlined,
   SettingOutlined, BankOutlined,
-  FileOutlined, BellOutlined, DollarOutlined, ShopOutlined,
+  FileOutlined, DollarOutlined, ShopOutlined,
   ContactsOutlined, PartitionOutlined, ProjectOutlined, } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -98,7 +99,7 @@ function CompanyLayoutInner() {
           background: '#111518', borderBottom: '1px solid rgba(255,255,255,0.06)',
           display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '0 24px', height: 64, gap: 16,
         }}>
-          <Button type="text" icon={<BellOutlined />} style={{ color: '#f0ede6' }} />
+          {companyId && <NotificationBell companyId={companyId} />}
           <UserMenu />
         </Header>
         <Content style={{ padding: 24 }}>

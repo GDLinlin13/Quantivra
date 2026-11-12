@@ -24,7 +24,7 @@ async function companyCurrency(companyId: number): Promise<string> {
 }
 
 /** Paid / waiting for payment, from the staff-claim expense Finance made. */
-function usePaidState(claims: Claim[]) {
+function usePaidState(claims: Claim[], companyCurrency = '') {
   const [paid, setPaid] = useState<Map<number, number>>(new Map());
   useEffect(() => {
     const ids = [...new Set(claims.map(c => c.document_id).filter(Boolean))] as number[];
@@ -34,7 +34,8 @@ function usePaidState(claims: Claim[]) {
   }, [claims]);
   return (c: Claim) => {
     if (c.status !== 'approved') return null;
-    if (!c.document_id) return <Tag>Waiting for Finance</Tag>;
+    if (c.payroll_run_id) return <Tag color="green">In payroll</Tag>;
+    if (!c.document_id) return <Tag>{'payroll_run_id' in c && c.currency === companyCurrency ? 'Next payroll run' : 'Waiting for Finance'}</Tag>;
     const due = paid.get(c.document_id);
     return due != null && due <= 0.004 ? <Tag color="green">Paid</Tag> : <Tag color="blue">To be paid</Tag>;
   };
@@ -85,7 +86,7 @@ function ClaimModal({ companyId, employeeId, currency, claim, onClose, onSaved }
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Form.Item name="claim_date" label="Date of expense" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="category" label="Category" rules={[{ required: true, message: 'Choose or type a category' }]}>
-            <AutoComplete options={CLAIM_CATEGORIES.map(c => ({ value: c }))} placeholder="e.g. Transport" filterOption={(i, o) => String(o?.value).toLowerCase().includes(i.toLowerCase())} />
+            <AutoComplete options={CLAIM_CATEGORIES.map(c => ({ value: c }))} filterOption={(i, o) => String(o?.value).toLowerCase().includes(i.toLowerCase())} />
           </Form.Item>
           <Form.Item name="currency" label="Currency" rules={[{ required: true }]}>
             <Select showSearch options={[...new Set([currency, ...COMMON_CURRENCIES])].map(c => ({ value: c, label: c }))} />
@@ -94,7 +95,7 @@ function ClaimModal({ companyId, employeeId, currency, claim, onClose, onSaved }
             <AmountInput style={{ width: '100%' }} precision={2} min={0} />
           </Form.Item>
         </div>
-        <Form.Item name="description" label="What was it for"><Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} placeholder="e.g. Taxi to client meeting" /></Form.Item>
+        <Form.Item name="description" label="What was it for"><Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
         <Form.Item label="Receipts">
           <Space orientation="vertical" size={4}>
             {files.map((f, i) => (
@@ -121,7 +122,7 @@ export function MyClaimsTab({ companyId }: { companyId: number }) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<Claim> | null>(null);
   const [viewing, setViewing] = useState<ClaimReceipt | null>(null);
-  const paidState = usePaidState(claims);
+  const paidState = usePaidState(claims, currency);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -203,7 +204,7 @@ export function ClaimsTab({ companyId }: { companyId: number }) {
   const [note, setNote] = useState('');
   const [viewing, setViewing] = useState<ClaimReceipt | null>(null);
   const [chain, setChain] = useState<Map<number, RequestStatus>>(new Map());
-  const paidState = usePaidState(claims);
+  const paidState = usePaidState(claims, currency);
 
   const load = useCallback(async () => {
     setLoading(true);
