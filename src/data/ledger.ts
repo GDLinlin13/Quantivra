@@ -1,6 +1,7 @@
 // The general ledger, worked out from what's already in the system (invoices, bills, expenses,
 // payments, finalised payroll, opening balances) plus manual journals. Nothing is posted twice:
 // change or void a document and the books follow.
+import { accountForCategory } from './claimAccounts';
 import { docTotals, docRate, type Account, type FinDocument, type DocLine } from './finance';
 
 export interface LedgerLine { account_id: number; debit: number; credit: number; description?: string; contact_id?: number | null }
@@ -65,8 +66,20 @@ export function payrollLines(r: LedgerInput['payroll'][number], accounts: Accoun
   // CPF Board drops the cents from the month's total SDL (e.g. 53.75 → 53.00), so that's what is owed
   const sdlCents = r2((sp?.sdl || 0) - Math.floor((sp?.sdl || 0) + 1e-9));
   const grat = r2(Math.min(Math.max(0, employer - erCpf), sp?.gratuity || 0));
+  // staff claims paid back by this run go to the expense account of their category
+  const reimbBy = new Map<string, { category: string; account: number; amount: number }>();
+  for (const x of r.reimbursements || []) {
+    const account = accountForCategory(x.category, accounts) || WAGES;
+    const k = `${account}`;
+    const have = reimbBy.get(k);
+    if (have) have.amount = r2(have.amount + Number(x.amount)); else reimbBy.set(k, { category: x.category, account, amount: r2(Number(x.amount)) });
+  }
+  let room = r2(gross - dirGross);                       // never more than the pay it came out of
+  const reimb = [...reimbBy.values()].map(x => { const amount = Math.max(0, Math.min(x.amount, room)); room = r2(room - amount); return { ...x, amount }; }).filter(x => x.amount > 0);
+  const reimbTotal = r2(reimb.reduce((t, x) => t + x.amount, 0));
   const lines: LedgerLine[] = [
-    { account_id: WAGES, debit: r2(gross - dirGross), credit: 0, description: 'Employee salaries' },
+    { account_id: WAGES, debit: r2(gross - dirGross - reimbTotal), credit: 0, description: 'Employee salaries' },
+    ...reimb.map(x => ({ account_id: x.account, debit: x.amount, credit: 0, description: `Staff claims – ${x.category}` })),
     { account_id: DIRECTOR, debit: dirGross, credit: 0, description: "Director's salary" },
     { account_id: ER_CPF, debit: erCpf, credit: 0, description: 'Employer contributions' },
     { account_id: ER_OTHER, debit: r2(employer - erCpf - sdlCents - grat), credit: 0, description: 'Other employer contributions' },
@@ -105,7 +118,9 @@ export interface LedgerInput {
   /** the company's own currency (documents in other currencies are booked at their rate) */
   currency?: string;
   allocations: { payment_id: number; document_id: number; amount: number }[];
-  payroll: { id: number; period_year: number; period_month: number; pay_date: string; status: string; total_gross: number; total_deductions: number; total_employer: number; total_net: number; split?: PayrollSplit }[];
+  payroll: { id: number; period_year: number; period_month: number; pay_date: string; status: string; total_gross: number; total_deductions: number; total_employer: number; total_net: number; split?: PayrollSplit;
+    /** staff claims paid back in this run, by category: booked to their own expense accounts, not to salaries (migration 058) */
+    reimbursements?: { category: string; amount: number }[] }[];
   journals: { id: number; number: string | null; journal_date: string; memo: string | null; lines: { account_id: number; debit: number; credit: number; description?: string | null }[] }[];
 }
 

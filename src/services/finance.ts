@@ -671,6 +671,13 @@ export async function loadLedgerInput(companyId: number) {
       const mine = (slips as any[]).filter(s => s.run_id === r.id);
       if (mine.length) r.split = payrollSplit(mine, directors, country);
     }
+    // staff claims paid back in these runs (database update 058): booked by category, not as salaries
+    const paidBack = await supabase.from('claims').select('payroll_run_id, category, amount').in('payroll_run_id', runs.map(r => r.id))
+      .then(r => (r.error ? [] : r.data || []));
+    for (const r of runs) {
+      const mine = (paidBack as any[]).filter(c => Number(c.payroll_run_id) === r.id);
+      if (mine.length) r.reimbursements = mine.map(c => ({ category: c.category, amount: Number(c.amount) }));
+    }
   }
   const byDoc = new Map<number, any[]>();
   for (const l of lines || []) { const a = byDoc.get(l.document_id) || []; a.push(l); byDoc.set(l.document_id, a); }

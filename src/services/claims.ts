@@ -18,19 +18,7 @@ export interface ClaimReceipt { id: number; company_id: number; claim_id: number
 
 export const CLAIM_CATEGORIES = ['Transport', 'Travel', 'Meals', 'Entertainment', 'Phone', 'Medical', 'Office supplies', 'Training', 'Others'];
 
-/** The expense account a category usually goes to (by the standard chart's names), else General expenses. */
-export function accountForCategory(category: string, accounts: { id: number; name: string; type: string; subtype?: string | null; archived?: boolean }[]): number | null {
-  const exp = accounts.filter(a => a.type === 'expense' && !a.archived);
-  const c = category.toLowerCase();
-  const by = (re: RegExp) => exp.find(a => re.test(a.name.toLowerCase()))?.id;
-  const guess =
-    /transport|travel|taxi|parking|mileage/.test(c) ? by(/travel|transport/) :
-    /meal|entertain|food/.test(c) ? by(/meal|entertain/) :
-    /office|stationery|supplies/.test(c) ? by(/office/) :
-    /software|subscription/.test(c) ? by(/software|subscription/) :
-    /phone|internet|utilit/.test(c) ? by(/utilit|phone|telecom/) : undefined;
-  return guess ?? exp.find(a => a.subtype === 'general')?.id ?? exp[0]?.id ?? null;
-}
+export { accountForCategory } from '../data/claimAccounts';
 
 const must = (r: { data: any; error: any }): any => {
   if (r.error) throw new Error(/claims|does not exist/i.test(r.error.message) && /relation|exist/i.test(r.error.message)
