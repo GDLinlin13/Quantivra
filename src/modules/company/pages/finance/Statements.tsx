@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Table, Button, Space, Modal, Select, DatePicker, Segmented, Tag, Empty, Typography, message, Input } from 'antd';
-import { PrinterOutlined, DownloadOutlined, FileTextOutlined } from '@ant-design/icons';
+import { PrinterOutlined, DownloadOutlined, FileTextOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
-import { paymentService, docService } from '../../../../services/finance';
+import { paymentService, docService, companyFileService, documentFolderService } from '../../../../services/finance';
 import { today, type Contact, type ContactPerson, type FinanceSettings } from '../../../../data/finance';
 import { companyFields, money as fmtMoney, pickPaymentAccount } from '../../../../data/documentLayouts';
 import { buildStatement, statementCurrencies, customersOwing, type Soa, type SoaPayment, type SoaAllocation } from '../../../../data/soa';
@@ -179,11 +179,28 @@ function StatementModal({ data, contactId, currency, payments, allocations, onCl
     } catch (e: any) { message.error(e.message); }
     setBusy(false);
   };
+  // keep a copy in Documents → Other files → SOA (the folder can be renamed there)
+  const [saving, setSaving] = useState(false);
+  const saveCopy = async () => {
+    setSaving(true);
+    try {
+      const n = await ensureNumber();
+      const el = document.getElementById('fin-soa-print');
+      if (!el) return;
+      const blob = await elementsToPdf([el]);
+      await companyFileService.add(data.companyId, new File([blob], `${nameFor(n)}.pdf`, { type: 'application/pdf' }), { folder: 'other', subfolder: 'SOA' });
+      const folders = await documentFolderService.list(data.companyId).catch(() => [] as string[]);
+      if (!folders.includes('SOA')) await documentFolderService.save(data.companyId, [...folders, 'SOA']).catch(() => null);
+      message.success(`Saved in Documents → Other files → SOA: ${nameFor(n)}.pdf`);
+    } catch (e: any) { message.error(e.message); }
+    setSaving(false);
+  };
   const month = (m: number) => { const d = dayjs().subtract(m, 'month'); setFrom(d.startOf('month')); setTo(m === 0 ? dayjs() : d.endOf('month')); };
 
   return (
     <Modal open onCancel={onClose} width={A4_MODAL} title={`Statement of account — ${contact?.name || ''}`}
-      footer={<Space><Button icon={<PrinterOutlined />} onClick={print}>Print</Button>
+      footer={<Space><Button icon={<FolderOpenOutlined />} loading={saving} onClick={saveCopy}>Save to Documents</Button>
+        <Button icon={<PrinterOutlined />} onClick={print}>Print</Button>
         <Button type="primary" icon={<DownloadOutlined />} loading={busy} onClick={download}>Download PDF</Button></Space>}>
       <Space wrap style={{ marginBottom: 12 }}>
         {currencies.length > 1 && <Select style={{ width: 90 }} value={cur} onChange={setCur} options={currencies.map(c => ({ value: c, label: c }))} />}
