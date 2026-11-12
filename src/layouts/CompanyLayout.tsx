@@ -53,7 +53,7 @@ function CompanyLayoutInner() {
   ].filter(Boolean) as { key: string; icon: React.ReactNode; label: string }[];
 
   const adminMenu = !access.canViewPay ? [] : [
-    { key: '/company/settings', icon: <SettingOutlined />, label: 'Settings' },
+    { key: '/company/settings', icon: <SettingOutlined />, label: 'Company Settings' },
     { key: '/company/profile', icon: <BankOutlined />, label: 'Document Templates' },
     { key: '/company/users', icon: <UserOutlined />, label: 'Users' },
     { key: '/company/roles', icon: <SafetyOutlined />, label: 'Roles' },

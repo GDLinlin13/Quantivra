@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
-import { Card, Typography, Spin, Tabs, Form, Input, InputNumber, Button, message, Switch, Space, Segmented, Alert, Tag, Tooltip, Select, Popconfirm } from 'antd';
+import { Card, ColorPicker, Typography, Spin, Tabs, Form, Input, InputNumber, Button, message, Switch, Space, Segmented, Alert, Tag, Tooltip, Select, Popconfirm } from 'antd';
 import { DeleteOutlined, SaveOutlined, PlusOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -46,6 +46,16 @@ export function CompanyProfilePage() {
   useEffect(() => { load(); }, [load]);
 
   if (!company) return <Spin />;
+
+  // the accent colour and the default footer are shared by all the templates
+  const saveLook = async () => {
+    setSaving(true);
+    try {
+      await brandingService.save(companyId!, { accent_color: accent, footer_note: vals.footer_note ?? null });
+      message.success('Saved');
+    } catch (e: any) { message.error(e.message); }
+    setSaving(false);
+  };
 
   // Template tabs: templates only.
   const saveTemplates = async () => {
@@ -377,6 +387,15 @@ export function CompanyProfilePage() {
   return (
     <div>
       <Title level={4} style={{ color: '#f0ede6', marginBottom: 16 }}>Document Templates</Title>
+      <Card size="small" style={{ ...panel, marginBottom: 16, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>For all templates</span>}>
+        <Form layout="vertical" size="small" component={false}>
+          <Form.Item label="Accent colour"><ColorPicker value={accent} onChange={c => setAccent(c.toHexString())} showText /></Form.Item>
+          <Form.Item label="Default document footer">
+            <Input.TextArea rows={2} value={vals.footer_note || ''} onChange={e => setVals(p => ({ ...p, footer_note: e.target.value }))} placeholder="e.g. This is a computer-generated document." />
+          </Form.Item>
+        </Form>
+        <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={saveLook}>Save</Button>
+      </Card>
       <Tabs
         items={[
           {

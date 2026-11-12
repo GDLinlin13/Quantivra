@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, Form, Input, Button, Upload, message, Space, ColorPicker, Typography, Spin } from 'antd';
+import { Card, Form, Input, Button, Upload, message, Space, Typography, Spin } from 'antd';
 import { UploadOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
 import { brandingService, fileToLogoDataUri, type Branding } from '../../../../services/branding';
 import { DocumentShell } from '../../../../components/DocumentShell';
@@ -15,14 +15,13 @@ export function CompanyDetailsCard({ companyId, company }: { companyId: number; 
   const [branding, setBranding] = useState<Branding | null>(null);
   const [form] = Form.useForm();
   const [logo, setLogo] = useState<string | null>(null);
-  const [accent, setAccent] = useState('#1677ff');
   const [vals, setVals] = useState<Record<string, any>>({});     // mirror of the form, for the preview
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     brandingService.get(companyId).then(b => {
-      setBranding(b); setLogo(b.logo_data_uri); setAccent(b.accent_color);
-      const initial = { legal_name: b.legal_name || company?.name, registration_no: b.registration_no, address: b.address, phone: b.phone, email: b.email, website: b.website, footer_note: b.footer_note };
+      setBranding(b); setLogo(b.logo_data_uri);
+      const initial = { legal_name: b.legal_name || company?.name, registration_no: b.registration_no, address: b.address, phone: b.phone, email: b.email, website: b.website };
       setVals(initial); form.setFieldsValue(initial);
     }).catch(() => null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -42,8 +41,8 @@ export function CompanyDetailsCard({ companyId, company }: { companyId: number; 
       const v = { ...vals, ...form.getFieldsValue(true) };
       await brandingService.save(companyId, {
         legal_name: v.legal_name ?? null, registration_no: v.registration_no ?? null, address: v.address ?? null,
-        phone: v.phone ?? null, email: v.email ?? null, website: v.website ?? null, footer_note: v.footer_note ?? null,
-        logo_data_uri: logo, accent_color: accent,
+        phone: v.phone ?? null, email: v.email ?? null, website: v.website ?? null,
+        logo_data_uri: logo,
       });
       message.success('Company details saved');
     } catch (e: any) { message.error(e.message); }
@@ -51,8 +50,8 @@ export function CompanyDetailsCard({ companyId, company }: { companyId: number; 
   };
 
   if (!branding) return <Spin />;
-  const previewBranding: Branding = { ...branding, logo_data_uri: logo, accent_color: accent, legal_name: vals.legal_name, registration_no: vals.registration_no, address: vals.address,
-    phone: vals.phone, email: vals.email, website: vals.website, footer_note: vals.footer_note };
+  const previewBranding: Branding = { ...branding, logo_data_uri: logo, legal_name: vals.legal_name, registration_no: vals.registration_no, address: vals.address,
+    phone: vals.phone, email: vals.email, website: vals.website };
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 1fr) minmax(320px, 1.2fr)', gap: 24, alignItems: 'start', marginBottom: 24, maxWidth: 1300 }}>
       <Card size="small" style={panel} title={<span style={{ color: '#f0ede6' }}>Logo and company details</span>}>
@@ -77,8 +76,6 @@ export function CompanyDetailsCard({ companyId, company }: { companyId: number; 
             <Form.Item name="email" label="Email"><Input /></Form.Item>
           </div>
           <Form.Item name="website" label="Website"><Input /></Form.Item>
-          <Form.Item label="Accent colour"><ColorPicker value={accent} onChange={c => setAccent(c.toHexString())} showText disabled={!canWrite} /></Form.Item>
-          <Form.Item name="footer_note" label="Default document footer"><Input.TextArea rows={2} /></Form.Item>
         </Form>
         {canWrite && <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>Save</Button>}
       </Card>
