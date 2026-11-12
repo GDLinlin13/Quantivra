@@ -115,6 +115,8 @@ export function DocList({ data, docType }: { data: FinanceData; docType: DocType
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`No ${DOC_LABEL[docType].toLowerCase()}s yet`} /> }}
         columns={[
           { title: 'Number', dataIndex: 'number', render: (v: string, d) => <a onClick={() => setEditing({ id: d.id, type: d.doc_type })}>{v}</a> },
+          // the supplier's own invoice number sits beside our bill number
+          ...(!sales ? [{ title: 'Invoice no.', dataIndex: 'reference', render: (v: string | null) => v || '—' }] : []),
           { title: 'Date', dataIndex: 'issue_date', render: (v: string) => fmtDate(v), sorter: (a, b) => a.issue_date.localeCompare(b.issue_date) },
           { title: sales ? 'Customer' : docType === 'expense' ? 'Paid to' : 'Supplier', key: 'c', render: (_, d) => contactName(d.contact_id) },
           ...(docType === 'expense' || (docType === 'bill' && mine.some(d => d.employee_id)) ? [{ title: 'Claimed by', key: 'e', render: (_: any, d: FinDocument) => data.employees.find(e => e.id === d.employee_id)?.full_name || '—' }] : []),
