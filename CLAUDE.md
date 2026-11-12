@@ -12,6 +12,13 @@ check fails, fix it first or tell the owner; never merge a red PR. Database
 migrations still need the owner to run them in the Supabase SQL editor, so
 say clearly when one is waiting, and in which order the two have to happen.
 
+## Vercel free plan: 100 deployments a day
+Every push to a branch makes a preview deployment and every merge makes a production one; past 100 a day Vercel
+refuses ("api-deployments-free-per-day") and a merged change does not go live until it is redeployed. Batch changes
+into one pull request, push as little as possible, and merge once. If previews are switched off in Vercel
+(Settings → Git → Ignored Build Step), there is no Vercel check on pull requests: rely on `npm test` and `npm run build`,
+then confirm the production deployment after merging.
+
 ## Commands
 - `npm test` — vitest (payroll engine + server function tests)
 - `npm run build` — `tsc && vite build`
