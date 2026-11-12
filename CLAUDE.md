@@ -19,6 +19,11 @@ into one pull request, push as little as possible, and merge once. If previews a
 (Settings → Git → Ignored Build Step), there is no Vercel check on pull requests: rely on `npm test` and `npm run build`,
 then confirm the production deployment after merging.
 
+## Claims and payroll
+Staff claims: an approver approves, then Finance approves (Finance → Payables → Staff claims). A Finance-approved claim in
+the company's currency that Finance has not recorded is paid back in the next payroll run as a reimbursement (no CPF) and
+leaves Finance's list; one Finance recorded first never goes into payroll. The books show it under its category account.
+
 ## Commands
 - `npm test` — vitest (payroll engine + server function tests)
 - `npm run build` — `tsc && vite build`
