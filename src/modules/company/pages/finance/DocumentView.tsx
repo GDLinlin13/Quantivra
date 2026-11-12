@@ -20,6 +20,11 @@ export function documentData(doc: FinDocument, lines: DocLine[], contact: Contac
   const bank = pickPaymentAccount(inv, doc.payment_account_index);
   const payRows = (bank?.lines || []).filter(r => (r.value || '').trim());
   const termsDays = doc.due_date ? Math.round((Date.parse(doc.due_date) - Date.parse(doc.issue_date)) / 86400000) : null;
+  // Deliver to: what was typed or chosen on the invoice; left blank it is the customer (Bill to)
+  const isInvoice = doc.doc_type === 'invoice';
+  const hasProducts = isInvoice && lines.some(l => items.find(x => x.id === l.item_id)?.kind === 'product');
+  const dName = doc.delivery_name || (isInvoice ? contact?.name || '' : '');
+  const dAddr = doc.delivery_address || (isInvoice ? contact?.address || '' : '');
   const fields: FieldValues = {
     ...companyFields(company, branding, inv?.footerNote),
     // {{currency}} is the document's own currency (a USD invoice says USD, not the company's HKD)
@@ -28,8 +33,8 @@ export function documentData(doc: FinDocument, lines: DocLine[], contact: Contac
     invoice_no: doc.number, invoice_date: fmtDate(doc.issue_date), due_date: fmtDate(doc.due_date),
     payment_terms: termsDays != null ? (termsDays === 0 ? 'Due on receipt' : `${termsDays} days`) : '',
     reference: doc.reference || '', company_gst_no: settings.gstRegistered ? (settings.gstNumber || '') : '',
-    customer_name: contact?.name || '', customer_address: contact?.address || '', delivery_name: doc.delivery_name || (doc.delivery_address ? contact?.name || '' : ''), delivery_address: doc.delivery_address || '',
-    deliver_to: doc.delivery_address || doc.delivery_name ? `Deliver to:\n${[doc.delivery_name || contact?.name, doc.delivery_address].filter(Boolean).join('\n')}` : '',
+    customer_name: contact?.name || '', customer_address: contact?.address || '', delivery_name: dName, delivery_address: dAddr,
+    deliver_to: (dName || dAddr) && (doc.delivery_address || doc.delivery_name || hasProducts) ? `Deliver to:\n${[dName, dAddr].filter(Boolean).join('\n')}` : '',
     customer_contact: person?.name || '', customer_phone: person?.phone || contact?.phone || '',
     customer_email: person?.email || contact?.email || '', customer_website: contact?.website || '',
     subtotal: M(t.subtotal), total_discount: M(t.discount_total), subtotal_after_discount: M(t.subtotal - t.discount_total),
@@ -80,7 +85,7 @@ export function DocumentView({ doc, lines, contact, person, company, branding, s
           <div style={{ color: '#666', fontSize: 12 }}>{doc.doc_type === 'quote' ? 'Prepared for' : 'Bill to'}</div>
           <b>{fields.customer_name}</b>{fields.customer_address ? `\n${fields.customer_address}` : ''}
           {fields.customer_contact && <div style={{ fontSize: 12, marginTop: 2 }}>Attn: {fields.customer_contact}{[fields.customer_phone, fields.customer_email].filter(Boolean).length ? ` · ${[fields.customer_phone, fields.customer_email].filter(Boolean).join(' · ')}` : ''}</div>}
-          {(fields.delivery_address || fields.delivery_name) && <div style={{ marginTop: 8 }}><div style={{ color: '#666', fontSize: 12 }}>Deliver to</div><b>{fields.delivery_name}</b>{fields.delivery_address ? `\n${fields.delivery_address}` : ''}</div>}
+          {fields.deliver_to && <div style={{ marginTop: 8 }}><div style={{ color: '#666', fontSize: 12 }}>Deliver to</div><b>{fields.delivery_name}</b>{fields.delivery_address ? `\n${fields.delivery_address}` : ''}</div>}
           {fields.company_gst_no && <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>Our {taxRegLabel(company?.country)} {fields.company_gst_no}</div>}
         </div>
         <table style={{ width: '100%', fontSize: 13, color: '#111', borderCollapse: 'collapse' }}>
