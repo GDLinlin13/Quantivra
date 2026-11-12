@@ -65,8 +65,6 @@ export interface FinDocument {
   delivery_address?: string | null;
   /** who it is delivered to (migration 054) */
   delivery_name?: string | null;
-  /** the person to ask for at the delivery address (migration 054) */
-  delivery_contact?: string | null;
   /** company currency per 1 unit of the document's currency; empty when the document is in the company's currency (migration 036) */
   fx_rate?: number | null;
   created_at?: string;
