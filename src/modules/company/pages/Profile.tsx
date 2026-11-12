@@ -7,7 +7,7 @@ import { brandingService, DEFAULT_TEMPLATES, type Branding } from '../../../serv
 import { DocumentShell } from '../../../components/DocumentShell';
 import { GridTemplateEditor } from '../../../components/GridTemplateEditor';
 import { LetterEditor } from '../../../components/LetterEditor';
-import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, paymentAccounts, DEFAULT_PAYMENT_LABELS, type DocKind, type PaymentAccount, type PaymentLine } from '../../../data/documentLayouts';
+import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, paymentAccounts, type DocKind, type PaymentAccount, type PaymentLine } from '../../../data/documentLayouts';
 import { CellValue } from '../../../components/GridDocument';
 import type { GridTemplate } from '../../../utils/gridTemplate';
 import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME, formatDocFileName, DOC_FILE_NAME_TOKENS, DEFAULT_DOC_FILE_NAME } from '../../../utils/payslipFiles';
@@ -231,7 +231,7 @@ export function CompanyProfilePage() {
   // Bank accounts shown as payment details; older single list becomes the first account.
   const banks: PaymentAccount[] = paymentAccounts(tpl.invoice).length
     ? paymentAccounts(tpl.invoice)
-    : [{ title: '', lines: DEFAULT_PAYMENT_LABELS.map(label => ({ label, value: '' })), isDefault: true }];
+    : [{ title: '', lines: [{ label: '', value: '' }], isDefault: true }];
   const setBanks = (next: PaymentAccount[]) => setTpl(p => ({ ...p, invoice: { ...p.invoice, paymentAccounts: next, paymentDetails: undefined } }));
   const setBank = (bi: number, patch: Partial<PaymentAccount>) => setBanks(banks.map((b, j) => (j === bi ? { ...b, ...patch } : b)));
   const setBankLine = (bi: number, li: number, patch: Partial<PaymentLine>) =>
@@ -278,7 +278,7 @@ export function CompanyProfilePage() {
             <Button size="small" icon={<PlusOutlined />} onClick={() => setBank(bi, { lines: [...b.lines, { label: '', value: '' }] })}>Add a line</Button>
           </div>
         ))}
-        <Button icon={<PlusOutlined />} onClick={() => setBanks([...banks, { title: '', lines: [] }])}>Add another bank</Button>
+        <Button icon={<PlusOutlined />} onClick={() => setBanks([...banks, { title: '', lines: [{ label: '', value: '' }] }])}>Add another bank</Button>
       </Form.Item>
       {(tpl.invoice.bankDetails || '').trim() && (
         <Form.Item label="Older payment details (free text)">
