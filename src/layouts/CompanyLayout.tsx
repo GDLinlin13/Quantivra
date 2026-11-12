@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { RainbowTitle } from '../components/RainbowTitle';
-import { Layout, Menu, Button, Avatar, Dropdown, Typography } from 'antd';
-import { MyProfileModal } from '../components/MyProfileModal';
-import { profileService, NO_PROFILE, DEFAULT_AVATAR_COLOR, type MyProfile } from '../services/profile';
+import { Layout, Menu, Button, Typography } from 'antd';
+import { UserMenu } from '../components/UserMenu';
 import {
   DashboardOutlined, TeamOutlined, UserOutlined, SafetyOutlined,
-  SettingOutlined, LogoutOutlined, BankOutlined,
+  SettingOutlined, BankOutlined,
   FileOutlined, BellOutlined, DollarOutlined, ShopOutlined,
   ContactsOutlined, PartitionOutlined, ProjectOutlined, } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
@@ -23,20 +22,10 @@ export function CompanyLayout() {
 
 function CompanyLayoutInner() {
   const access = useCompanyAccess();
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [profile, setProfile] = useState<MyProfile>(NO_PROFILE);
-  const [authId, setAuthId] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, companyId } = useAuth();
+  const { companyId } = useAuth();
   const [companyName, setCompanyName] = useState<string>('');
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      const id = data.user?.id || null;
-      setAuthId(id);
-      if (id) profileService.get(id).then(setProfile).catch(() => null);
-    });
-  }, [companyId]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -71,24 +60,8 @@ function CompanyLayoutInner() {
     { key: '/company/files', icon: <FileOutlined />, label: 'Documents' },
   ];
 
-  const userMenu = {
-    items: [
-      { key: 'profile', icon: <UserOutlined />, label: 'My Profile' },
-      { type: 'divider' as const },
-      { key: 'logout', icon: <LogoutOutlined />, label: 'Sign Out', danger: true },
-    ],
-    onClick: ({ key }: { key: string }) => {
-      if (key === 'logout') { logout(); navigate('/login'); }
-      if (key === 'profile') setProfileOpen(true);
-    },
-  };
-
   return (
     <Layout style={{ minHeight: '100vh', background: '#0b0f12' }}>
-      {profileOpen && (
-        <MyProfileModal profile={profile} fullName={user?.full_name || ''} onClose={() => setProfileOpen(false)}
-          onSave={async p => { if (!authId) throw new Error('Not signed in'); await profileService.save(authId, p); setProfile(p); }} />
-      )}
       <Sider
         theme="dark"
         collapsible
@@ -126,12 +99,7 @@ function CompanyLayoutInner() {
           display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '0 24px', height: 64, gap: 16,
         }}>
           <Button type="text" icon={<BellOutlined />} style={{ color: '#f0ede6' }} />
-          <Dropdown menu={userMenu} placement="bottomRight">
-            <Button type="text" style={{ color: '#f0ede6', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Avatar size="small" src={profile.avatar_data || undefined} icon={profile.avatar_data ? undefined : <UserOutlined />} style={{ background: profile.avatar_data ? undefined : (profile.avatar_color || DEFAULT_AVATAR_COLOR), color: '#111' }} />
-              {profile.display_name || user?.full_name}
-            </Button>
-          </Dropdown>
+          <UserMenu />
         </Header>
         <Content style={{ padding: 24 }}>
           <DateFormatProvider><Outlet /></DateFormatProvider>
