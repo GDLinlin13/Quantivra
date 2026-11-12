@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode, type KeyboardEvent as RKeyboardEvent } from 'react';
-import { Button, Tooltip, Select, InputNumber, ColorPicker, Dropdown, Segmented, Space, Input, Divider, Typography, Popconfirm, Collapse } from 'antd';
+import { Button, Tooltip, Select, InputNumber, ColorPicker, Dropdown, Segmented, Space, Input, Divider, Typography, Popconfirm, Collapse, Modal } from 'antd';
 import {
   BoldOutlined, ItalicOutlined, UnderlineOutlined, AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined,
   VerticalAlignTopOutlined, VerticalAlignMiddleOutlined, VerticalAlignBottomOutlined, BorderOutlined,
@@ -51,6 +51,11 @@ function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
   const hk = (country || '').toUpperCase() === 'HK';
   const cellStyleTd: React.CSSProperties = { padding: '3px 8px', borderBottom: '1px solid rgba(255,255,255,0.06)', verticalAlign: 'top' };
   const code: React.CSSProperties = { fontFamily: 'monospace', fontSize: 12, color: '#91caff', cursor: 'pointer', whiteSpace: 'nowrap' };
+  const [example, setExample] = useState(false);
+  const first = lists[0];
+  const shownCols = first ? first.fields.slice(0, 3) : [];
+  const printed = first ? (sample.lists[first.name] || []).slice(0, 3) : [];
+  const th: React.CSSProperties = { border: '1px solid #ccc', padding: '3px 8px', textAlign: 'left', fontWeight: 500 };
   const C = ({ n }: { n: string }) => <code style={code} onClick={() => onInsert(n)} title="Click to put it in the selected cell">{`{{${n}}}`}</code>;
   return (
     <div style={{ color: 'rgba(240,237,230,0.8)', fontSize: 13, lineHeight: 1.55, maxHeight: 420, overflowY: 'auto' }}>
@@ -70,12 +75,9 @@ function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
         </div>
         <div>
           {lists.length > 0 && <div style={{ fontWeight: 600, marginBottom: 4 }}>Lists</div>}
-          <p style={{ margin: '0 0 8px' }}>
-            {kind === 'payslip' ? <>Design <b>one</b> row, e.g. <C n="earnings.name" /> and <C n="earnings.amount" />. It turns yellow ↻ and is repeated for each item. One row can hold two lists side by side.{sg ? <> For only some items, use single fields like <C n="cpf_employer" />.</> : null}{hk ? <> MPF: <C n="mpf_employer" />, <C n="mpf_employee" />.</> : null}</>
-              : kind === 'letterhead' ? <>The top and bottom of every document from Create document. Put <C n="document_title" /> and <C n="document_date" /> in it; the typed text goes where <C n="document_body" /> is.</>
-              : kind === 'soa' ? <>Design <b>one</b> row, e.g. <C n="rows.date" />, <C n="rows.number" /> and <C n="rows.balance" />. It turns yellow ↻ and is repeated for each line. Payment details: <C n="payment.label" /> on the left, <C n="payment.value" /> on the right, in one row.</>
-              : <>Design <b>one</b> row, e.g. <C n="lines.description" /> and <C n="lines.amount" />. It turns yellow ↻ and is repeated for each line. Payment details: <C n="payment.label" /> on the left, <C n="payment.value" /> on the right, in one row. Discounts: <C n="discounts.name" /> and <C n="discounts.amount" /> in a row below the subtotal.</>}
-          </p>
+          {kind === 'letterhead'
+            ? <p style={{ margin: '0 0 8px' }}>Put <C n="document_title" />, <C n="document_date" /> and <C n="document_body" /> in it.</p>
+            : lists.length > 0 && <Button size="small" style={{ marginBottom: 8 }} onClick={() => setExample(true)}>View example</Button>}
           {lists.map(l => (
             <div key={l.name} style={{ marginBottom: 6 }}>
               <b>{l.label}</b>
@@ -91,6 +93,20 @@ function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
           ))}
         </div>
       </div>
+      <Modal open={example} onCancel={() => setExample(false)} footer={null} title="Example" width={560}>
+        {first && (
+          <div style={{ fontSize: 13 }}>
+            <div style={{ marginBottom: 6 }}>You design <b>one</b> row with the fields of a list ({first.label}). It turns yellow ↻ and is repeated for each item.</div>
+            <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: 12 }}><tbody>
+              <tr style={{ background: '#fffbeb' }}>{shownCols.map(f => <td key={f.name} style={{ ...th, fontFamily: 'monospace', color: '#0b57d0' }}>{`{{${f.name}}}`}{f === shownCols[0] ? ' ↻' : ''}</td>)}</tr>
+            </tbody></table>
+            <div style={{ marginBottom: 6 }}>When printed:</div>
+            <table style={{ borderCollapse: 'collapse', width: '100%' }}><tbody>
+              {printed.map((r, i) => <tr key={i}>{shownCols.map(f => <td key={f.name} style={th}>{plainAmount(r[f.name.split('.').pop()!] || '')}</td>)}</tr>)}
+            </tbody></table>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
