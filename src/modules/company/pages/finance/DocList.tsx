@@ -1,4 +1,4 @@
-import { A4_MODAL } from '../../../../utils/renderPdf';
+import { A4_MODAL, A4_FRAME } from '../../../../utils/renderPdf';
 import { useState, useEffect } from 'react';
 import { Table, Button, Space, Tag, Input, Segmented, Modal, Form, InputNumber, DatePicker, Select, message, Statistic, Card, Typography, Empty, Dropdown } from 'antd';
 import { PlusOutlined, EyeOutlined, PrinterOutlined, DownloadOutlined, DollarOutlined, SearchOutlined, MoreOutlined, FileDoneOutlined, CopyOutlined } from '@ant-design/icons';
@@ -215,7 +215,7 @@ function ViewModal({ id, data, onClose }: { id: number; data: FinanceData; onClo
       footer={<Space><Button icon={<PrinterOutlined />} onClick={print} disabled={!loaded}>Print</Button>
         <Button type="primary" icon={<DownloadOutlined />} loading={busy} onClick={download} disabled={!loaded}>Download PDF</Button></Space>}>
       {loaded && doc && (
-        <div style={{ width: 760, maxWidth: '100%' }}>
+        <div style={A4_FRAME}>
           <DocumentView doc={doc} lines={loaded.lines.map(l => ({ ...l, description: lineText(l, data.items) }))} contact={contact} person={person} company={data.company} branding={data.branding} settings={data.settings} items={data.items} />
         </div>
       )}

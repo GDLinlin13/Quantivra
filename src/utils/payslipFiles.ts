@@ -90,45 +90,60 @@ export function uniqueNames(names: string[]): string[] {
   });
 }
 
-/** Turn rendered payslips (one element each) into a PDF with one A4 page per payslip. */
-export async function elementsToPdf(elements: HTMLElement[]): Promise<Blob> {
-  const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import('jspdf'), import('html2canvas')]).catch(() => {
+const A4 = { w: 210, h: 297, margin: 10 };
+
+/** Where to cut a tall picture so a line of text is not split: the last empty (white) row before the page ends. */
+function cutRow(canvas: HTMLCanvasElement, from: number, target: number): number {
+  const ctx = canvas.getContext('2d');
+  if (!ctx || target >= canvas.height) return Math.min(target, canvas.height);
+  const reach = Math.floor((target - from) * 0.2);
+  for (let y = target; y > target - reach && y > from; y--) {
+    const row = ctx.getImageData(0, y, canvas.width, 1).data;
+    let white = true;
+    for (let i = 0; i < row.length; i += 4) if (row[i] < 245 || row[i + 1] < 245 || row[i + 2] < 245) { white = false; break; }
+    if (white) return y;
+  }
+  return target;
+}
+
+/** Draw a picture on A4 pages: one page when it fits, else as many pages as it needs (never shrunk to fit). */
+function addPictureToPdf(pdf: any, canvas: HTMLCanvasElement, firstOnNewPage: boolean) {
+  const imgW = A4.w - A4.margin * 2;
+  const pxPerMm = canvas.width / imgW;
+  const slicePx = Math.floor((A4.h - A4.margin * 2) * pxPerMm);
+  let y = 0, page = 0;
+  while (y < canvas.height) {
+    const end = canvas.height - y <= slicePx ? canvas.height : cutRow(canvas, y, y + slicePx);
+    const h = Math.max(1, end - y);
+    const part = document.createElement('canvas');
+    part.width = canvas.width; part.height = h;
+    part.getContext('2d')!.drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+    if (page > 0 || firstOnNewPage) pdf.addPage();
+    pdf.addImage(part.toDataURL('image/jpeg', 0.92), 'JPEG', A4.margin, A4.margin, imgW, h / pxPerMm);
+    y = end; page++;
+  }
+}
+
+async function loadPdfTools() {
+  return Promise.all([import('jspdf'), import('html2canvas')]).catch(() => {
     throw new Error('Quantivra was just updated. Refresh the page (F5) and try again.');
   });
+}
+
+/** Turn rendered documents (one element each) into a PDF on A4 pages: a long one runs over onto more pages. */
+export async function elementsToPdf(elements: HTMLElement[]): Promise<Blob> {
+  const [{ jsPDF }, { default: html2canvas }] = await loadPdfTools();
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
-  const pageW = 210, pageH = 297, margin = 10;
   for (let i = 0; i < elements.length; i++) {
     const canvas = await html2canvas(elements[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
-    const img = canvas.toDataURL('image/jpeg', 0.92);
-    let w = pageW - margin * 2;
-    let h = (canvas.height / canvas.width) * w;
-    if (h > pageH - margin * 2) { h = pageH - margin * 2; w = (canvas.width / canvas.height) * h; }
-    if (i > 0) pdf.addPage();
-    pdf.addImage(img, 'JPEG', (pageW - w) / 2, margin, w, h);
+    addPictureToPdf(pdf, canvas, i > 0);
   }
   return pdf.output('blob');
 }
 
 /** One tall element (a typed document) as a PDF: the picture is cut into A4 pages. */
 export async function elementToPagedPdf(el: HTMLElement): Promise<Blob> {
-  const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import('jspdf'), import('html2canvas')]).catch(() => {
-    throw new Error('Quantivra was just updated. Refresh the page (F5) and try again.');
-  });
-  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
-  const pageW = 210, pageH = 297, margin = 10;
-  const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
-  const imgW = pageW - margin * 2;
-  const pxPerMm = canvas.width / imgW;
-  const slicePx = Math.floor((pageH - margin * 2) * pxPerMm);
-  for (let y = 0, page = 0; y < canvas.height; y += slicePx, page++) {
-    const h = Math.min(slicePx, canvas.height - y);
-    const part = document.createElement('canvas');
-    part.width = canvas.width; part.height = h;
-    part.getContext('2d')!.drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
-    if (page > 0) pdf.addPage();
-    pdf.addImage(part.toDataURL('image/jpeg', 0.92), 'JPEG', margin, margin, imgW, h / pxPerMm);
-  }
-  return pdf.output('blob');
+  return elementsToPdf([el]);
 }
 
 export async function zipFiles(files: { name: string; blob: Blob }[]): Promise<Blob> {

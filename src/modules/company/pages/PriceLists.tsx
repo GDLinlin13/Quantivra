@@ -8,7 +8,7 @@ import type { Contact } from '../../../data/finance';
 import type { Branding } from '../../../services/branding';
 import { DocumentShell } from '../../../components/DocumentShell';
 import { AmountInput } from '../../../components/AmountInput';
-import { A4_MODAL } from '../../../utils/renderPdf';
+import { A4_MODAL, A4_FRAME, A4_PAGE } from '../../../utils/renderPdf';
 import { elementsToPdf, downloadBlob } from '../../../utils/payslipFiles';
 import { PRINT_CSS } from './hr/PayslipView';
 import { fmtDate } from '../../../utils/dateFormat';
@@ -189,8 +189,8 @@ function PriceListView({ list, items, classes, rows, customers, currency, compan
         <Select allowClear style={{ width: 280, marginBottom: 12 }} placeholder="For (optional): choose a customer" value={forId ?? undefined} onChange={v => setForId(v ?? null)}
           options={customers.map(c => ({ value: c.id, label: c.name }))} />
       )}
-      <div style={{ width: 760, maxWidth: '100%' }}>
-        <div id="price-list-print" style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
+      <div style={A4_FRAME}>
+        <div id="price-list-print" style={A4_PAGE}>
           <DocumentShell country={company?.country} branding={branding} companyName={company?.name || ''} forPrint title="PRICE LIST"
             meta={<>{list.name}<br />{fmtDate(new Date().toISOString().slice(0, 10))}</>} showLogo showCompanyBlock footerNote={undefined}>
             {forName && <div style={{ fontSize: 13, color: '#111', marginBottom: 12 }}><div style={{ color: '#666', fontSize: 12 }}>Prepared for</div><b>{forName}</b></div>}

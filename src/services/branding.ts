@@ -1,5 +1,5 @@
 import { supabase } from '../utils/supabase';
-import { normalizeTemplate, type GridTemplate } from '../utils/gridTemplate';
+import { normalizeTemplate, toA4, type GridTemplate } from '../utils/gridTemplate';
 import { isLegacyStarter, type AmountFormat } from '../data/documentLayouts';
 
 export interface PayslipTemplate {
@@ -104,7 +104,7 @@ export function ownLayout(kind: 'payslip' | 'invoice' | 'soa' | 'letterhead', sa
   const t = normalizeTemplate(saved, null as unknown as GridTemplate);
   if (!t) return undefined;
   if (isLegacyStarter(kind, t, country) && (!t.enabled || (country || 'SG').toUpperCase() !== 'SG')) return undefined;
-  return t;
+  return toA4(t);
 }
 
 function withDefaults(row: any, companyId: number, country?: string | null): Branding {

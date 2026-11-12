@@ -1,4 +1,4 @@
-import { A4_MODAL } from '../../../../utils/renderPdf';
+import { A4_MODAL, A4_FRAME } from '../../../../utils/renderPdf';
 import { useState, useEffect, useCallback } from 'react';
 import { Card, Button, Select, InputNumber, Input, Table, Tag, message, Modal, Descriptions, Space, Popconfirm, Alert, Statistic, Row, Col, Switch, Tooltip, DatePicker } from 'antd';
 import { PlayCircleOutlined, FileTextOutlined, CheckCircleOutlined, DeleteOutlined, PrinterOutlined, InfoCircleOutlined, DownloadOutlined, EditOutlined } from '@ant-design/icons';
@@ -239,7 +239,7 @@ export function PayrollTab({ companyId }: { companyId: number }) {
           <Button type="primary" icon={<DownloadOutlined />} loading={downloading} onClick={() => downloadOne(slip!)}>Download PDF</Button>
         </Space>}>
         {slip && <PaidTo slip={slip} onSaved={() => setBankKey(k => k + 1)} />}
-        {slip && <PayslipView slip={slip} company={company} branding={branding} period={openRun?.run} refreshKey={bankKey} />}
+        {slip && <div style={A4_FRAME}><PayslipView slip={slip} company={company} branding={branding} period={openRun?.run} refreshKey={bankKey} /></div>}
       </Modal>
     </div>
   );
