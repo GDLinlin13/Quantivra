@@ -191,7 +191,8 @@ function StatementModal({ data, contactId, currency, payments, allocations, onCl
       await companyFileService.add(data.companyId, new File([blob], `${nameFor(n)}.pdf`, { type: 'application/pdf' }), { folder: 'other', subfolder: 'SOA' });
       const folders = await documentFolderService.list(data.companyId).catch(() => [] as string[]);
       if (!folders.includes('SOA')) await documentFolderService.save(data.companyId, [...folders, 'SOA']).catch(() => null);
-      message.success(`Saved in Documents → Other files → SOA: ${nameFor(n)}.pdf`);
+      downloadBlob(blob, `${nameFor(n)}.pdf`);
+      message.success(`Saved in Documents → Other files → SOA, and downloaded: ${nameFor(n)}.pdf`);
     } catch (e: any) { message.error(e.message); }
     setSaving(false);
   };
@@ -199,7 +200,7 @@ function StatementModal({ data, contactId, currency, payments, allocations, onCl
 
   return (
     <Modal open onCancel={onClose} width={A4_MODAL} title={`Statement of account — ${contact?.name || ''}`}
-      footer={<Space><Button icon={<FolderOpenOutlined />} loading={saving} onClick={saveCopy}>Save to Documents</Button>
+      footer={<Space><Button icon={<FolderOpenOutlined />} loading={saving} onClick={saveCopy}>Save and download</Button>
         <Button icon={<PrinterOutlined />} onClick={print}>Print</Button>
         <Button type="primary" icon={<DownloadOutlined />} loading={busy} onClick={download}>Download PDF</Button></Space>}>
       <Space wrap style={{ marginBottom: 12 }}>
