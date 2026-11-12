@@ -45,6 +45,11 @@ export function blankTemplate(rows = 20, cols = 6): GridTemplate {
   return { enabled: false, cols: Array(cols).fill(Math.round(680 / cols)), rows: Array.from({ length: rows }, () => ({})), cells: {} };
 }
 
+/** Every column the same width again and every row its standard height; the text and formatting stay. */
+export function resetSizes(t: GridTemplate, width = 680): GridTemplate {
+  return { ...t, cols: t.cols.map(() => Math.round(width / t.cols.length)), rows: t.rows.map(({ h: _h, ...rest }) => rest) };
+}
+
 /** Keep only sane values (the template is stored as JSON and could be old or hand-edited). */
 export function normalizeTemplate(t: any, fallback: GridTemplate): GridTemplate {
   if (!t || !Array.isArray(t.cols) || !Array.isArray(t.rows) || typeof t.cells !== 'object' || !t.cells) return fallback;

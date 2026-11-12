@@ -8,7 +8,7 @@ import {
 } from '@ant-design/icons';
 import {
   key, colName, coveredSet, mergeAt, normRange, expandRange, mergeRange, unmergeRange, insertRow, deleteRow, insertCol, deleteCol,
-  styleRange, outlineRange, isLogoCell, rowUsesList, AUTO_REPEAT, moveRange, copyBlock, pasteBlock, clearArea, type Block, type GridTemplate, type GridCell, type Range,
+  blankTemplate, resetSizes, styleRange, outlineRange, isLogoCell, rowUsesList, AUTO_REPEAT, moveRange, copyBlock, pasteBlock, clearArea, type Block, type GridTemplate, type GridCell, type Range,
 } from '../utils/gridTemplate';
 import { docFields, docLists, STARTER_LAYOUTS, sampleData, fieldShortName, listExample, plainAmount, type DocKind } from '../data/documentLayouts';
 import { GridDocument, cellStyle, LogoImg, spanHeight } from './GridDocument';
@@ -366,9 +366,19 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
         <Segmented value={mode} onChange={v => { finishEdit(true); setMode(v as any); }}
           options={[{ label: 'Design', value: 'design' }, { label: 'Preview with example data', value: 'preview' }]} />
-        <Popconfirm title="Replace this layout with the starter layout?" description="Your current layout will be lost (you can still Undo)." onConfirm={() => commit({ ...STARTER_LAYOUTS[kind](country, branding), enabled: t.enabled })}>
-          <Button size="small" icon={<ReloadOutlined />}>Start again from the starter layout</Button>
-        </Popconfirm>
+        <Space size={6} wrap>
+          <Popconfirm title="Reset all column widths and row heights?" description="The text and formatting stay; only the sizes go back to the standard (you can still Undo)."
+            onConfirm={() => commit(resetSizes(t))}>
+            <Button size="small">Reset all sizes</Button>
+          </Popconfirm>
+          <Popconfirm title="Clear everything?" description="Every cell, format and size is removed and you get an empty sheet (you can still Undo)."
+            onConfirm={() => { commit({ ...blankTemplate(), enabled: t.enabled }); setAnchor({ r: 0, c: 0 }); setFocus({ r: 0, c: 0 }); }}>
+            <Button size="small" icon={<ClearOutlined />} danger>Clear everything</Button>
+          </Popconfirm>
+                <Popconfirm title="Replace this layout with the starter layout?" description="Your current layout will be lost (you can still Undo)." onConfirm={() => commit({ ...STARTER_LAYOUTS[kind](country, branding), enabled: t.enabled })}>
+            <Button size="small" icon={<ReloadOutlined />}>Start again from the starter layout</Button>
+          </Popconfirm>
+        </Space>
       </div>
 
       {mode === 'design' && (
