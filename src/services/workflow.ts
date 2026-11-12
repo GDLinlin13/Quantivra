@@ -50,7 +50,9 @@ export const workflowService = {
   },
   /** 'approved' / 'rejected' when final; 'pending' when it moved on to the next step. */
   async decide(kind: FlowKind, id: number, decision: 'approved' | 'rejected', note?: string): Promise<'approved' | 'rejected' | 'pending'> {
-    return must(await supabase.rpc('workflow_decide', { p_kind: kind, p_id: id, p_decision: decision, p_note: note || null }));
+    const res = must(await supabase.rpc('workflow_decide', { p_kind: kind, p_id: id, p_decision: decision, p_note: note || null }));
+    try { window.dispatchEvent(new Event('qv-approvals-changed')); } catch { /* the bell catches up on its own */ }
+    return res;
   },
   /** Which kinds of request this person approves, so the right tabs show. */
   async approverKinds(companyId: number): Promise<FlowKind[]> {

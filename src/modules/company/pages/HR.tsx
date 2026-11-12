@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Typography, Tabs, Alert } from 'antd';
 import { useAuth } from '../../../contexts/AuthContext';
 import { EmployeesTab } from './hr/EmployeesTab';
@@ -16,6 +18,9 @@ const { Title } = Typography;
 export function CompanyHRPage() {
   const { companyId } = useAuth();
   const access = useCompanyAccess();
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState<string | undefined>(params.get('tab') || undefined);   // the bell opens a tab
+  useEffect(() => { const t = params.get('tab'); if (t) setTab(t); }, [params]);
   const canViewPay = access.canViewPay;
   const canManageStaff = access.can('employees', 'edit');
   const canManageLeave = (canManageStaff || access.can('leave', 'edit')) && access.isOn('leave');
@@ -32,7 +37,7 @@ export function CompanyHRPage() {
   return (
     <div>
       <Title level={4} style={{ color: '#f0ede6', marginBottom: 16 }}>HR</Title>
-      <Tabs
+      <Tabs activeKey={tab} onChange={setTab}
         items={[
           ...(access.can('leave') ? [{ key: 'leave', label: 'My Leave', children: <LeaveTab companyId={companyId} /> }] : []),
           ...(canClock ? [{ key: 'myattendance', label: 'My Attendance', children: <MyAttendanceTab companyId={companyId} /> }] : []),

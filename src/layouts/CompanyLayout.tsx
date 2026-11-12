@@ -3,6 +3,7 @@ import { supabase } from '../utils/supabase';
 import { RainbowTitle } from '../components/RainbowTitle';
 import { Layout, Menu, Typography } from 'antd';
 import { UserMenu } from '../components/UserMenu';
+import { NotificationBell } from '../components/NotificationBell';
 import {
   DashboardOutlined, TeamOutlined, UserOutlined, SafetyOutlined,
   SettingOutlined, BankOutlined,
@@ -98,6 +99,7 @@ function CompanyLayoutInner() {
           background: '#111518', borderBottom: '1px solid rgba(255,255,255,0.06)',
           display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '0 24px', height: 64, gap: 16,
         }}>
+          {companyId && <NotificationBell companyId={companyId} />}
           <UserMenu />
         </Header>
         <Content style={{ padding: 24 }}>
