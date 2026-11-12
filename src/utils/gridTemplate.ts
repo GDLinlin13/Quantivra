@@ -16,6 +16,7 @@ export interface GridCell {
   c?: string;          // text colour
   bg?: string;         // fill colour
   bt?: boolean; br?: boolean; bb?: boolean; bl?: boolean; // borders
+  dbt?: boolean; dbb?: boolean; // double line on the top / bottom (as under a total)
   cs?: number;         // merged columns (on the top-left cell)
   rs?: number;         // merged rows (on the top-left cell)
 }

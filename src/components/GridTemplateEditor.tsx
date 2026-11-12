@@ -221,12 +221,14 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
   const style = (patch: Partial<GridCell>) => commit(styleRange(t, range, patch));
   const toggle = (k: 'b' | 'i' | 'u') => style({ [k]: !cur[k] });
 
-  const borders = (how: 'all' | 'outline' | 'top' | 'bottom' | 'none') => {
-    if (how === 'all') return style({ bt: true, br: true, bb: true, bl: true });
-    if (how === 'none') return style({ bt: false, br: false, bb: false, bl: false });
+  const borders = (how: 'all' | 'outline' | 'top' | 'bottom' | 'dtop' | 'dbottom' | 'none') => {
+    if (how === 'all') return style({ bt: true, br: true, bb: true, bl: true, dbt: false, dbb: false });
+    if (how === 'none') return style({ bt: false, br: false, bb: false, bl: false, dbt: false, dbb: false });
     if (how === 'outline') return commit(outlineRange(t, range, true));
-    if (how === 'top') return commit(styleRange(t, { ...range, r2: range.r1 }, { bt: true }));
-    return commit(styleRange(t, { ...range, r1: range.r2 }, { bb: true }));
+    if (how === 'top') return commit(styleRange(t, { ...range, r2: range.r1 }, { bt: true, dbt: false }));
+    if (how === 'dtop') return commit(styleRange(t, { ...range, r2: range.r1 }, { dbt: true }));
+    if (how === 'dbottom') return commit(styleRange(t, { ...range, r1: range.r2 }, { dbb: true }));
+    return commit(styleRange(t, { ...range, r1: range.r2 }, { bb: true, dbb: false }));
   };
 
   const move = (dr: number, dc: number, extend = false) => {
@@ -425,7 +427,8 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
             <Dropdown menu={{
               items: [
                 { key: 'all', label: 'All borders' }, { key: 'outline', label: 'Outside border' },
-                { key: 'top', label: 'Top border' }, { key: 'bottom', label: 'Bottom border' }, { key: 'none', label: 'No border' },
+                { key: 'top', label: 'Top border' }, { key: 'bottom', label: 'Bottom border' },
+                { key: 'dtop', label: 'Double top border' }, { key: 'dbottom', label: 'Double bottom border' }, { key: 'none', label: 'No border' },
               ], onClick: ({ key: k }) => borders(k as any),
             }}>
               <Button size="small" icon={<BorderOutlined />}>Borders</Button>

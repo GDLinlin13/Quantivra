@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { expandTemplate, isLogoCell, type GridCell, type GridTemplate, type FieldValues, type ListValues } from '../utils/gridTemplate';
 
 export const GRID_LINE = '1px solid #333';
+export const GRID_DOUBLE = '3px double #333';
 
 export function cellStyle(cell: GridCell): CSSProperties {
   return {
@@ -13,9 +14,9 @@ export function cellStyle(cell: GridCell): CSSProperties {
     fontSize: cell.fs || 12,
     color: cell.c || '#111',
     background: cell.bg || 'transparent',
-    borderTop: cell.bt ? GRID_LINE : undefined,
+    borderTop: cell.dbt ? GRID_DOUBLE : cell.bt ? GRID_LINE : undefined,
     borderRight: cell.br ? GRID_LINE : undefined,
-    borderBottom: cell.bb ? GRID_LINE : undefined,
+    borderBottom: cell.dbb ? GRID_DOUBLE : cell.bb ? GRID_LINE : undefined,
     borderLeft: cell.bl ? GRID_LINE : undefined,
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
