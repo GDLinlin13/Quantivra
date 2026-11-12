@@ -614,7 +614,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
               const list = pieces.filter(p => p.item_id === it.id && (p.id === l.piece_id || (!pieceSold(p.id) && !taken.has(p.id))))
                 .sort((a, b) => a.weight - b.weight);
               return <Select style={{ width: '100%' }} showSearch optionFilterProp="label" placeholder="Choose a piece" value={l.piece_id ?? undefined}
-                optionLabelProp="short" options={list.map(p => { const c = classes.find(x => x.id === p.class_id); return { value: p.id, short: `${kgText(p.weight)} kg`, label: `${kgText(p.weight)} kg${c ? ` · ${classLabel(c)}` : ''}` }; })}
+                optionLabelProp="short" options={list.map(p => ({ value: p.id, short: `${kgText(p.weight)} kg`, label: `${kgText(p.weight)} kg` }))}
                 notFoundContent="No pieces in stock"
                 onChange={v => { const p = pieces.find(x => x.id === v); if (p) priceByWeight(i, it, p.weight, p.id); }} />;
             }
