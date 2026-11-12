@@ -507,6 +507,9 @@ export function Bank({ data }: { data: FinanceData }) {
  * A transfer recorded in the company's currency (e.g. SGD 1,419.88 from the SGD account) arriving in a bank in
  * another currency: enter what arrived (or the rate) and the line is stored in that currency, matched.
  */
+/** the purple that marks a suggested match */
+const SUGGEST = '#a78bfa';
+
 function FxMatch({ txn, currency, accCur, onClose, onMatch }: {
   txn: BankTxn; currency: string; accCur: string; onClose: () => void; onMatch: (received: number, base: number) => Promise<void>;
 }) {
@@ -761,10 +764,10 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                       return { disabled: foreign && !!first && d.id !== first.id && (isForeignDoc(first, data.currency) || isForeignDoc(d, data.currency)) };
                     } }}
                   columns={[
-                    { title: inbound ? 'Number' : 'Invoice no.', key: 'no', render: (_, d) => <span style={{ fontWeight: named(d) ? 700 : 400 }}>{docNo(d)}</span> },
+                    { title: inbound ? 'Number' : 'Invoice no.', key: 'no', render: (_, d) => <span style={{ fontWeight: named(d) ? 700 : 400, color: named(d) ? SUGGEST : undefined }}>{docNo(d)}</span> },
                     { title: 'Date', dataIndex: 'issue_date', render: (v: string) => fmtDate(v) },
                     { title: inbound ? 'Customer' : 'Supplier', key: 'c', render: (_, d) => contact(d.contact_id) },
-                    { title: 'Still owed', key: 'b', align: 'right' as const, render: (_, d) => <span style={{ fontWeight: sameAmount(d) ? 700 : 400 }}>{money(balanceDue(d), d.currency || data.currency)}{isForeignDoc(d, data.currency) && !inBankCur(d) && <Text type="secondary"> ≈ {money(inBase(d, balanceDue(d)), data.currency)}</Text>}</span> },
+                    { title: 'Still owed', key: 'b', align: 'right' as const, render: (_, d) => <span style={{ fontWeight: sameAmount(d) ? 700 : 400, color: sameAmount(d) ? SUGGEST : undefined }}>{money(balanceDue(d), d.currency || data.currency)}{isForeignDoc(d, data.currency) && !inBankCur(d) && <Text type="secondary"> ≈ {money(inBase(d, balanceDue(d)), data.currency)}</Text>}</span> },
                   ]} />
               )}
               {multi.length > 1 && (
