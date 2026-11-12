@@ -49,6 +49,7 @@ export function statementData(s: Soa, contact: Contact | null, person: ContactPe
     rows: s.rows.map(r => ({
       date: fmtDate(r.date), type: KIND_LABEL[r.kind], number: r.number, reference: r.reference,
       description: [r.description || '', r.kind === 'invoice' && r.reference ? `Ref ${r.reference}` : ''].filter(Boolean).join(' · '),
+      amount: r.debit ? M(r.debit) : r.credit ? M(-r.credit) : '',
       debit: r.debit ? M(r.debit) : '', credit: r.credit ? M(r.credit) : '', balance: M(r.balance),
     })),
     payment: payRows.map(r => ({ label: r.label, value: r.value })),

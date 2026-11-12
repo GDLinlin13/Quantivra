@@ -177,6 +177,7 @@ export const DOC_LISTS: Record<DocKind, ListDef[]> = {
         { name: 'rows.number', label: 'Document number' },
         { name: 'rows.reference', label: 'Reference' },
         { name: 'rows.description', label: 'Description' },
+        { name: 'rows.amount', label: 'Amount (credits shown as −)' },
         { name: 'rows.debit', label: 'Debit' },
         { name: 'rows.credit', label: 'Credit' },
         { name: 'rows.balance', label: 'Running balance' },
@@ -584,10 +585,10 @@ function sampleDataRaw(kind: DocKind, company: any, branding: any): { fields: Fi
       },
       lists: {
         rows: [
-          { date: '2026-07-03', type: 'Invoice', number: 'INV-0007', reference: 'PO-88', description: '', debit: m(1800), credit: '', balance: m(3000) },
-          { date: '2026-07-21', type: 'Payment', number: 'RCT-0004', reference: 'Bank transfer', description: 'Payment received — INV-0005', credit: m(1200), debit: '', balance: m(1800) },
-          { date: '2026-08-10', type: 'Credit note', number: 'CN-0001', reference: '', description: 'Credit note', credit: m(1000), debit: '', balance: m(800) },
-          { date: '2026-08-24', type: 'Invoice', number: 'INV-0009', reference: '', description: '', debit: m(1200), credit: '', balance: m(2000) },
+          { date: '2026-07-03', type: 'Invoice', number: 'INV-0007', reference: 'PO-88', description: '', amount: m(1800), debit: m(1800), credit: '', balance: m(3000) },
+          { date: '2026-07-21', type: 'Payment', number: 'RCT-0004', reference: 'Bank transfer', description: 'Payment received — INV-0005', amount: m(-1200), credit: m(1200), debit: '', balance: m(1800) },
+          { date: '2026-08-10', type: 'Credit note', number: 'CN-0001', reference: '', description: 'Credit note', amount: m(-1000), credit: m(1000), debit: '', balance: m(800) },
+          { date: '2026-08-24', type: 'Invoice', number: 'INV-0009', reference: '', description: '', amount: m(1200), debit: m(1200), credit: '', balance: m(2000) },
         ],
         payment: paymentRows(branding?.templates?.invoice, true).map(r => ({ label: r.label, value: r.value })),
       },
