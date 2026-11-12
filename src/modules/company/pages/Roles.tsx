@@ -194,7 +194,7 @@ export function CompanyRolesPage() {
           <div key={modKey} style={{ marginBottom: 20 }}>
             <Space>
               <Text style={{ color: '#f0ede6', fontWeight: 600, fontSize: 14 }}>{(MODULES as any)[modKey]?.label || modKey}</Text>
-              {!access.isOn(modKey) && <Tag>Switched off in Settings → Modules</Tag>}
+              {!access.isOn(modKey) && <Tag>Switched off in Company Settings → Modules</Tag>}
             </Space>
             <Divider style={{ margin: '8px 0', borderColor: 'rgba(255,255,255,0.06)' }} />
             <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: '6px 12px', alignItems: 'center' }}>
