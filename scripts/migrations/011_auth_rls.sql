@@ -296,7 +296,7 @@ DECLARE
     ['workflow_logs',       'instance_id', 'workflow_instances']
   ];
   platform_tables text[] := ARRAY['platform_users','platform_roles','platform_permissions','platform_audit_log'];
-  special text[] := ARRAY['companies','platform_subscriptions','audit_log'];
+  special text[] := ARRAY['companies','platform_subscriptions','audit_log','user_profiles'];
   handled text[] := ARRAY[]::text[];
   reference text[] := ARRAY[]::text[];
   i int;

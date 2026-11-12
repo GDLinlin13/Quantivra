@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { RainbowTitle } from '../components/RainbowTitle';
-import { Layout, Menu, Button, Avatar, Dropdown, Typography, Modal } from 'antd';
-import { ChangePasswordCard } from '../components/ChangePasswordCard';
+import { Layout, Menu, Button, Avatar, Dropdown, Typography } from 'antd';
+import { MyProfileModal } from '../components/MyProfileModal';
+import { profileService, NO_PROFILE, DEFAULT_AVATAR_COLOR, type MyProfile } from '../services/profile';
 import {
   DashboardOutlined, TeamOutlined, UserOutlined, SafetyOutlined,
   SettingOutlined, LogoutOutlined, BankOutlined,
@@ -22,11 +23,21 @@ export function CompanyLayout() {
 
 function CompanyLayoutInner() {
   const access = useCompanyAccess();
-  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profile, setProfile] = useState<MyProfile>(NO_PROFILE);
+  const [authId, setAuthId] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, companyId } = useAuth();
   const [companyName, setCompanyName] = useState<string>('');
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const id = data.user?.id || null;
+      setAuthId(id);
+      if (id) profileService.get(id).then(setProfile).catch(() => null);
+    });
+  }, [companyId]);
+
   useEffect(() => {
     if (!companyId) return;
     supabase.from('companies').select('name').eq('id', companyId).maybeSingle()
@@ -62,21 +73,22 @@ function CompanyLayoutInner() {
 
   const userMenu = {
     items: [
-      { key: 'password', icon: <UserOutlined />, label: 'Change my password' },
+      { key: 'profile', icon: <UserOutlined />, label: 'My Profile' },
       { type: 'divider' as const },
       { key: 'logout', icon: <LogoutOutlined />, label: 'Sign Out', danger: true },
     ],
     onClick: ({ key }: { key: string }) => {
       if (key === 'logout') { logout(); navigate('/login'); }
-      if (key === 'password') setPasswordOpen(true);
+      if (key === 'profile') setProfileOpen(true);
     },
   };
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#0b0f12' }}>
-      <Modal open={passwordOpen} onCancel={() => setPasswordOpen(false)} footer={null} width={520} destroyOnHidden>
-        <ChangePasswordCard />
-      </Modal>
+      {profileOpen && (
+        <MyProfileModal profile={profile} fullName={user?.full_name || ''} onClose={() => setProfileOpen(false)}
+          onSave={async p => { if (!authId) throw new Error('Not signed in'); await profileService.save(authId, p); setProfile(p); }} />
+      )}
       <Sider
         theme="dark"
         collapsible
@@ -116,8 +128,8 @@ function CompanyLayoutInner() {
           <Button type="text" icon={<BellOutlined />} style={{ color: '#f0ede6' }} />
           <Dropdown menu={userMenu} placement="bottomRight">
             <Button type="text" style={{ color: '#f0ede6', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Avatar size="small" icon={<UserOutlined />} style={{ background: '#4fc3f7', color: '#111' }} />
-              {user?.full_name}
+              <Avatar size="small" src={profile.avatar_data || undefined} icon={profile.avatar_data ? undefined : <UserOutlined />} style={{ background: profile.avatar_data ? undefined : (profile.avatar_color || DEFAULT_AVATAR_COLOR), color: '#111' }} />
+              {profile.display_name || user?.full_name}
             </Button>
           </Dropdown>
         </Header>
