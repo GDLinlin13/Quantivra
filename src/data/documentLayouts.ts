@@ -91,7 +91,7 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
     { name: 'notes', label: 'Notes' },
     { name: 'terms', label: 'Terms & conditions' },
     { name: 'bank_details', label: 'Bank / payment details' },
-    { name: 'payment_account', label: 'Bank account name (which bank is shown)' },
+    { name: 'payment_account', label: 'Payment name (which payment details are shown)' },
   ],
   soa: [
     ...COMPANY_FIELDS,
@@ -120,7 +120,7 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
     { name: 'age_90_plus', label: 'Ageing: over 90 days overdue' },
     { name: 'notes', label: 'Notes' },
     { name: 'bank_details', label: 'Bank / payment details' },
-    { name: 'payment_account', label: 'Bank account name (which bank is shown)' },
+    { name: 'payment_account', label: 'Payment name (which payment details are shown)' },
   ],
 };
 

@@ -254,7 +254,7 @@ export function CompanyProfilePage() {
         {banks.map((b, bi) => (
           <div key={bi} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: 10, marginBottom: 10 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
-              <Input style={{ width: 240 }} value={b.title} placeholder="Bank account name, e.g. DBS (SGD)" onChange={e => setBank(bi, { title: e.target.value })} />
+              <Input style={{ width: 240 }} value={b.title} placeholder="Payment name" onChange={e => setBank(bi, { title: e.target.value })} />
               <Switch size="small" checked={!!b.isDefault || banks.length === 1}
                 onChange={on => setBanks(banks.map((x, j) => ({ ...x, isDefault: on ? j === bi : (j === 0 && bi !== 0) })))} />
               <Text style={{ color: 'rgba(240,237,230,0.7)', fontSize: 12 }}>Default</Text>
@@ -278,7 +278,7 @@ export function CompanyProfilePage() {
             <Button size="small" icon={<PlusOutlined />} onClick={() => setBank(bi, { lines: [...b.lines, { label: '', value: '' }] })}>Add a line</Button>
           </div>
         ))}
-        <Button icon={<PlusOutlined />} onClick={() => setBanks([...banks, { title: '', lines: DEFAULT_PAYMENT_LABELS.map(label => ({ label, value: '' })) }])}>Add another bank</Button>
+        <Button icon={<PlusOutlined />} onClick={() => setBanks([...banks, { title: '', lines: [] }])}>Add another bank</Button>
       </Form.Item>
       {(tpl.invoice.bankDetails || '').trim() && (
         <Form.Item label="Older payment details (free text)">
