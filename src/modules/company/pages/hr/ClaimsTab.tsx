@@ -85,7 +85,7 @@ function ClaimModal({ companyId, employeeId, currency, claim, onClose, onSaved }
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <Form.Item name="claim_date" label="Date of expense" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="category" label="Category" rules={[{ required: true, message: 'Choose or type a category' }]}>
-            <AutoComplete options={CLAIM_CATEGORIES.map(c => ({ value: c }))} placeholder="e.g. Transport" filterOption={(i, o) => String(o?.value).toLowerCase().includes(i.toLowerCase())} />
+            <AutoComplete options={CLAIM_CATEGORIES.map(c => ({ value: c }))} filterOption={(i, o) => String(o?.value).toLowerCase().includes(i.toLowerCase())} />
           </Form.Item>
           <Form.Item name="currency" label="Currency" rules={[{ required: true }]}>
             <Select showSearch options={[...new Set([currency, ...COMMON_CURRENCIES])].map(c => ({ value: c, label: c }))} />
@@ -94,7 +94,7 @@ function ClaimModal({ companyId, employeeId, currency, claim, onClose, onSaved }
             <AmountInput style={{ width: '100%' }} precision={2} min={0} />
           </Form.Item>
         </div>
-        <Form.Item name="description" label="What was it for"><Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} placeholder="e.g. Taxi to client meeting" /></Form.Item>
+        <Form.Item name="description" label="What was it for"><Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
         <Form.Item label="Receipts">
           <Space orientation="vertical" size={4}>
             {files.map((f, i) => (
