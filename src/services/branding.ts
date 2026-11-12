@@ -53,6 +53,13 @@ export interface SoaTemplate {
   fileName?: string;
   layout?: GridTemplate;
 }
+/** The top of the documents typed in the letter editor (Document Templates → Letterhead). */
+export interface LetterheadTemplate {
+  showLogo: boolean;
+  showCompanyBlock: boolean;
+  footerNote: string;
+  layout?: GridTemplate;
+}
 export interface DocumentTemplate {
   showLogo: boolean;
   showLetterhead: boolean;
@@ -62,6 +69,7 @@ export interface Templates {
   payslip: PayslipTemplate;
   invoice: InvoiceTemplate;
   soa: SoaTemplate;
+  letterhead: LetterheadTemplate;
   document: DocumentTemplate;
 }
 
@@ -83,6 +91,7 @@ export const DEFAULT_TEMPLATES: Templates = {
   payslip: { showLogo: true, showCompanyBlock: true, showEmployeeId: true, showBankAccount: false, bankAccountFull: false, showDesignation: true, showNationalId: false, nationalIdFull: false, footerNote: '' },
   invoice: { showLogo: true, showCompanyBlock: true, paymentTermsDays: 30, bankDetails: '', footerNote: '' },
   soa: { showLogo: true, showCompanyBlock: true, footerNote: '' },
+  letterhead: { showLogo: true, showCompanyBlock: true, footerNote: '' },
   document: { showLogo: true, showLetterhead: true, footerNote: '' },
 };
 
@@ -90,7 +99,7 @@ export const DEFAULT_TEMPLATES: Templates = {
  * The company's own saved layout, or none yet (Custom then starts from a copy of the pre-built design).
  * An untouched copy of the older grid starter counts as none: it was never really this company's design.
  */
-export function ownLayout(kind: 'payslip' | 'invoice' | 'soa', saved: any, country?: string | null): GridTemplate | undefined {
+export function ownLayout(kind: 'payslip' | 'invoice' | 'soa' | 'letterhead', saved: any, country?: string | null): GridTemplate | undefined {
   if (!saved) return undefined;
   const t = normalizeTemplate(saved, null as unknown as GridTemplate);
   if (!t) return undefined;
@@ -115,6 +124,7 @@ function withDefaults(row: any, companyId: number, country?: string | null): Bra
       payslip: { ...DEFAULT_TEMPLATES.payslip, ...(t.payslip || {}), layout: ownLayout('payslip', t.payslip?.layout, country) },
       invoice: { ...DEFAULT_TEMPLATES.invoice, ...(t.invoice || {}), layout: ownLayout('invoice', t.invoice?.layout, country) },
       soa: { ...DEFAULT_TEMPLATES.soa, ...(t.soa || {}), layout: ownLayout('soa', t.soa?.layout, country) },
+      letterhead: { ...DEFAULT_TEMPLATES.letterhead, ...(t.letterhead || {}), layout: ownLayout('letterhead', t.letterhead?.layout, country) },
       document: { ...DEFAULT_TEMPLATES.document, ...(t.document || {}) },
     },
   };

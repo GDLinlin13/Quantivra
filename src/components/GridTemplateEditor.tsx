@@ -91,6 +91,13 @@ function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
                 ordinary (non-repeating) rows. SDL is a levy the company pays, not CPF; it has its own <code style={code} onClick={() => onInsert('sdl')} title="Click to put it in the selected cell">{'{{sdl}}'}</code> field.
               </p>}
             </>
+          ) : kind === 'letterhead' ? (
+            <p style={{ margin: '0 0 8px' }}>
+              This is the top (and bottom) of every document you create with <b>Create document</b>. Put your logo in a cell on its own
+              (<code style={code} onClick={() => onInsert('logo')} title="Click to put it in the selected cell">{'{{logo}}'}</code>), your company details, and
+              <code style={code} onClick={() => onInsert('document_title')} title="Click to put it in the selected cell">{'{{document_title}}'}</code> and
+              <code style={code} onClick={() => onInsert('document_date')} title="Click to put it in the selected cell">{'{{document_date}}'}</code>, which are filled in for each document. What you type goes below it.
+            </p>
           ) : kind === 'soa' ? (
             <>
             <p style={{ margin: '0 0 8px' }}>
@@ -138,6 +145,7 @@ function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
           <p style={{ margin: '8px 0 0', color: 'rgba(240,237,230,0.55)' }}>
             {kind === 'payslip'
               ? `The item names come from payroll: Basic Salary from the employee record, the statutory ones${sg ? ' (CPF, SDL, CDAC…)' : ''} are worked out automatically, and the rest are whatever you add under Payroll → Pay items. You never type item codes — the payslip shows the names.`
+              : kind === 'letterhead' ? 'The document name and date are filled in each time you create a document.'
               : kind === 'soa' ? 'The lines are the customer’s invoices, credit notes and payments, with the running balance.'
               : 'The item names are whatever is typed on each invoice line.'}
           </p>

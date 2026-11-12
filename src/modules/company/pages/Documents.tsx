@@ -19,6 +19,8 @@ import { downloadBlob, formatFileName, formatDocFileName, zipFiles } from '../..
 import { PayslipView } from './hr/PayslipView';
 import { DocumentView } from './finance/DocumentView';
 import { FileViewer } from '../../../components/FileViewer';
+import { LetterEditor } from '../../../components/LetterEditor';
+import { readDocxSource } from '../../../utils/docxExport';
 import { saveBankStatement } from './finance/saveStatement';
 import { fmtDate } from '../../../utils/dateFormat';
 
@@ -214,6 +216,21 @@ export function CompanyDocumentsPage() {
   };
   // open: show it in the viewer popup; download: save it
   const [viewing, setViewing] = useState<Row | null>(null);
+  // a Word file made with Create document opens again in the editor (its PDF is replaced when saved)
+  const [editing, setEditing] = useState<{ title: string; html: string; subfolder?: string | null; replace: CompanyFile[] } | null>(null);
+  const editDoc = async (r: Row) => {
+    setBusy(r.key);
+    try {
+      const f = r.kind === 'stored' ? files.find(x => x.id === r.fileId) : undefined;
+      if (!f) throw new Error('Could not find the file');
+      const src = await readDocxSource(await (await fileOf(r)).blob.arrayBuffer());
+      if (!src) throw new Error('Only Word files made with Create document (Document Templates → Letterhead) can be edited here');
+      const base = f.file_name.replace(/\.docx$/i, '');
+      const pdf = files.find(x => x.id !== f.id && (x.subfolder || '') === (f.subfolder || '') && x.file_name === `${base}.pdf`);
+      setEditing({ title: src.title, html: src.html, subfolder: f.subfolder || '', replace: [f, ...(pdf ? [pdf] : [])] });
+    } catch (e: any) { message.error(e.message); }
+    setBusy(null);
+  };
   const act = async (r: Row, how: 'open' | 'download') => {
     if (how === 'open') { setViewing(r); return; }
     setBusy(r.key);
@@ -338,6 +355,9 @@ export function CompanyDocumentsPage() {
                     <Space size={4}>
                       <Button size="small" icon={<EyeOutlined />} loading={busy === r.key} onClick={() => act(r, 'open')} title="Open" />
                       <Button size="small" icon={<DownloadOutlined />} onClick={() => act(r, 'download')} title="Download" />
+                      {r.kind === 'stored' && r.fileId && /\.docx$/i.test(r.name) && (
+                        <Button size="small" onClick={() => editDoc(r)}>Edit</Button>
+                      )}
                       {r.kind === 'stored' && (r.fileId || r.attachmentId) && (
                         <Button size="small" icon={<EditOutlined />} title="Rename" onClick={() => {
                           const cur = r.fileId ? files.find(f => f.id === r.fileId)?.file_name : attachments.find(a => a.id === r.attachmentId)?.file_name;
@@ -374,6 +394,7 @@ export function CompanyDocumentsPage() {
       <Modal open={!!renaming} title="Rename" okText="Save" onCancel={() => setRenaming(null)} okButtonProps={{ disabled: !renaming?.name.trim() }} onOk={doRename}>
         <Input autoFocus value={renaming?.name || ''} onChange={e => setRenaming(r => (r ? { ...r, name: e.target.value } : r))} onPressEnter={doRename} />
       </Modal>
+      {editing && company && branding && <LetterEditor companyId={companyId} company={company} branding={branding} initial={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
       {viewing && <FileViewer name={viewing.kind === 'stored' ? viewing.name : viewing.name.replace(/(\.pdf)?$/i, '.pdf')} load={() => fileOf(viewing).then(x => x.blob)} onClose={() => setViewing(null)} />}
     </div>
   );

@@ -9,7 +9,7 @@ const SG_ONLY_FIELDS = new Set(['cpf_employee', 'cpf_employer', 'cpf_total', 'sd
 const HK_ONLY_FIELDS = new Set(['mpf_employee', 'mpf_employer', 'mpf_total']);
 const isHK = (country?: string | null) => (country || '').toUpperCase() === 'HK';
 
-export type DocKind = 'payslip' | 'invoice' | 'soa';
+export type DocKind = 'payslip' | 'invoice' | 'soa' | 'letterhead';
 
 export interface FieldDef { name: string; label: string }
 export interface ListDef { name: string; label: string; fields: FieldDef[] }
@@ -28,6 +28,12 @@ const COMPANY_FIELDS: FieldDef[] = [
 ];
 
 export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
+  letterhead: [
+    ...COMPANY_FIELDS,
+    { name: 'document_title', label: 'Document name (what you call the document when you create it)' },
+    { name: 'document_date', label: 'Date' },
+    { name: 'document_body', label: 'Where the text you type goes (put it alone in a row; the rows below it become the bottom of the page)' },
+  ],
   payslip: [
     ...COMPANY_FIELDS,
     { name: 'employee_name', label: 'Employee name' },
@@ -121,6 +127,7 @@ const nameAmount = (list: string, what: string): FieldDef[] => [
 ];
 
 export const DOC_LISTS: Record<DocKind, ListDef[]> = {
+  letterhead: [],
   payslip: [
     { name: 'earnings', label: 'Earnings', fields: nameAmount('earnings', 'Earning') },
     { name: 'deductions', label: 'Deductions', fields: nameAmount('deductions', 'Deduction') },
@@ -352,6 +359,11 @@ function footerRows(branding: any, kind: DocKind, width: number): RowSpec {
  * choices (what to show, its details, its country's terms). Nothing from any other company.
  */
 export const STARTER_LAYOUTS: Record<DocKind, (country?: string | null, branding?: any) => GridTemplate> = {
+  letterhead: (country, branding) => build([150, 200, 70, 130, 130], [
+    ...headerRows(country, branding, '{{document_title}}', ['{{document_date}}'], 1, 2, 2, 'letterhead'),
+    { h: 40, cells: [[0, { v: '{{document_body}}', cs: 5, c: GREY, fs: 11 }]] },
+    ...footerRows(branding, 'letterhead', 5),
+  ]),
   payslip: (country, branding) => {
     const t = branding?.templates?.payslip || {};
     const accent = branding?.accent_color || '#0369a1';
@@ -548,6 +560,9 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
         ] : hk ? [{ name: 'MPF', employee: m(475), employer: m(475), total: m(950) }] : [],
       },
     };
+  }
+  if (kind === 'letterhead') {
+    return { fields: { ...base, document_title: 'LETTER OF EMPLOYMENT', document_date: '12 November 2026' }, lists: {} };
   }
   if (kind === 'soa') {
     return {

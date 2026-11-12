@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { Card, ColorPicker, Typography, Spin, Tabs, Form, Input, InputNumber, Button, message, Switch, Space, Segmented, Alert, Tag, Tooltip, Select, Popconfirm } from 'antd';
-import { DeleteOutlined, SaveOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, SaveOutlined, PlusOutlined, FileAddOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { brandingService, DEFAULT_TEMPLATES, type Branding } from '../../../services/branding';
 import { DocumentShell } from '../../../components/DocumentShell';
 import { GridTemplateEditor } from '../../../components/GridTemplateEditor';
+import { LetterEditor } from '../../../components/LetterEditor';
 import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, paymentAccounts, DEFAULT_PAYMENT_LABELS, type DocKind, type PaymentAccount, type PaymentLine } from '../../../data/documentLayouts';
 import { CellValue } from '../../../components/GridDocument';
 import type { GridTemplate } from '../../../utils/gridTemplate';
@@ -190,6 +191,43 @@ export function CompanyProfilePage() {
     )),
   );
 
+  const [creating, setCreating] = useState(false);
+  // the colour and the footer behind the letterhead, and the way to make a document on it
+  const letterheadCommon = (
+    <Card size="small" style={{ ...panel, marginBottom: 12 }} title={<span style={{ color: '#f0ede6' }}>Colour, footer and new documents</span>}>
+      <Space size={24} wrap align="start">
+        <Form layout="vertical" size="small" component={false}>
+          <Form.Item label="Accent colour" style={{ marginBottom: 0 }}><ColorPicker value={accent} onChange={c => setAccent(c.toHexString())} showText /></Form.Item>
+        </Form>
+        <div style={{ width: 420, maxWidth: '100%' }}>
+          <Text style={{ color: 'rgba(240,237,230,0.8)', fontSize: 12 }}>Default document footer</Text>
+          <Input.TextArea rows={2} value={vals.footer_note || ''} onChange={e => setVals(p => ({ ...p, footer_note: e.target.value }))} placeholder="e.g. This is a computer-generated document." />
+        </div>
+        <Space>
+          <Button icon={<SaveOutlined />} loading={saving} onClick={saveLook}>Save colour and footer</Button>
+          <Button type="primary" icon={<FileAddOutlined />} onClick={() => setCreating(true)}>Create document</Button>
+        </Space>
+      </Space>
+    </Card>
+  );
+  const letterheadPrebuilt = twoCol(
+    <Card size="small" style={panel} title={<span style={{ color: '#f0ede6' }}>What the letterhead shows</span>}>
+      <TplToggle label="Logo" v={tpl.letterhead.showLogo} on={x => setTplField('letterhead', 'showLogo', x)} />
+      <TplToggle label="Company address block" v={tpl.letterhead.showCompanyBlock} on={x => setTplField('letterhead', 'showCompanyBlock', x)} />
+      <Form layout="vertical" component={false}>
+        <Form.Item label="Footer note" style={{ marginTop: 8 }}>
+          <Input.TextArea rows={2} value={tpl.letterhead.footerNote} onChange={e => setTplField('letterhead', 'footerNote', e.target.value)} placeholder="Leave empty to use the default document footer" />
+        </Form.Item>
+      </Form>
+    </Card>,
+    previewBox('Preview — how it looks at the top of your documents', (
+      <DocumentShell country={company?.country} branding={previewBranding} companyName={company.name} title="LETTER OF EMPLOYMENT" meta={<>{fmtDate(new Date().toISOString().slice(0, 10))}</>}
+        showLogo={tpl.letterhead.showLogo} showCompanyBlock={tpl.letterhead.showCompanyBlock} footerNote={tpl.letterhead.footerNote || vals.footer_note} forPrint>
+        <div style={{ color: '#999', fontSize: 12, padding: '12px 0' }}>What you type goes here.</div>
+      </DocumentShell>
+    )),
+  );
+
   // Bank accounts shown as payment details; older single list becomes the first account.
   const banks: PaymentAccount[] = paymentAccounts(tpl.invoice).length
     ? paymentAccounts(tpl.invoice)
@@ -318,7 +356,7 @@ export function CompanyProfilePage() {
       <Tabs
         items={[
           {
-            key: 'payslip-template', label: 'Payslip Template',
+            key: 'payslip-template', label: 'Payslip',
             children: templateTab('payslip', 'Payslips', payslipPrebuilt, undefined,
               <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 640 }} title={<span style={{ color: '#f0ede6' }}>Payslip footer (the {'{{footer_note}}'} field)</span>}>
                 <Input.TextArea rows={2} value={tpl.payslip.footerNote} onChange={e => setTplField('payslip', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Company Settings" />
@@ -326,7 +364,7 @@ export function CompanyProfilePage() {
               undefined),
           },
           {
-            key: 'invoice-template', label: 'Invoice Template',
+            key: 'invoice-template', label: 'Invoice',
             children: templateTab('invoice', 'Invoices', tpl.invoice.layout?.enabled ? null : invoicePrebuilt,
               undefined,
               <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>Invoice settings</span>}>
@@ -334,7 +372,7 @@ export function CompanyProfilePage() {
               </Card>),
           },
           {
-            key: 'soa-template', label: 'Statement Template',
+            key: 'soa-template', label: 'Statement',
             children: templateTab('soa', 'Statements', tpl.soa.layout?.enabled ? null : soaPrebuilt,
               'The bank details printed on a statement are the ones in the Invoice Template.',
               <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>Statement settings</span>}>
@@ -342,29 +380,12 @@ export function CompanyProfilePage() {
               </Card>),
           },
           {
-            key: 'letterhead', label: 'Letterhead', forceRender: true,
-            children: twoCol(
-              <Card size="small" style={panel} title={<span style={{ color: '#f0ede6' }}>Letterhead</span>}>
-                <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12, display: 'block', marginBottom: 12 }}>
-                  The top of every document: your logo and company details (Company Settings), the accent colour, and the footer used when a template has none of its own.
-                </Text>
-                <Form layout="vertical" size="small" component={false}>
-                  <Form.Item label="Accent colour"><ColorPicker value={accent} onChange={c => setAccent(c.toHexString())} showText /></Form.Item>
-                  <Form.Item label="Default document footer">
-                    <Input.TextArea rows={2} value={vals.footer_note || ''} onChange={e => setVals(p => ({ ...p, footer_note: e.target.value }))} placeholder="e.g. This is a computer-generated document." />
-                  </Form.Item>
-                </Form>
-                <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={saveLook}>Save</Button>
-              </Card>,
-              previewBox('Preview — how it looks at the top of your documents', (
-                <DocumentShell country={company?.country} branding={previewBranding} companyName={company.name} title="DOCUMENT" meta={<>Reference<br />Date</>} forPrint footerNote={vals.footer_note}>
-                  <div style={{ color: '#999', fontSize: 12, padding: '12px 0' }}>Document content goes here.</div>
-                </DocumentShell>
-              )),
-            ),
+            key: 'letterhead', label: 'Letterhead',
+            children: templateTab('letterhead', 'Documents', tpl.letterhead.layout?.enabled ? null : letterheadPrebuilt, undefined, undefined, letterheadCommon),
           },
         ]}
       />
+      {creating && branding && <LetterEditor companyId={companyId!} company={company} branding={previewBranding} onClose={() => setCreating(false)} onSaved={() => setCreating(false)} />}
     </div>
   );
 }
