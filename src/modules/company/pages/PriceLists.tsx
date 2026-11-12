@@ -130,11 +130,11 @@ function PriceListDrawer({ companyId, list, kind, company, items, classes, rows,
     <Drawer open onClose={onClose} size={820} title={list.id ? list.name : 'New price list'}
       extra={canWrite && <Button type="primary" loading={saving} onClick={save}>Save</Button>}>
       <Space direction="vertical" size={12} style={{ width: '100%' }}>
-        <Input placeholder="Name, e.g. Restaurants" value={name} onChange={e => setName(e.target.value)} disabled={!canWrite} />
+        <Input placeholder="Name" value={name} onChange={e => setName(e.target.value)} disabled={!canWrite} />
         <Select mode="multiple" style={{ width: '100%' }} placeholder={kind === 'purchase' ? 'Suppliers on this list' : 'Customers on this list'} optionFilterProp="label" disabled={!canWrite}
           value={who} onChange={setWho}
           options={people.filter(c => !c.archived || who.includes(c.id)).map(c => ({ value: c.id, label: (c as any)[col] && (c as any)[col] !== list.id && !who.includes(c.id) ? `${c.name} (on another list)` : c.name }))} />
-        <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} placeholder={kind === 'purchase' ? 'Note, e.g. prices valid until 31 Dec' : 'Note shown on the printed list, e.g. prices valid until 31 Dec'} value={notes} onChange={e => setNotes(e.target.value)} disabled={!canWrite} />
+        <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} placeholder={kind === 'purchase' ? 'Note' : 'Note shown on the printed list'} value={notes} onChange={e => setNotes(e.target.value)} disabled={!canWrite} />
         <Space wrap>
           <Input allowClear placeholder="Find an item" style={{ width: 240 }} value={search} onChange={e => setSearch(e.target.value)} />
           {canWrite && !isStandard && <Button size="small" onClick={() => setPrices(p => { const m = { ...p }; for (const l of lines) if (m[l.key] == null && standard(l) != null) m[l.key] = standard(l)!; return m; })}>{isStandard ? '' : 'Fill the rest with the Standard prices'}</Button>}

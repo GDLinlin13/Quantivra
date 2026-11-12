@@ -401,6 +401,9 @@ export const docService = {
       payment_account_index: d.payment_account_index ?? null, updated_at: new Date().toISOString(),
       // the delivery address (migration 053); left out until the document has one
       ...(d.delivery_address !== undefined ? { delivery_address: (d.delivery_address || '').trim() || null } : {}),
+      // who it is delivered to (migration 054)
+      ...(d.delivery_contact !== undefined ? { delivery_contact: (d.delivery_contact || '').trim() || null } : {}),
+      ...(d.delivery_name !== undefined ? { delivery_name: (d.delivery_name || '').trim() || null } : {}),
       // a document in another currency keeps its exchange rate (migration 036); left out otherwise
       ...(d.fx_rate !== undefined ? { fx_rate: d.fx_rate || null } : {}),
     };
