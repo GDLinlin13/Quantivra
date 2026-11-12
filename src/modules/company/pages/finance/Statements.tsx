@@ -20,6 +20,8 @@ const { Text } = Typography;
 export const DEFAULT_STATEMENT_FILE_NAME = 'Statement of account - {customer} - {date}';
 const KIND_LABEL = { invoice: 'Invoice', credit_note: 'Credit note', payment: 'Payment' } as const;
 
+const termsText = (days: number) => (days === 0 ? 'Due on receipt' : `${days} days`);
+
 /** Fields and lists for the statement template, from a real statement. */
 export function statementData(s: Soa, contact: Contact | null, person: ContactPerson | null, company: any, branding: Branding | null, settings: FinanceSettings, number = '') {
   const tpl = branding?.templates.soa;
@@ -32,6 +34,7 @@ export function statementData(s: Soa, contact: Contact | null, person: ContactPe
     ...companyFields(company, branding, tpl?.footerNote),
     currency: s.currency,
     document_title: 'STATEMENT OF ACCOUNT', statement_no: number, company_gst_no: settings.gstRegistered ? (settings.gstNumber || '') : '',
+    payment_terms: termsText(contact?.payment_terms_days ?? inv?.paymentTermsDays ?? 30),
     statement_date: fmtDate(s.to), period_from: fmtDate(s.from), period_to: fmtDate(s.to),
     period: s.from ? `${longDate(s.from)} to ${longDate(s.to)}` : `All items up to ${longDate(s.to)}`,
     customer_name: contact?.name || '', customer_address: contact?.address || '',

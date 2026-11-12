@@ -99,6 +99,7 @@ export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
     { name: 'statement_no', label: 'Statement number (given when printed or downloaded)' },
     { name: 'statement_date', label: 'Statement date' },
     { name: 'period', label: 'Period covered (e.g. 1 Jan 2026 to 31 Mar 2026)' },
+    { name: 'payment_terms', label: 'Payment terms (the customer’s, e.g. 30 days)' },
     { name: 'period_from', label: 'Period start date' },
     { name: 'period_to', label: 'Period end date' },
     { name: 'customer_name', label: 'Customer name' },
@@ -570,7 +571,7 @@ export function sampleData(kind: DocKind, company: any, branding: any): { fields
     return {
       fields: {
         ...base, document_title: 'STATEMENT OF ACCOUNT', statement_no: 'SOA-2026-0001', company_gst_no: '', statement_date: '2026-08-31', period: '1 Jul 2026 to 31 Aug 2026',
-        period_from: '2026-07-01', period_to: '2026-08-31',
+        period_from: '2026-07-01', period_to: '2026-08-31', payment_terms: '30 days',
         customer_name: sg ? 'Acme Trading Pte Ltd' : country === 'AE' ? 'Acme Trading LLC' : 'Acme Trading Ltd',
         customer_address: sg ? '1 Example Road, Singapore 123456' : country === 'AE' ? '1 Example Road, Dubai' : '1 Example Road',
         customer_contact: 'Mr John Lee', customer_phone: sg ? '+65 6123 4567' : country === 'AE' ? '+971 4 123 4567' : '+1 555 123 4567', customer_email: 'accounts@acme.example',
