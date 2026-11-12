@@ -467,19 +467,19 @@ export function CompanyProfilePage() {
               <>{amountFormatCard('payslip')}{fileNamesCard}</>),
           },
           {
-            key: 'soa-template', label: 'Statement Template',
-            children: templateTab('soa', 'Statements', tpl.soa.layout?.enabled ? null : soaPrebuilt,
-              'The bank details printed on a statement are the ones in the Invoice Template.',
-              <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>Statement settings</span>}>
-                {soaSettings}
-              </Card>),
-          },
-          {
             key: 'invoice-template', label: 'Invoice Template',
             children: templateTab('invoice', 'Invoices', tpl.invoice.layout?.enabled ? null : invoicePrebuilt,
               undefined,
               <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>Invoice settings</span>}>
                 {invoiceSettings}
+              </Card>),
+          },
+          {
+            key: 'soa-template', label: 'Statement Template',
+            children: templateTab('soa', 'Statements', tpl.soa.layout?.enabled ? null : soaPrebuilt,
+              'The bank details printed on a statement are the ones in the Invoice Template.',
+              <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>Statement settings</span>}>
+                {soaSettings}
               </Card>),
           },
         ]}
