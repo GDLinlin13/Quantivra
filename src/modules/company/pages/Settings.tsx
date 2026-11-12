@@ -92,47 +92,43 @@ export function CompanySettingsPage() {
   return (
     <div>
       <Title level={4} style={{ color: '#f0ede6', marginBottom: 24 }}>Company Settings</Title>
-      <Card style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, maxWidth: 640, marginBottom: 24 }}>
+      <Card style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, maxWidth: 900, marginBottom: 24 }}>
         <Form form={form} layout="vertical" onFinish={handleSave} disabled={!access.canWrite('settings')}>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ width: 120, height: 60, border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: '#fff' }}>
-              {logo ? <img src={logo} alt="logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <Text style={{ color: '#999', fontSize: 12 }}>No logo</Text>}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 24 }}>
+              <div style={{ width: 120, height: 60, border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: '#fff' }}>
+                {logo ? <img src={logo} alt="logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <Text style={{ color: '#999', fontSize: 12 }}>No logo</Text>}
+              </div>
+              {access.canWrite('settings') && (
+                <Space orientation="vertical">
+                  <Upload beforeUpload={onLogo} showUploadList={false} accept="image/*"><Button size="small" icon={<UploadOutlined />}>Upload logo</Button></Upload>
+                  {logo && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setLogo(null)}>Remove</Button>}
+                </Space>
+              )}
             </div>
-            {access.canWrite('settings') && (
-              <Space orientation="vertical">
-                <Upload beforeUpload={onLogo} showUploadList={false} accept="image/*"><Button size="small" icon={<UploadOutlined />}>Upload logo</Button></Upload>
-                {logo && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setLogo(null)}>Remove</Button>}
-              </Space>
-            )}
-          </div>
-          <Form.Item name="name" label={<Text style={{ color: '#f0ede6' }}>Company Name</Text>}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="legal_name" label={<Text style={{ color: '#f0ede6' }}>Legal name (on documents)</Text>}><Input /></Form.Item>
-          <Form.Item name="registration_no" label={<Text style={{ color: '#f0ede6' }}>{companyRegLabel(company.country)}</Text>}><Input /></Form.Item>
-          <Form.Item name="address" label={<Text style={{ color: '#f0ede6' }}>Address</Text>}><Input.TextArea rows={2} /></Form.Item>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Form.Item name="registration_no" label={<Text style={{ color: '#f0ede6' }}>{companyRegLabel(company.country)}</Text>} style={{ alignSelf: 'end' }}><Input /></Form.Item>
+            <Form.Item name="name" label={<Text style={{ color: '#f0ede6' }}>Company Name</Text>}><Input /></Form.Item>
+            <Form.Item name="legal_name" label={<Text style={{ color: '#f0ede6' }}>Legal name (on documents)</Text>}><Input /></Form.Item>
+            <Form.Item name="address" label={<Text style={{ color: '#f0ede6' }}>Address</Text>} style={{ gridColumn: '1 / -1' }}><Input.TextArea rows={2} /></Form.Item>
             <Form.Item name="phone" label={<Text style={{ color: '#f0ede6' }}>Phone</Text>}><Input /></Form.Item>
             <Form.Item name="email" label={<Text style={{ color: '#f0ede6' }}>Email</Text>}><Input /></Form.Item>
+            <Form.Item name="website" label={<Text style={{ color: '#f0ede6' }}>Website</Text>}><Input /></Form.Item>
+            <Form.Item name="currency" label={<Text style={{ color: '#f0ede6' }}>Currency</Text>}>
+              <Select showSearch optionFilterProp="label" options={currencyOptions()} />
+            </Form.Item>
+            <Form.Item name="financial_year_start" label={<Text style={{ color: '#f0ede6' }}>Financial Year Start</Text>}><Input placeholder="MM-DD" /></Form.Item>
+            <Form.Item name="timezone" label={<Text style={{ color: '#f0ede6' }}>Timezone</Text>}>
+              <Select showSearch optionFilterProp="label" options={timezoneOptions()} />
+            </Form.Item>
+            <Form.Item label={<Text style={{ color: '#f0ede6' }}>Date Format</Text>}>
+              <Select value={dateFmt.format} options={DATE_FORMATS}
+                onChange={async v => { try { await dateFmt.save(v); message.success('Date format saved'); } catch (e: any) { message.error(e.message); } }} />
+            </Form.Item>
+            <Form.Item name="amount_format" label={<Text style={{ color: '#f0ede6' }}>Amount Format</Text>}>
+              <Select popupMatchSelectWidth={false}
+                options={AMOUNT_FORMATS.map(f => ({ value: f.value, label: f.value.startsWith('accounting') ? f.label.replace('$', f.value === 'accounting_code' ? (company.currency || 'SGD') : money(0, company.currency || 'SGD', 'symbol').replace(/[0-9.,]/g, '')) : f.label.replace(/ — .*$/, '') + ' — ' + money(1234.5, company.currency || 'SGD', f.value) }))} />
+            </Form.Item>
           </div>
-          <Form.Item name="website" label={<Text style={{ color: '#f0ede6' }}>Website</Text>}><Input /></Form.Item>
-          <Form.Item name="currency" label={<Text style={{ color: '#f0ede6' }}>Currency</Text>}>
-            <Select showSearch optionFilterProp="label" options={currencyOptions()} />
-          </Form.Item>
-          <Form.Item name="financial_year_start" label={<Text style={{ color: '#f0ede6' }}>Financial Year Start</Text>}>
-            <Input placeholder="MM-DD" />
-          </Form.Item>
-          <Form.Item name="timezone" label={<Text style={{ color: '#f0ede6' }}>Timezone</Text>}>
-            <Select showSearch optionFilterProp="label" options={timezoneOptions()} />
-          </Form.Item>
-          <Form.Item label={<Text style={{ color: '#f0ede6' }}>Date Format</Text>}>
-            <Select value={dateFmt.format} options={DATE_FORMATS}
-              onChange={async v => { try { await dateFmt.save(v); message.success('Date format saved'); } catch (e: any) { message.error(e.message); } }} />
-          </Form.Item>
-          <Form.Item name="amount_format" label={<Text style={{ color: '#f0ede6' }}>Amount Format</Text>}>
-            <Select popupMatchSelectWidth={false}
-              options={AMOUNT_FORMATS.map(f => ({ value: f.value, label: f.value.startsWith('accounting') ? f.label.replace('$', f.value === 'accounting_code' ? (company.currency || 'SGD') : money(0, company.currency || 'SGD', 'symbol').replace(/[0-9.,]/g, '')) : f.label.replace(/ — .*$/, '') + ' — ' + money(1234.5, company.currency || 'SGD', f.value) }))} />
-          </Form.Item>
           <Button type="primary" htmlType="submit" loading={saving} style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
             Save
           </Button>
@@ -140,7 +136,7 @@ export function CompanySettingsPage() {
       </Card>
 
       <Title level={5} style={{ color: '#f0ede6', marginBottom: 16 }}>Modules</Title>
-      <Card style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, maxWidth: 760, marginBottom: 24 }}>
+      <Card style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, maxWidth: 900, marginBottom: 24 }}>
         <Text style={{ color: 'rgba(240,237,230,0.6)', display: 'block', marginBottom: 12 }}>
           Click a module to switch it on or off for your company. A module that is off is hidden for everyone.
         </Text>

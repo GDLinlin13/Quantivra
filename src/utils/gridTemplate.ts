@@ -45,6 +45,27 @@ export function blankTemplate(rows = 20, cols = 6): GridTemplate {
   return { enabled: false, cols: Array(cols).fill(Math.round(680 / cols)), rows: Array.from({ length: rows }, () => ({})), cells: {} };
 }
 
+/** The row that holds {{document_body}} (where the text you type goes), or -1. */
+export function bodyRowOf(t: GridTemplate): number {
+  for (const [k, cell] of Object.entries(t.cells)) if ((cell.v || '').includes('{{document_body}}')) return Number(k.split(':')[0]);
+  return -1;
+}
+/** A letterhead split at its body row: the rows above (header) and below (footer); the body row itself is left out. */
+export function splitAtBody(t: GridTemplate): { header: GridTemplate; footer: GridTemplate | null } {
+  const at = bodyRowOf(t);
+  if (at < 0) return { header: t, footer: null };
+  const part = (from: number, to: number): GridTemplate => {
+    const cells: Record<string, GridCell> = {};
+    for (const [k, cell] of Object.entries(t.cells)) {
+      const [r, c] = k.split(':').map(Number);
+      if (r >= from && r < to) cells[key(r - from, c)] = cell;
+    }
+    return { ...t, rows: t.rows.slice(from, to), cells };
+  };
+  const header = part(0, at), footer = part(at + 1, t.rows.length);
+  return { header, footer: footer.rows.length ? footer : null };
+}
+
 /** Every column the same width again and every row its standard height; the text and formatting stay. */
 export function resetSizes(t: GridTemplate, width = 680): GridTemplate {
   return { ...t, cols: t.cols.map(() => Math.round(width / t.cols.length)), rows: t.rows.map(({ h: _h, ...rest }) => rest) };

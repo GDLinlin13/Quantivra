@@ -109,6 +109,28 @@ export async function elementsToPdf(elements: HTMLElement[]): Promise<Blob> {
   return pdf.output('blob');
 }
 
+/** One tall element (a typed document) as a PDF: the picture is cut into A4 pages. */
+export async function elementToPagedPdf(el: HTMLElement): Promise<Blob> {
+  const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import('jspdf'), import('html2canvas')]).catch(() => {
+    throw new Error('Quantivra was just updated. Refresh the page (F5) and try again.');
+  });
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
+  const pageW = 210, pageH = 297, margin = 10;
+  const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+  const imgW = pageW - margin * 2;
+  const pxPerMm = canvas.width / imgW;
+  const slicePx = Math.floor((pageH - margin * 2) * pxPerMm);
+  for (let y = 0, page = 0; y < canvas.height; y += slicePx, page++) {
+    const h = Math.min(slicePx, canvas.height - y);
+    const part = document.createElement('canvas');
+    part.width = canvas.width; part.height = h;
+    part.getContext('2d')!.drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+    if (page > 0) pdf.addPage();
+    pdf.addImage(part.toDataURL('image/jpeg', 0.92), 'JPEG', margin, margin, imgW, h / pxPerMm);
+  }
+  return pdf.output('blob');
+}
+
 export async function zipFiles(files: { name: string; blob: Blob }[]): Promise<Blob> {
   const { default: JSZip } = await import('jszip');
   const zip = new JSZip();

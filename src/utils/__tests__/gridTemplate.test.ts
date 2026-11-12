@@ -157,3 +157,21 @@ describe('reset sizes / clear everything', () => {
     expect(b.rows.every(r => r.h === undefined)).toBe(true);
   });
 });
+
+import { splitAtBody, bodyRowOf } from '../gridTemplate';
+describe('letterhead split at the body row', () => {
+  const t = { ...blankTemplate(5, 3), cells: { '0:0': { v: 'Head' }, '1:0': { v: 'More head' }, '2:0': { v: '{{document_body}}' }, '3:1': { v: 'Foot' } } } as any;
+  it('puts the rows above in the header and below in the footer', () => {
+    expect(bodyRowOf(t)).toBe(2);
+    const { header, footer } = splitAtBody(t);
+    expect(header.rows).toHaveLength(2);
+    expect(Object.keys(header.cells).sort()).toEqual(['0:0', '1:0']);
+    expect(footer!.rows).toHaveLength(2);
+    expect(footer!.cells['0:1'].v).toBe('Foot');          // row 3 became row 0
+  });
+  it('treats a layout without a body row as all header', () => {
+    const noBody = { ...t, cells: { '0:0': { v: 'Head' } } };
+    expect(bodyRowOf(noBody)).toBe(-1);
+    expect(splitAtBody(noBody)).toEqual({ header: noBody, footer: null });
+  });
+});
