@@ -19,10 +19,6 @@ export interface CatalogItem {
   sale_basis?: 'per_kg' | 'per_piece' | null;
   /** loose: the small unit ("g") and how many make one item unit (1 kg = 1000 g) */
   loose_unit?: string | null; loose_factor?: number | null;
-  /** decimals for weights in kg (0–3); migration 055 */
-  weight_decimals?: number;
-  /** prices always show cents (46.00); off: whole figures when there are no cents (46); migration 056 */
-  show_cents?: boolean;
 }
 export type StockMode = 'normal' | 'pieces' | 'loose';
 
