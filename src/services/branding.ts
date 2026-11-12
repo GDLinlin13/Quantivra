@@ -10,6 +10,14 @@ export interface PayslipTemplate {
   /** Show the full bank account number instead of the masked one. */
   bankAccountFull?: boolean;
   showDesignation?: boolean;
+  /** department and date joined under the employee's name (off by default) */
+  showDepartment?: boolean;
+  showJoinDate?: boolean;
+  /** the month and pay date at the top right, the Gross Pay line, the employer's contributions and the amounts the company pays on the employee's behalf (all on by default) */
+  showPeriod?: boolean;
+  showGrossPay?: boolean;
+  showEmployerContributions?: boolean;
+  showOnBehalf?: boolean;
   showNationalId?: boolean;
   nationalIdFull?: boolean;
   /** Download file name patterns, e.g. "Payslip - {name} - {month} {year}". */

@@ -127,7 +127,7 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
       <DocumentShell
         branding={branding} companyName={company?.name || ''} forPrint
         title="PAYSLIP"
-        meta={<>{period && dayjs(`${period.period_year}-${period.period_month}-01`).format('MMMM YYYY')}<br />Pay date {period?.pay_date}</>}
+        meta={(t?.showPeriod ?? true) ? <>{period && dayjs(`${period.period_year}-${period.period_month}-01`).format('MMMM YYYY')}<br />Pay date {fmtDate(period?.pay_date)}</> : undefined}
         showLogo={t?.showLogo ?? true} showCompanyBlock={t?.showCompanyBlock ?? true}
         footerNote={t?.footerNote}
       >
@@ -135,6 +135,8 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
           <tbody>
             <tr><td style={{ color: '#666' }}>Employee</td><td style={{ textAlign: 'right' }}>{slip.employee_name}{(t?.showEmployeeId ?? true) && slip.employee_code ? ` · ${slip.employee_code}` : ''}</td></tr>
             {(t?.showDesignation ?? true) && designation && <tr><td style={{ color: '#666' }}>Designation</td><td style={{ textAlign: 'right' }}>{designation}</td></tr>}
+            {t?.showDepartment && department && <tr><td style={{ color: '#666' }}>Department</td><td style={{ textAlign: 'right' }}>{department}</td></tr>}
+            {t?.showJoinDate && emp?.join_date && <tr><td style={{ color: '#666' }}>Date joined</td><td style={{ textAlign: 'right' }}>{fmtDate(emp.join_date)}</td></tr>}
             {t?.showNationalId && idMasked && <tr><td style={{ color: '#666' }}>{nationalIdLabel(company?.country)}</td><td style={{ textAlign: 'right' }}>{t?.nationalIdFull ? idFull : idMasked}</td></tr>}
             {t?.showBankAccount && bankMasked && <tr><td style={{ color: '#666' }}>Bank account</td><td style={{ textAlign: 'right' }}>{[bankName, (t?.bankAccountFull && bankFull) || bankMasked].filter(Boolean).join(' ')}</td></tr>}
 
@@ -142,7 +144,7 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
             {slip.earnings_json.map((e, i) => (
               <tr key={i}><td style={{ padding: '2px 0' }}>{e.label || componentLabel(e.componentCode)}</td><td style={{ textAlign: 'right' }}><CellValue text={M(e.amount)} /></td></tr>
             ))}
-            <tr><td style={{ borderTop: '1px solid #e2e2e2' }}>Gross Pay</td><td style={{ textAlign: 'right', borderTop: '1px solid #e2e2e2' }}><CellValue text={M(slip.gross_pay)} /></td></tr>
+            {(t?.showGrossPay ?? true) && <tr><td style={{ borderTop: '1px solid #e2e2e2' }}>Gross Pay</td><td style={{ textAlign: 'right', borderTop: '1px solid #e2e2e2' }}><CellValue text={M(slip.gross_pay)} /></td></tr>}
 
             <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Deductions</td></tr>
             {slip.deductions_json.map((d, i) => (
@@ -153,13 +155,13 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
           </tbody>
         </table>
 
-        {stat.some(s => s.absorbedByEmployer && s.employeeTotal > 0) && (
+        {(t?.showOnBehalf ?? true) && stat.some(s => s.absorbedByEmployer && s.employeeTotal > 0) && (
           <div style={{ marginTop: 10, fontSize: 12, color: '#15803d' }}>
             Paid by the company on your behalf: {stat.filter(s => s.absorbedByEmployer && s.employeeTotal > 0)
               .map(s => `${s.schemeName || s.schemeCode} ${plainAmount(M(s.employeeTotal))}`).join(' · ')}
           </div>
         )}
-        {stat.some(s => s.employerTotal > 0) && (
+        {(t?.showEmployerContributions ?? true) && stat.some(s => s.employerTotal > 0) && (
           <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
             Employer contributions: {stat.filter(s => s.employerTotal > 0).map(s => `${s.schemeName || s.schemeCode} ${plainAmount(M(s.employerTotal))}`).join(' · ')}
           </div>

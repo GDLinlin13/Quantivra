@@ -12,6 +12,7 @@ import type { GridTemplate } from '../../../utils/gridTemplate';
 import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME, formatDocFileName, DOC_FILE_NAME_TOKENS, DEFAULT_DOC_FILE_NAME } from '../../../utils/payslipFiles';
 import { DEFAULT_STATEMENT_FILE_NAME } from './finance/Statements';
 import { nationalIdLabel, companyRegLabel } from '../../../data/countries';
+import { fmtDate } from '../../../utils/dateFormat';
 
 const { Title, Text } = Typography;
 const panel = { background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)' };
@@ -148,8 +149,11 @@ export function CompanyProfilePage() {
       <Form layout="vertical" component={false}>
       <TplToggle label="Logo" v={tpl.payslip.showLogo} on={x => setTplField('payslip', 'showLogo', x)} />
       <TplToggle label="Company address block" v={tpl.payslip.showCompanyBlock} on={x => setTplField('payslip', 'showCompanyBlock', x)} />
+      <TplToggle label="Pay month and pay date" v={tpl.payslip.showPeriod ?? true} on={x => setTplField('payslip', 'showPeriod', x)} />
       <TplToggle label="Employee ID" v={tpl.payslip.showEmployeeId} on={x => setTplField('payslip', 'showEmployeeId', x)} />
       <TplToggle label="Designation" v={tpl.payslip.showDesignation ?? true} on={x => setTplField('payslip', 'showDesignation', x)} />
+      <TplToggle label="Department" v={!!tpl.payslip.showDepartment} on={x => setTplField('payslip', 'showDepartment', x)} />
+      <TplToggle label="Date joined" v={!!tpl.payslip.showJoinDate} on={x => setTplField('payslip', 'showJoinDate', x)} />
       <TplToggle label={nationalIdLabel(company.country)} v={!!tpl.payslip.showNationalId} on={x => setTplField('payslip', 'showNationalId', x)} />
       {tpl.payslip.showNationalId && (
         <div style={{ padding: '4px 0 4px 16px' }}>
@@ -166,29 +170,36 @@ export function CompanyProfilePage() {
             options={[{ value: 'masked', label: 'Masked (••••6789)' }, { value: 'full', label: 'Full number' }]} />
         </div>
       )}
+      <TplToggle label="Gross pay line" v={tpl.payslip.showGrossPay ?? true} on={x => setTplField('payslip', 'showGrossPay', x)} />
+      <TplToggle label="Employer's contributions (CPF, SDL…)" v={tpl.payslip.showEmployerContributions ?? true} on={x => setTplField('payslip', 'showEmployerContributions', x)} />
+      <TplToggle label="Paid by the company on the employee's behalf" v={tpl.payslip.showOnBehalf ?? true} on={x => setTplField('payslip', 'showOnBehalf', x)} />
       <Form.Item label="Payslip footer note" style={{ marginTop: 8 }}>
         <Input.TextArea rows={2} value={tpl.payslip.footerNote} onChange={e => setTplField('payslip', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Profile" />
       </Form.Item>
       </Form>
     </Card>,
     previewBox('Preview with example data', (
-      <DocumentShell country={company?.country} branding={previewBranding} companyName={company.name} title="PAYSLIP" meta={<>August 2026<br />Pay date 2026-08-31</>}
+      <DocumentShell country={company?.country} branding={previewBranding} companyName={company.name} title="PAYSLIP" meta={(tpl.payslip.showPeriod ?? true) ? <>August 2026<br />Pay date {fmtDate('2026-08-31')}</> : undefined}
         showLogo={tpl.payslip.showLogo} showCompanyBlock={tpl.payslip.showCompanyBlock} footerNote={tpl.payslip.footerNote} forPrint>
         <table style={{ width: '100%', fontSize: 13, color: '#111', borderCollapse: 'collapse' }}>
           <tbody>
             {row('Employee', `Alice Tan${tpl.payslip.showEmployeeId ? ' · EMP-001' : ''}`, { muted: true })}
             {(tpl.payslip.showDesignation ?? true) && row('Designation', 'Senior Designer', { muted: true })}
+            {tpl.payslip.showDepartment && row('Department', 'Design', { muted: true })}
+            {tpl.payslip.showJoinDate && row('Date joined', fmtDate('2021-03-01'), { muted: true })}
             {tpl.payslip.showNationalId && row(nationalIdLabel(company.country), tpl.payslip.nationalIdFull ? 'S1234567A' : '•••••567A', { muted: true })}
             {tpl.payslip.showBankAccount && row('Bank account', tpl.payslip.bankAccountFull ? 'DBS 012-345678-9' : 'DBS ••••••••78-9', { muted: true })}
             <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Earnings</td></tr>
             {row('Basic Salary', money(9000, cur, tpl.payslip.amountFormat))}
             {row('Transport allowance', money(200, cur, tpl.payslip.amountFormat))}
-            {row('Gross Pay', money(9200, cur, tpl.payslip.amountFormat), { line: true })}
+            {(tpl.payslip.showGrossPay ?? true) && row('Gross Pay', money(9200, cur, tpl.payslip.amountFormat), { line: true })}
             <tr><td colSpan={2} style={{ color: '#888', paddingTop: 10 }}>Deductions</td></tr>
             {row('CPF (Employee)', money(-1600, cur, tpl.payslip.amountFormat))}
             {row('Net Pay', money(7600, cur, tpl.payslip.amountFormat), { bold: true, line: true })}
           </tbody>
         </table>
+        {(tpl.payslip.showOnBehalf ?? true) && <div style={{ marginTop: 10, fontSize: 12, color: '#15803d' }}>Paid by the company on your behalf: SDL {plainAmount(money(25, cur, tpl.payslip.amountFormat))}</div>}
+        {(tpl.payslip.showEmployerContributions ?? true) && <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>Employer contributions: CPF (Employer) {plainAmount(money(1700, cur, tpl.payslip.amountFormat))} · SDL {plainAmount(money(25, cur, tpl.payslip.amountFormat))}</div>}
       </DocumentShell>
     )),
   );
