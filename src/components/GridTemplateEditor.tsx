@@ -52,6 +52,9 @@ function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
   const cellStyleTd: React.CSSProperties = { padding: '3px 8px', borderBottom: '1px solid rgba(255,255,255,0.06)', verticalAlign: 'top' };
   const code: React.CSSProperties = { fontFamily: 'monospace', fontSize: 12, color: '#91caff', cursor: 'pointer', whiteSpace: 'nowrap' };
   const [example, setExample] = useState(false);
+  // fields and the lines of the lists, together; shown in two halves
+  const all = [...docFields(kind, country), ...lists.flatMap(l => l.fields.map(f => ({ ...f, label: `${l.label}: ${f.label}` })))];
+  const half = Math.ceil(all.length / 2);
   const first = lists[0];
   const shownCols = first ? first.fields.slice(0, 3) : [];
   const printed = first ? (sample.lists[first.name] || []).slice(0, 3) : [];
@@ -59,12 +62,16 @@ function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
   const C = ({ n }: { n: string }) => <code style={code} onClick={() => onInsert(n)} title="Click to put it in the selected cell">{`{{${n}}}`}</code>;
   return (
     <div style={{ color: 'rgba(240,237,230,0.8)', fontSize: 13, lineHeight: 1.55, maxHeight: 420, overflowY: 'auto' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 16 }}>
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Fields</div>
-          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+      <div style={{ marginBottom: 6 }}>
+        {kind === 'letterhead'
+          ? <>Put <C n="document_title" />, <C n="document_date" /> and <C n="document_body" /> in it.</>
+          : lists.length > 0 && <Button size="small" onClick={() => setExample(true)}>View example</Button>}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: '0 16px' }}>
+        {[all.slice(0, half), all.slice(half)].map((col, ci) => (
+          <table key={ci} style={{ borderCollapse: 'collapse', width: '100%', alignSelf: 'start' }}>
             <tbody>
-              {docFields(kind, country).map(f => (
+              {col.map(f => (
                 <tr key={f.name}>
                   <td style={cellStyleTd}><span style={code} onClick={() => onInsert(f.name)} title="Click to put it in the selected cell">{`{{${f.name}}}`}</span></td>
                   <td style={cellStyleTd}>{f.label}</td>
@@ -72,26 +79,7 @@ function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
               ))}
             </tbody>
           </table>
-        </div>
-        <div>
-          {lists.length > 0 && <div style={{ fontWeight: 600, marginBottom: 4 }}>Lists</div>}
-          {kind === 'letterhead'
-            ? <p style={{ margin: '0 0 8px' }}>Put <C n="document_title" />, <C n="document_date" /> and <C n="document_body" /> in it.</p>
-            : lists.length > 0 && <Button size="small" style={{ marginBottom: 8 }} onClick={() => setExample(true)}>View example</Button>}
-          {lists.map(l => (
-            <div key={l.name} style={{ marginBottom: 6 }}>
-              <b>{l.label}</b>
-              <div>
-                {l.fields.map(f => (
-                  <span key={f.name} style={{ marginRight: 12, whiteSpace: 'nowrap' }}>
-                    <span style={code} onClick={() => onInsert(f.name)} title="Click to put it in the selected cell">{`{{${f.name}}}`}</span>
-                    <span style={{ color: 'rgba(240,237,230,0.6)' }}> {f.label}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        ))}
       </div>
       <Modal open={example} onCancel={() => setExample(false)} footer={null} title="Example" width={560}>
         {first && (
