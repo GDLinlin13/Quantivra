@@ -233,11 +233,11 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       if (lp != null) p.unit_price = lp;
       else if (!cls) p.unit_price = Number(sales ? it.sale_price : it.purchase_price) || 0;
     }
-    // the class goes in the Description (unless something else was typed there), so Qty stays readable
+    // the weight class is not written into the Description (something typed there stays)
     const wd = it.weight_decimals ?? 3;
     const mine = own.map(c => classLabel(c, wd));
     const desc = (lines[i]?.description || '').trim();
-    const autoDesc = !desc || mine.includes(desc) ? (cls ? classLabel(cls, wd) : '') : desc;
+    const autoDesc = !desc || mine.includes(desc) ? '' : desc;
     setLine(i, { piece_id: pieceId, weight, quantity: p.quantity, unit_price: inDocCurrency(p.unit_price, itemCur), description: autoDesc });
     if (weight > 0 && !cls && own.length) message.warning(`No weight class for ${kgText(weight, wd)} kg — add one in the catalog, or type the price`);
   };
