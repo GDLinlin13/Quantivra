@@ -1,5 +1,6 @@
 // Fields, lists and starter layouts for the spreadsheet-style document designer.
 import type { GridTemplate, GridCell, FieldValues, ListValues } from '../utils/gridTemplate';
+import { fmtDate } from '../utils/dateFormat';
 import { companyRegLabel, nationalIdLabel, taxRegLabel } from './countries';
 
 const isSG = (country?: string | null) => (country || 'SG').toUpperCase() === 'SG';
@@ -530,7 +531,7 @@ export function companyFields(company: any, branding: any, footerNote?: string):
 }
 
 /** Example values shown in the designer's preview. */
-export function sampleData(kind: DocKind, company: any, branding: any): { fields: FieldValues; lists: ListValues } {
+function sampleDataRaw(kind: DocKind, company: any, branding: any): { fields: FieldValues; lists: ListValues } {
   const cur = company?.currency || 'SGD';
   const fmt = branding?.templates?.[kind]?.amountFormat;
   const m = (n: number) => money(n, cur, fmt);
@@ -682,3 +683,12 @@ export const LIST_EXAMPLES: Record<string, string> = {
   rows: 'One line per invoice, credit note and payment in the period, with the running balance',
   discounts: 'e.g. Loyalty discount (10%), Early payment discount — one line per discount; nothing is printed when there is none',
 };
+
+/** Example values for the template preview; dates follow the company's date format (Company Settings). */
+export function sampleData(kind: DocKind, company: any, branding: any): { fields: FieldValues; lists: ListValues } {
+  const raw = sampleDataRaw(kind, company, branding);
+  const dated = (r: Record<string, string>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? fmtDate(v) : v]));
+  const fields = dated(raw.fields) as FieldValues;
+  if (kind === 'soa') fields.period = `${fmtDate('2026-07-01')} to ${fmtDate('2026-08-31')}`;
+  return { fields, lists: Object.fromEntries(Object.entries(raw.lists).map(([k, rows]) => [k, rows.map(r => dated(r))])) as ListValues };
+}
