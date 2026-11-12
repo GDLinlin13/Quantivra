@@ -113,7 +113,7 @@ export function MatchDetails({ data, txn, look, accCur, onClose, onFilesChanged,
       const { doc, lines } = await docService.get(d.id);
       return renderPdf(<DocumentView doc={doc} lines={lines.map(l => ({ ...l, description: lineText(l, data.items) }))}
         contact={data.contacts.find(c => c.id === doc.contact_id) || null} person={data.people.find(p => p.id === doc.contact_person_id) || null}
-        company={data.company} branding={data.branding} settings={data.settings} domId="match-doc" />);
+        company={data.company} branding={data.branding} settings={data.settings} items={data.items} domId="match-doc" />);
     },
   });
 

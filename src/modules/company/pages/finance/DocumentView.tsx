@@ -4,6 +4,7 @@ import { GridDocument, CellValue } from '../../../../components/GridDocument';
 import { companyFields, money as fmtMoney, pickPaymentAccount } from '../../../../data/documentLayouts';
 import { docTotals, balanceDue, DOC_LABEL, type FinDocument, type DocLine, type Contact, type ContactPerson, type FinanceSettings } from '../../../../data/finance';
 import type { FieldValues, ListValues } from '../../../../utils/gridTemplate';
+import type { CatalogItem } from '../../../../data/catalog';
 import { taxRegLabel } from '../../../../data/countries';
 import { fmtDate } from '../../../../utils/dateFormat';
 
@@ -11,7 +12,7 @@ const qtyText = (n: number) => String(Number(n)).replace(/\.0+$/, '');
 
 /** Fields and lists for the invoice template, from a real document. */
 export function documentData(doc: FinDocument, lines: DocLine[], contact: Contact | null, person: ContactPerson | null,
-  company: any, branding: Branding | null, settings: FinanceSettings) {
+  company: any, branding: Branding | null, settings: FinanceSettings, items: CatalogItem[] = []) {
   const inv = branding?.templates.invoice;
   const cur = doc.currency || company?.currency || 'SGD';
   const M = (n: number) => fmtMoney(n, cur, inv?.amountFormat);
@@ -39,7 +40,7 @@ export function documentData(doc: FinDocument, lines: DocLine[], contact: Contac
   };
   const lists: ListValues = {
     lines: lines.map((l, i) => ({
-      no: String(i + 1), description: l.description, qty: qtyText(l.quantity), unit_price: M(l.unit_price),
+      no: String(i + 1), description: l.description, qty: qtyText(l.quantity), unit_price: fmtMoney(l.unit_price, cur, inv?.amountFormat, items.find(x => x.id === l.item_id)?.price_decimals || 2),
       discount: Number(l.discount_pct) ? `${Number(l.discount_pct)}%` : '', amount: M(t.lines[i]),
     })),
     discounts: (doc.discounts || []).map((d, i) => ({ name: d.kind === 'percent' ? `${d.name || 'Discount'} (${d.value}%)` : (d.name || 'Discount'), amount: M(t.discounts[i]) })).filter((_, i) => t.discounts[i] > 0),
@@ -49,12 +50,12 @@ export function documentData(doc: FinDocument, lines: DocLine[], contact: Contac
 }
 
 /** A quotation / invoice / credit note in the company's Invoice Template, ready to print or turn into a PDF. */
-export function DocumentView({ doc, lines, contact, person, company, branding, settings, domId = 'fin-doc-print' }: {
+export function DocumentView({ doc, lines, contact, person, company, branding, settings, items, domId = 'fin-doc-print' }: {
   doc: FinDocument; lines: DocLine[]; contact: Contact | null; person: ContactPerson | null;
-  company: any; branding: Branding | null; settings: FinanceSettings; domId?: string;
+  company: any; branding: Branding | null; settings: FinanceSettings; items?: CatalogItem[]; domId?: string;
 }) {
   const inv = branding?.templates.invoice;
-  const { fields, lists, totals: t, M, payRows } = documentData(doc, lines, contact, person, company, branding, settings);
+  const { fields, lists, totals: t, M, payRows } = documentData(doc, lines, contact, person, company, branding, settings, items);
 
   if (inv?.layout?.enabled) {
     return (

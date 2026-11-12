@@ -178,7 +178,7 @@ export function CompanyDocumentsPage() {
       const name = formatDocFileName(branding?.templates.invoice.fileName, {
         type: DOC_LABEL[doc.doc_type], number: doc.number, customer: contact?.name, reference: doc.reference, date: doc.issue_date, company: coName,
       });
-      return { name, blob: await renderPdf(<DocumentView doc={doc} lines={lines.map(l => ({ ...l, description: lineText(l, items) }))} contact={contact} person={person} company={company} branding={branding} settings={settings} domId="doc-render" />) };
+      return { name, blob: await renderPdf(<DocumentView doc={doc} lines={lines.map(l => ({ ...l, description: lineText(l, items) }))} contact={contact} person={person} company={company} branding={branding} settings={settings} items={items} domId="doc-render" />) };
     }
     return { name: r.name, blob: await companyFileService.blob(r.path) };
   };
