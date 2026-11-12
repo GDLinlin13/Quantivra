@@ -85,13 +85,22 @@ export function PlatformUsersPage() {
     load();
   };
   const companyNames = [...new Set(users.map((u: any) => u.companies?.name).filter(Boolean))] as string[];
+  // One line per company: its director (else its first user); the others open underneath
+  const groups = (() => {
+    const by = new Map<number, any[]>();
+    for (const u of users) by.set(u.company_id, [...(by.get(u.company_id) || []), u]);
+    return [...by.values()].map(list => {
+      const sorted = [...list].sort((a, b) => Number(!/director/i.test(a.job_title || '')) - Number(!/director/i.test(b.job_title || '')) || String(a.created_at).localeCompare(String(b.created_at)));
+      return { ...sorted[0], others: sorted.slice(1) };
+    });
+  })();
 
   const columns = [
+    { title: 'Company', key: 'company', render: (_: any, r: any) => <>{r.companies?.name || r.company_id}{r.others?.length ? <span style={{ color: 'rgba(240,237,230,0.45)', fontSize: 12 }}>{`  +${r.others.length} more`}</span> : null}</>,
+      filters: companyNames.map(n => ({ text: n, value: n })), onFilter: (v: any, r: any) => r.companies?.name === v },
+    { title: 'Name', dataIndex: 'full_name', key: 'full_name' },
     { title: 'Username', dataIndex: 'username', key: 'username', render: (v: string) => v || '-' },
     { title: 'Email', dataIndex: 'email', key: 'email', render: (v: string) => v || '-' },
-    { title: 'Name', dataIndex: 'full_name', key: 'full_name' },
-    { title: 'Company', key: 'company', render: (_: any, r: any) => r.companies?.name || r.company_id,
-      filters: companyNames.map(n => ({ text: n, value: n })), onFilter: (v: any, r: any) => r.companies?.name === v },
     { title: 'Status', dataIndex: 'is_active', key: 'status', render: (v: boolean) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Suspended'}</Tag> },
     { title: 'Created', dataIndex: 'created_at', key: 'created', render: (v: string) => new Date(v).toLocaleDateString() },
     {
@@ -127,8 +136,14 @@ export function PlatformUsersPage() {
           Create User
         </Button>
       </div>
-      <Table dataSource={users} columns={columns} loading={loading} rowKey="id"
+      <Table dataSource={groups} columns={columns} loading={loading} rowKey="id"
         style={{ background: 'transparent' }} pagination={false}
+        expandable={{
+          rowExpandable: (r: any) => r.others.length > 0,
+          expandedRowRender: (r: any) => (
+            <Table dataSource={r.others} columns={columns.map(c => (c.key === 'company' ? { ...c, render: () => '', filters: undefined, onFilter: undefined } : c))} rowKey="id" size="small" pagination={false} showHeader={false} style={{ background: 'transparent' }} />
+          ),
+        }}
         locale={{ emptyText: <span style={{ color: 'rgba(240,237,230,0.4)' }}>No users</span> }} />
 
       <Modal title={`Amend ${editing?.full_name || ''}`} open={!!editing} onCancel={() => setEditing(null)} footer={null} destroyOnHidden

@@ -71,6 +71,9 @@ export function CompaniesPage() {
   const normaliseName = (v: string | undefined) => (v || '').trim().replace(/\s+/g, ' ').toLowerCase();
   const deleteNameMatches = !!deleteTarget && normaliseName(deleteConfirmText) === normaliseName(deleteTarget.name);
   const [deleting, setDeleting] = useState(false);
+  const [editTarget, setEditTarget] = useState<Company | null>(null);
+  const [editForm] = Form.useForm();
+  const [savingEdit, setSavingEdit] = useState(false);
   const [form] = Form.useForm();
   const provisionStarted = useRef(false);
   const codeTouched = useRef(false);  // stop auto-suggesting once the code is edited by hand
@@ -238,11 +241,14 @@ export function CompaniesPage() {
       title: 'Actions', key: 'actions',
       render: (_: any, record: Company) => (
         record.is_active ? (
+          <Space>
+          <Button type="link" onClick={() => { setEditTarget(record); editForm.setFieldsValue({ name: record.name, financial_year_start: record.financial_year_start, timezone: record.timezone, modules: record.modules || [] }); }}>Edit</Button>
           <Popconfirm title="Deactivate this company?"
             description="All its users will be signed out and blocked from logging in."
             onConfirm={() => companyService.setActive(record.id, false).then(load).catch(e => message.error(e.message))}>
             <Button type="link" danger>Deactivate</Button>
           </Popconfirm>
+          </Space>
         ) : (
           <Space>
             <Popconfirm title="Reinstate this company?"
@@ -250,6 +256,7 @@ export function CompaniesPage() {
               onConfirm={() => companyService.setActive(record.id, true).then(load).catch(e => message.error(e.message))}>
               <Button type="link">Reinstate</Button>
             </Popconfirm>
+            <Button type="link" onClick={() => { setEditTarget(record); editForm.setFieldsValue({ name: record.name, financial_year_start: record.financial_year_start, timezone: record.timezone, modules: record.modules || [] }); }}>Edit</Button>
             <Button type="link" danger onClick={() => setDeleteTarget(record)}>Delete…</Button>
           </Space>
         )
@@ -292,6 +299,41 @@ export function CompaniesPage() {
           </Button>
         </Space>
       </div>
+
+      {editTarget && (
+        <Modal open title={`Edit ${editTarget.name}`} okText="Save" confirmLoading={savingEdit} onCancel={() => setEditTarget(null)} width={560} destroyOnHidden
+          onOk={async () => {
+            try {
+              const v = await editForm.validateFields();
+              setSavingEdit(true);
+              await companyService.update(editTarget.id, { name: v.name.trim(), financial_year_start: v.financial_year_start, timezone: v.timezone, modules: v.modules });
+              message.success('Company updated');
+              setEditTarget(null);
+              load();
+            } catch (e: any) { if (e?.message) message.error(e.message); }
+            setSavingEdit(false);
+          }}>
+          <Form form={editForm} layout="vertical">
+            <Form.Item name="name" label="Company name" rules={[{ required: true, message: 'Enter the company name' }]}><Input /></Form.Item>
+            <Row gutter={12}>
+              <Col span={8}><Form.Item label="Code"><Input value={editTarget.company_code} disabled /></Form.Item></Col>
+              <Col span={8}><Form.Item label="Country"><Input value={getCountryName(editTarget.country)} disabled /></Form.Item></Col>
+              <Col span={8}><Form.Item label="Currency"><Input value={editTarget.currency} disabled /></Form.Item></Col>
+            </Row>
+            <Row gutter={12}>
+              <Col span={8}><Form.Item name="financial_year_start" label="Financial Year"><Input /></Form.Item></Col>
+              <Col span={16}><Form.Item name="timezone" label="Timezone" rules={[{ required: true, message: 'Choose a timezone' }]}>
+                <Select showSearch optionFilterProp="label" options={timezoneOptions()} />
+              </Form.Item></Col>
+            </Row>
+            <Form.Item name="modules" label="Sections">
+              <Checkbox.Group>
+                <Row>{ALL_FEATURES_MODULES.map(key => <Col span={12} key={key}><Checkbox value={key}>{moduleLabel(key)}</Checkbox></Col>)}</Row>
+              </Checkbox.Group>
+            </Form.Item>
+          </Form>
+        </Modal>
+      )}
 
       <Table
         dataSource={companies}

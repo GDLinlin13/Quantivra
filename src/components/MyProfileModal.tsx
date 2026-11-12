@@ -48,14 +48,14 @@ export function MyProfileModal({ profile, fullName, onSave, onClose }: {
               </Space>
             </div>
             {!picture && (
-              <div>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>Icon colour</Text>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <Text type="secondary">Icon colour</Text>
+                <ColorPicker value={color} onChange={c => setColor(c.toHexString())} disabledAlpha />
                 <Space wrap size={8}>
                   {PRESETS.map(c => (
                     <span key={c} onClick={() => setColor(c)} role="button"
-                      style={{ width: 28, height: 28, borderRadius: '50%', background: c, cursor: 'pointer', outline: c.toLowerCase() === color.toLowerCase() ? '2px solid #f0ede6' : 'none', outlineOffset: 2 }} />
+                      style={{ display: 'inline-block', width: 24, height: 24, borderRadius: '50%', background: c, cursor: 'pointer', outline: c.toLowerCase() === color.toLowerCase() ? '2px solid #f0ede6' : 'none', outlineOffset: 2 }} />
                   ))}
-                  <ColorPicker value={color} onChange={c => setColor(c.toHexString())} disabledAlpha />
                 </Space>
               </div>
             )}
