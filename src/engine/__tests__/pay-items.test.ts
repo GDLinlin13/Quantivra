@@ -53,11 +53,16 @@ describe('overtime and unpaid leave maths', () => {
 describe('pay items in a payroll run', () => {
   const base = pay([]);
 
-  it('adds allowances and overtime to gross pay and CPF', () => {
+  it('adds overtime to gross pay and CPF; an allowance is paid in full with no CPF', () => {
     const { r, cpf } = pay([item('ALLOWANCE_TRANSPORT', 200, { recurring: true }), item('OVERTIME', 300, { quantity: 10 })]);
     expect(r.grossPay).toBe(4500);
     expect(cpf).toBeGreaterThan(base.cpf);
     expect(r.earnings.map(e => e.label).filter(Boolean)).toEqual(['Transport allowance', 'Overtime (10 hrs)']);
+    // the same pay with the overtime only: the allowance adds nothing to CPF
+    expect(cpf).toBe(pay([item('OVERTIME', 300, { quantity: 10 })]).cpf);
+  });
+  it.each(['ALLOWANCE_TRANSPORT', 'ALLOWANCE_HOUSING', 'ALLOWANCE_MEAL', 'ALLOWANCE_SHIFT', 'ALLOWANCE_OTHER'])('%s has no CPF', code => {
+    expect(pay([item(code, 200, { recurring: true })]).cpf).toBe(base.cpf);
   });
 
   it('pays reimbursements in full with no CPF', () => {
