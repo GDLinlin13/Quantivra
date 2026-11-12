@@ -141,3 +141,19 @@ describe('rows marked repeating without a list', () => {
     expect(out.map(r => r.cells.map(c => c.text))).toEqual([['Employer CPF :', '1,360'], ['Employee CPF :', '1,600']]);
   });
 });
+
+import { resetSizes, blankTemplate as blank0 } from '../gridTemplate';
+describe('reset sizes / clear everything', () => {
+  it('puts every column and row back to the standard size and keeps the text', () => {
+    const t = { ...blank0(4, 4), cols: [10, 300, 55, 90], rows: [{ h: 50 }, { h: 12, repeat: 'lines' }, {}, { h: 99 }], cells: { '0:0': { v: 'Hello', b: true } } };
+    const r = resetSizes(t);
+    expect(r.cols).toEqual([170, 170, 170, 170]);
+    expect(r.rows).toEqual([{}, { repeat: 'lines' }, {}, {}]);
+    expect(r.cells).toEqual({ '0:0': { v: 'Hello', b: true } });
+  });
+  it('an empty sheet has no cells and standard sizes', () => {
+    const b = blank0();
+    expect(Object.keys(b.cells)).toHaveLength(0);
+    expect(b.rows.every(r => r.h === undefined)).toBe(true);
+  });
+});
