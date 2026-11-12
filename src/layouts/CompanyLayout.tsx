@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { RainbowTitle } from '../components/RainbowTitle';
-import { Layout, Menu, Button, Avatar, Dropdown, Typography, Modal } from 'antd';
-import { ChangePasswordCard } from '../components/ChangePasswordCard';
+import { Layout, Menu, Button, Typography } from 'antd';
+import { UserMenu } from '../components/UserMenu';
 import {
   DashboardOutlined, TeamOutlined, UserOutlined, SafetyOutlined,
-  SettingOutlined, LogoutOutlined, BankOutlined,
+  SettingOutlined, BankOutlined,
   FileOutlined, BellOutlined, DollarOutlined, ShopOutlined,
   ContactsOutlined, PartitionOutlined, ProjectOutlined, } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
@@ -22,11 +22,11 @@ export function CompanyLayout() {
 
 function CompanyLayoutInner() {
   const access = useCompanyAccess();
-  const [passwordOpen, setPasswordOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, companyId } = useAuth();
+  const { companyId } = useAuth();
   const [companyName, setCompanyName] = useState<string>('');
+
   useEffect(() => {
     if (!companyId) return;
     supabase.from('companies').select('name').eq('id', companyId).maybeSingle()
@@ -60,23 +60,8 @@ function CompanyLayoutInner() {
     { key: '/company/files', icon: <FileOutlined />, label: 'Documents' },
   ];
 
-  const userMenu = {
-    items: [
-      { key: 'password', icon: <UserOutlined />, label: 'Change my password' },
-      { type: 'divider' as const },
-      { key: 'logout', icon: <LogoutOutlined />, label: 'Sign Out', danger: true },
-    ],
-    onClick: ({ key }: { key: string }) => {
-      if (key === 'logout') { logout(); navigate('/login'); }
-      if (key === 'password') setPasswordOpen(true);
-    },
-  };
-
   return (
     <Layout style={{ minHeight: '100vh', background: '#0b0f12' }}>
-      <Modal open={passwordOpen} onCancel={() => setPasswordOpen(false)} footer={null} width={520} destroyOnHidden>
-        <ChangePasswordCard />
-      </Modal>
       <Sider
         theme="dark"
         collapsible
@@ -114,12 +99,7 @@ function CompanyLayoutInner() {
           display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '0 24px', height: 64, gap: 16,
         }}>
           <Button type="text" icon={<BellOutlined />} style={{ color: '#f0ede6' }} />
-          <Dropdown menu={userMenu} placement="bottomRight">
-            <Button type="text" style={{ color: '#f0ede6', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Avatar size="small" icon={<UserOutlined />} style={{ background: '#4fc3f7', color: '#111' }} />
-              {user?.full_name}
-            </Button>
-          </Dropdown>
+          <UserMenu />
         </Header>
         <Content style={{ padding: 24 }}>
           <DateFormatProvider><Outlet /></DateFormatProvider>

@@ -1,4 +1,4 @@
-import { Layout, Menu, Button, Typography } from 'antd';
+import { Layout, Menu, Typography } from 'antd';
 import {
   DashboardOutlined, BuildOutlined, GlobalOutlined,
   AppstoreOutlined, AuditOutlined, SettingOutlined,
@@ -6,14 +6,15 @@ import {
 } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { UserMenu } from '../components/UserMenu';
 
-const { Sider, Content } = Layout;
+const { Sider, Content, Header } = Layout;
 const { Text } = Typography;
 
 export function PlatformLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
 
   const menuItems = [
     { key: '/platform', icon: <DashboardOutlined />, label: 'Dashboard' },
@@ -78,6 +79,9 @@ export function PlatformLayout() {
         </div>
       </Sider>
       <Layout style={{ background: '#0b0f12' }}>
+        <Header style={{ background: '#111518', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '0 24px', height: 64 }}>
+          <UserMenu />
+        </Header>
         <Content style={{ padding: 24 }}>
           <Outlet />
         </Content>

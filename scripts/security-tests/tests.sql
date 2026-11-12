@@ -1193,6 +1193,27 @@ BEGIN; :as_a
 DELETE FROM contacts WHERE name = 'Addr customer';
 COMMIT;
 
+\echo '9u. my profile: everyone reads and changes only their own'
+BEGIN; :as_a
+DO $$
+BEGIN
+  INSERT INTO user_profiles (auth_user_id, display_name, avatar_color) VALUES ('aaaaaaaa-0000-0000-0000-000000000001', 'Alpha Person', '#ff0000');
+  BEGIN INSERT INTO user_profiles (auth_user_id, display_name) VALUES ('bbbbbbbb-0000-0000-0000-000000000002', 'planted'); RAISE EXCEPTION 'FAIL: A wrote B profile';
+  EXCEPTION WHEN insufficient_privilege OR check_violation THEN NULL; END;
+END $$;
+COMMIT;
+BEGIN; :as_b
+DO $$
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM user_profiles WHERE display_name = 'Alpha Person'), 'FAIL: B sees A profile';
+  UPDATE user_profiles SET display_name = 'hijacked' WHERE auth_user_id = 'aaaaaaaa-0000-0000-0000-000000000001';
+  ASSERT NOT FOUND, 'FAIL: B changed A profile';
+END $$;
+ROLLBACK;
+BEGIN; :as_a
+DELETE FROM user_profiles WHERE auth_user_id = 'aaaaaaaa-0000-0000-0000-000000000001';
+COMMIT;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;
