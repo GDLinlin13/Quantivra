@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, Button, Modal, Form, Select, DatePicker, Input, message, Table, Tag, Alert, Space, Upload, Popconfirm, Segmented, AutoComplete, Typography } from 'antd';
 import { PlusOutlined, PaperClipOutlined, UploadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { claimService, CLAIM_CATEGORIES, type Claim, type ClaimReceipt } from '../../../../services/claims';
+import { claimService, claimAccountService, claimAccountOf, CLAIM_CATEGORIES, type Claim, type ClaimReceipt } from '../../../../services/claims';
 import { leaveService, hrService, type Employee } from '../../../../services/hr';
-import { ATTACH_TYPES } from '../../../../services/finance';
+import { ATTACH_TYPES, accountService } from '../../../../services/finance';
+import type { Account } from '../../../../data/finance';
 import { workflowService, approverLabel, type RequestStatus } from '../../../../services/workflow';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
@@ -205,6 +206,16 @@ export function ClaimsTab({ companyId }: { companyId: number }) {
   const [viewing, setViewing] = useState<ClaimReceipt | null>(null);
   const [chain, setChain] = useState<Map<number, RequestStatus>>(new Map());
   const paidState = usePaidState(claims, currency);
+  // which expense account each claim goes to: set per category (Category accounts), and by hand for the others
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [byCategory, setByCategory] = useState<Record<string, number>>({});
+  const [catOpen, setCatOpen] = useState(false);
+  const expenseOptions = accounts.filter(a => a.type === 'expense' && !a.archived).map(a => ({ value: a.id, label: `${a.code} ${a.name}` }));
+  const loadAccounts = useCallback(async () => {
+    setAccounts(await accountService.list(companyId).catch(() => []));
+    setByCategory(await claimAccountService.get(companyId).catch(() => ({})));
+  }, [companyId]);
+  useEffect(() => { loadAccounts(); }, [loadAccounts]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -237,6 +248,7 @@ export function ClaimsTab({ companyId }: { companyId: number }) {
           options={[{ value: 'pending', label: `To approve (${count('pending')})` }, { value: 'approved', label: 'Approved' }, { value: 'rejected', label: 'Rejected' }, { value: 'all', label: 'All' }]} />
         {canWrite && (
           <Space>
+            <Button onClick={() => setCatOpen(true)}>Category accounts</Button>
             <Select style={{ width: 220 }} showSearch optionFilterProp="label" placeholder="Claim for…" value={newFor ?? undefined} onChange={setNewFor}
               options={employees.filter(e => e.status === 'active').map(e => ({ value: Number(e.id), label: e.full_name }))} />
             <Button icon={<PlusOutlined />} disabled={!newFor} onClick={() => setEditing({ employee_id: newFor! })}>New claim</Button>
@@ -251,6 +263,15 @@ export function ClaimsTab({ companyId }: { companyId: number }) {
           { title: 'Category', dataIndex: 'category' },
           { title: 'Description', dataIndex: 'description', render: (v: string | null) => v || '—' },
           { title: 'Amount', key: 'a', align: 'right' as const, render: (_, c) => money(c.amount, c.currency) },
+          { title: 'Account', key: 'ac', width: 220, render: (_, c) => {
+            if (c.status === 'rejected' || c.status === 'cancelled') return '—';
+            const chosen = claimAccountOf(c, byCategory);
+            return (
+              <Select size="small" style={{ width: '100%' }} showSearch optionFilterProp="label" allowClear disabled={!canWrite} placeholder="Choose account"
+                status={chosen ? undefined : 'warning'} value={chosen ?? undefined} options={expenseOptions}
+                onChange={async v => { try { await claimService.setAccount(c.id, v ?? null); setClaims(cs => cs.map(x => (x.id === c.id ? { ...x, account_id: v ?? null } : x))); } catch (e: any) { message.error(e.message); } }} />
+            );
+          } },
           { title: 'Receipts', key: 'r', render: (_, c) => (
             <Receipts files={files.filter(f => f.claim_id === c.id)} canRemove={canRemove && c.status === 'pending'} onView={setViewing}
               onRemove={async f => { try { await claimService.removeReceipt(f); load(); } catch (e: any) { message.error(e.message); } }} />
@@ -286,7 +307,39 @@ export function ClaimsTab({ companyId }: { companyId: number }) {
         <Input.TextArea autoSize={{ minRows: 2 }} placeholder="Reason (shown to the employee)" value={note} onChange={e => setNote(e.target.value)} />
       </Modal>
       {editing && <ClaimModal companyId={companyId} employeeId={editing.employee_id!} currency={currency} claim={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setNewFor(null); load(); }} />}
+      {catOpen && <CategoryAccountsModal companyId={companyId} accounts={expenseOptions} map={byCategory} onClose={() => setCatOpen(false)} onSaved={m => { setByCategory(m); setCatOpen(false); }} />}
       {viewing && <FileViewer name={viewing.file_name} load={() => claimService.receiptBlob(viewing.path)} onClose={() => setViewing(null)} />}
     </div>
+  );
+}
+
+/** Claims → Category accounts: the expense account each category of claim goes to. "Others" is picked claim by claim. */
+function CategoryAccountsModal({ companyId, accounts, map, onClose, onSaved }: {
+  companyId: number; accounts: { value: number; label: string }[]; map: Record<string, number>; onClose: () => void; onSaved: (m: Record<string, number>) => void;
+}) {
+  const [draft, setDraft] = useState<Record<string, number | undefined>>(map);
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    setSaving(true);
+    try {
+      const clean = Object.fromEntries(Object.entries(draft).filter(([, v]) => v)) as Record<string, number>;
+      await claimAccountService.save(companyId, clean);
+      message.success('Category accounts saved');
+      onSaved(clean);
+    } catch (e: any) { message.error(e.message); }
+    setSaving(false);
+  };
+  return (
+    <Modal open onCancel={onClose} title="Category accounts" okText="Save" confirmLoading={saving} onOk={save} width={520} destroyOnHidden>
+      <Space orientation="vertical" size={8} style={{ width: '100%' }}>
+        {CLAIM_CATEGORIES.filter(c => c !== 'Others').map(c => (
+          <div key={c} style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 12, alignItems: 'center' }}>
+            <Text>{c}</Text>
+            <Select allowClear showSearch optionFilterProp="label" style={{ width: '100%' }} value={draft[c]} options={accounts}
+              onChange={v => setDraft(d => ({ ...d, [c]: v }))} />
+          </div>
+        ))}
+      </Space>
+    </Modal>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Select, message, Empty, Space, Typography } from 'antd';
-import { claimService, accountForCategory, type Claim } from '../../../../services/claims';
+import { claimService, claimAccountService, claimAccountOf, accountForCategory, type Claim } from '../../../../services/claims';
 import { money } from '../../../../data/documentLayouts';
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import type { FinanceData } from './DocList';
@@ -24,7 +24,8 @@ export function StaffClaims({ data }: { data: FinanceData }) {
         // claims in the company's currency are paid back in the next payroll run (once database update 058 is in)
         && (!('payroll_run_id' in c) || c.currency !== currency));
       setClaims(list);
-      setAccountOf(Object.fromEntries(list.map(c => [c.id, accountForCategory(c.category, accounts)])));
+      const byCategory = await claimAccountService.get(companyId).catch(() => ({} as Record<string, number>));
+      setAccountOf(Object.fromEntries(list.map(c => [c.id, claimAccountOf(c, byCategory) ?? accountForCategory(c.category, accounts)])));
       setChosen(list.map(c => c.id));
       setError(null);
     } catch (e: any) { setError(e.message); setClaims([]); }

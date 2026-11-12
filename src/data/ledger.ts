@@ -69,7 +69,7 @@ export function payrollLines(r: LedgerInput['payroll'][number], accounts: Accoun
   // staff claims paid back by this run go to the expense account of their category
   const reimbBy = new Map<string, { category: string; account: number; amount: number }>();
   for (const x of r.reimbursements || []) {
-    const account = accountForCategory(x.category, accounts) || WAGES;
+    const account = (x.account_id && accounts.some(a => a.id === x.account_id) ? x.account_id : 0) || accountForCategory(x.category, accounts) || WAGES;
     const k = `${account}`;
     const have = reimbBy.get(k);
     if (have) have.amount = r2(have.amount + Number(x.amount)); else reimbBy.set(k, { category: x.category, account, amount: r2(Number(x.amount)) });
@@ -120,7 +120,7 @@ export interface LedgerInput {
   allocations: { payment_id: number; document_id: number; amount: number }[];
   payroll: { id: number; period_year: number; period_month: number; pay_date: string; status: string; total_gross: number; total_deductions: number; total_employer: number; total_net: number; split?: PayrollSplit;
     /** staff claims paid back in this run, by category: booked to their own expense accounts, not to salaries (migration 058) */
-    reimbursements?: { category: string; amount: number }[] }[];
+    reimbursements?: { category: string; amount: number; account_id?: number | null }[] }[];
   journals: { id: number; number: string | null; journal_date: string; memo: string | null; lines: { account_id: number; debit: number; credit: number; description?: string | null }[] }[];
 }
 
