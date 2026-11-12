@@ -54,7 +54,7 @@ function CompanyLayoutInner() {
 
   const adminMenu = !access.canViewPay ? [] : [
     { key: '/company/settings', icon: <SettingOutlined />, label: 'Settings' },
-    { key: '/company/profile', icon: <BankOutlined />, label: 'Company Profile' },
+    { key: '/company/profile', icon: <BankOutlined />, label: 'Document Templates' },
     { key: '/company/users', icon: <UserOutlined />, label: 'Users' },
     { key: '/company/roles', icon: <SafetyOutlined />, label: 'Roles' },
     { key: '/company/files', icon: <FileOutlined />, label: 'Documents' },

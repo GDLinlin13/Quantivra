@@ -189,7 +189,7 @@ export function CompanyRolesPage() {
         styles={{ header: { background: '#151a1e', color: '#f0ede6' }, body: { background: '#151a1e', maxHeight: 500, overflow: 'auto' } }}>
         <Alert type="info" showIcon style={{ marginBottom: 16 }}
           message="Tick what people with this role may do. Unticked means hidden or not allowed. People see the change the next time they open Quantivra."
-          description={<span style={{ fontSize: 12 }}>Payroll, salaries, Settings, Company Profile, Users and Roles follow the role’s <b>Can see pay &amp; manage users</b> switch, not these ticks.</span>} />
+          description={<span style={{ fontSize: 12 }}>Payroll, salaries, Settings, Document Templates, Users and Roles follow the role’s <b>Can see pay &amp; manage users</b> switch, not these ticks.</span>} />
         {Object.entries(PERMISSION_TICKS).map(([modKey, ticks]) => (
           <div key={modKey} style={{ marginBottom: 20 }}>
             <Space>

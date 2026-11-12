@@ -114,7 +114,7 @@ export function BulkPayslips({ open, onClose, run, slips, company, branding }: {
         mode === 'combined' || chosen.length <= 1
           ? <>File name: <b>{mode === 'combined' ? combinedName : sample ? formatFileName(t?.fileName, ctxFor(sample)) : ''}</b></>
           : <>File names like: <b>{sample ? formatFileName(t?.fileName, ctxFor(sample)) : ''}</b> inside <b>{combinedName.replace(/\.pdf$/, '.zip')}</b></>
-      } description={<span style={{ fontSize: 12 }}>Change the file name format in Company Profile → Payslip Template. “Print” always prints one document, one payslip per page.</span>} />
+      } description={<span style={{ fontSize: 12 }}>Change the file name format in Document Templates → Payslip Template. “Print” always prints one document, one payslip per page.</span>} />
 
       {busy && busy.total > 1 && <Progress style={{ marginTop: 12 }} percent={Math.round((busy.done / busy.total) * 100)} format={() => `${busy.done} / ${busy.total}`} />}
       {!ready && <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>Preparing payslips…</Text>}

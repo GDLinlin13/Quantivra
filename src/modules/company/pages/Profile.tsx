@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
-import { Card, Descriptions, Typography, Spin, Tabs, Form, Input, InputNumber, Button, Upload, message, Switch, Space, ColorPicker, Segmented, Alert, Tag, Tooltip, Select, Popconfirm } from 'antd';
-import { UploadOutlined, DeleteOutlined, SaveOutlined, PlusOutlined } from '@ant-design/icons';
+import { Card, Typography, Spin, Tabs, Form, Input, InputNumber, Button, message, Switch, Space, Segmented, Alert, Tag, Tooltip, Select, Popconfirm } from 'antd';
+import { DeleteOutlined, SaveOutlined, PlusOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
-import { brandingService, fileToLogoDataUri, DEFAULT_TEMPLATES, type Branding } from '../../../services/branding';
+import { brandingService, DEFAULT_TEMPLATES, type Branding } from '../../../services/branding';
 import { DocumentShell } from '../../../components/DocumentShell';
 import { GridTemplateEditor } from '../../../components/GridTemplateEditor';
 import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, paymentAccounts, DEFAULT_PAYMENT_LABELS, type DocKind, type PaymentAccount, type PaymentLine } from '../../../data/documentLayouts';
@@ -11,7 +11,7 @@ import { CellValue } from '../../../components/GridDocument';
 import type { GridTemplate } from '../../../utils/gridTemplate';
 import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME, formatDocFileName, DOC_FILE_NAME_TOKENS, DEFAULT_DOC_FILE_NAME } from '../../../utils/payslipFiles';
 import { DEFAULT_STATEMENT_FILE_NAME } from './finance/Statements';
-import { nationalIdLabel, companyRegLabel } from '../../../data/countries';
+import { nationalIdLabel } from '../../../data/countries';
 import { fmtDate } from '../../../utils/dateFormat';
 
 const { Title, Text } = Typography;
@@ -47,21 +47,6 @@ export function CompanyProfilePage() {
 
   if (!company) return <Spin />;
 
-  // Profile tab: logo and company details shown on documents.
-  const saveBranding = async () => {
-    setSaving(true);
-    try {
-      const v = { ...vals, ...form.getFieldsValue(true) };
-      await brandingService.save(companyId!, {
-        legal_name: v.legal_name ?? null, registration_no: v.registration_no ?? null, address: v.address ?? null,
-        phone: v.phone ?? null, email: v.email ?? null, website: v.website ?? null, footer_note: v.footer_note ?? null,
-        logo_data_uri: logo, accent_color: accent,
-      });
-      message.success('Company details saved');
-    } catch (e: any) { message.error(e.message); }
-    setSaving(false);
-  };
-
   // Template tabs: templates only.
   const saveTemplates = async () => {
     setSaving(true);
@@ -70,15 +55,6 @@ export function CompanyProfilePage() {
       message.success('Template saved');
     } catch (e: any) { message.error(e.message); }
     setSaving(false);
-  };
-
-  const onLogo = async (file: File) => {
-    try {
-      if (file.size > 4_000_000) throw new Error('Image too large (max 4 MB)');
-      setLogo(await fileToLogoDataUri(file));
-      message.success('Logo ready — click Save to keep it');
-    } catch (e: any) { message.error(e.message); }
-    return false;
   };
 
   const setTplField = (doc: keyof typeof tpl, key: string, val: any) =>
@@ -112,7 +88,7 @@ export function CompanyProfilePage() {
             {layout.enabled
               ? `${what} are printed with the layout you design below.`
               : `${what} are printed with Quantivra's ready-made design; you choose what it shows below.`}
-            {' '}Your logo and company details come from the Profile tab.
+            {' '}Your logo and company details come from Settings → Company Settings.
           </Text>
           {note && <Alert type="info" showIcon style={{ marginTop: 8 }} title={note} />}
         </Card>
@@ -174,7 +150,7 @@ export function CompanyProfilePage() {
       <TplToggle label="Employer's contributions (CPF, SDL…)" v={tpl.payslip.showEmployerContributions ?? true} on={x => setTplField('payslip', 'showEmployerContributions', x)} />
       <TplToggle label="Paid by the company on the employee's behalf" v={tpl.payslip.showOnBehalf ?? true} on={x => setTplField('payslip', 'showOnBehalf', x)} />
       <Form.Item label="Payslip footer note" style={{ marginTop: 8 }}>
-        <Input.TextArea rows={2} value={tpl.payslip.footerNote} onChange={e => setTplField('payslip', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Profile" />
+        <Input.TextArea rows={2} value={tpl.payslip.footerNote} onChange={e => setTplField('payslip', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Company Settings" />
       </Form.Item>
       </Form>
     </Card>,
@@ -271,7 +247,7 @@ export function CompanyProfilePage() {
         </Text>
       </Form.Item>
       <Form.Item label="Footer note" style={{ marginBottom: 0 }}>
-        <Input.TextArea rows={2} value={tpl.soa.footerNote} onChange={e => setTplField('soa', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Profile" />
+        <Input.TextArea rows={2} value={tpl.soa.footerNote} onChange={e => setTplField('soa', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Company Settings" />
       </Form.Item>
     </Form>
   );
@@ -334,7 +310,7 @@ export function CompanyProfilePage() {
         </Form.Item>
       )}
       <Form.Item label="Invoice footer note">
-        <Input.TextArea rows={2} value={tpl.invoice.footerNote} onChange={e => setTplField('invoice', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Profile" />
+        <Input.TextArea rows={2} value={tpl.invoice.footerNote} onChange={e => setTplField('invoice', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Company Settings" />
       </Form.Item>
     </Form>
   );
@@ -400,69 +376,14 @@ export function CompanyProfilePage() {
 
   return (
     <div>
-      <Title level={4} style={{ color: '#f0ede6', marginBottom: 16 }}>Company Profile</Title>
+      <Title level={4} style={{ color: '#f0ede6', marginBottom: 16 }}>Document Templates</Title>
       <Tabs
         items={[
-          {
-            key: 'profile', label: 'Profile', forceRender: true,
-            children: twoCol(
-              <>
-                <Card size="small" style={{ ...panel, marginBottom: 16 }} title={<span style={{ color: '#f0ede6' }}>Company</span>}>
-                  <Descriptions column={2} size="large"
-                  styles={{ label: { color: 'rgba(240,237,230,0.6)' }, content: { color: '#f0ede6' } }}>
-                  <Descriptions.Item label="Name">{company.name}</Descriptions.Item>
-                  <Descriptions.Item label="Code">{company.company_code}</Descriptions.Item>
-                  <Descriptions.Item label="Country">{company.country}</Descriptions.Item>
-                  <Descriptions.Item label="Currency">{company.currency}</Descriptions.Item>
-                  <Descriptions.Item label="Financial Year">{company.financial_year_start}</Descriptions.Item>
-                  <Descriptions.Item label="Timezone">{company.timezone}</Descriptions.Item>
-                  <Descriptions.Item label="Modules">{(company.modules || []).join(', ') || 'None'}</Descriptions.Item>
-                </Descriptions>
-                </Card>
-                <Card size="small" style={panel} title={<span style={{ color: '#f0ede6' }}>Logo and company details</span>}>
-                  <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12, display: 'block', marginBottom: 12 }}>
-                    Shown at the top of payslips, invoices and other documents.
-                  </Text>
-                  <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 12 }}>
-                  <div style={{ width: 120, height: 60, border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: '#fff' }}>
-                    {logo ? <img src={logo} alt="logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <Text style={{ color: '#999', fontSize: 12 }}>No logo</Text>}
-                  </div>
-                  <Space orientation="vertical">
-                    <Upload beforeUpload={onLogo} showUploadList={false} accept="image/*">
-                      <Button size="small" icon={<UploadOutlined />}>Upload logo</Button>
-                    </Upload>
-                    {logo && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setLogo(null)}>Remove</Button>}
-                  </Space>
-                </div>
-                <Form form={form} initialValues={vals} layout="vertical" size="small" onValuesChange={(_, all) => setVals(p => ({ ...p, ...all }))}>
-                  <Form.Item name="legal_name" label="Legal name (on documents)"><Input /></Form.Item>
-                  <Form.Item name="registration_no" label={companyRegLabel(company.country)}><Input /></Form.Item>
-                  <Form.Item name="address" label="Address"><Input.TextArea rows={2} /></Form.Item>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'end' }}>
-                    <Form.Item name="phone" label="Phone"><Input /></Form.Item>
-                    <Form.Item name="email" label="Email"><Input /></Form.Item>
-                  </div>
-                  <Form.Item name="website" label="Website"><Input /></Form.Item>
-                  <Form.Item label="Accent colour">
-                    <ColorPicker value={accent} onChange={c => setAccent(c.toHexString())} showText />
-                  </Form.Item>
-                  <Form.Item name="footer_note" label="Default document footer"><Input.TextArea rows={2} placeholder="e.g. This is a computer-generated document." /></Form.Item>
-                </Form>
-                <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={saveBranding}>Save</Button>
-                </Card>
-              </>,
-              previewBox('Preview — how it looks at the top of your documents', (
-                <DocumentShell country={company?.country} branding={previewBranding} companyName={company.name} title="DOCUMENT" meta={<>Reference<br />Date</>} forPrint>
-                  <div style={{ color: '#999', fontSize: 12, padding: '12px 0' }}>Document content goes here.</div>
-                </DocumentShell>
-              )),
-            ),
-          },
           {
             key: 'payslip-template', label: 'Payslip Template',
             children: templateTab('payslip', 'Payslips', payslipPrebuilt, undefined,
               <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 640 }} title={<span style={{ color: '#f0ede6' }}>Payslip footer (the {'{{footer_note}}'} field)</span>}>
-                <Input.TextArea rows={2} value={tpl.payslip.footerNote} onChange={e => setTplField('payslip', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Profile" />
+                <Input.TextArea rows={2} value={tpl.payslip.footerNote} onChange={e => setTplField('payslip', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Company Settings" />
               </Card>,
               <>{amountFormatCard('payslip')}{fileNamesCard}</>),
           },
