@@ -678,10 +678,22 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
   // difference (bank charges or kept with the contact), as for one document
   const multi = docIds.length > 1 ? docIds.map(id => data.docs.find(x => x.id === id)).filter(Boolean) as FinDocument[] : [];
   multi.sort((a, b) => a.issue_date.localeCompare(b.issue_date) || a.id - b.id);
-  const multiDue = r2(multi.reduce((t, d) => t + balanceDue(d), 0));
-  const multiAlloc = (() => { const a = allocatePayment(amt, multi.map(d => balanceDue(d))); return multi.map((d, i) => ({ doc: d, due: a.parts[i].due, part: a.parts[i].part })); })();
+  // what each is worth in the company's currency (a foreign bill at its own rate)
+  const baseDue = (d: FinDocument) => (isForeignDoc(d, data.currency) ? inBase(d, balanceDue(d)) : balanceDue(d));
+  const multiDue = r2(multi.reduce((t, d) => t + baseDue(d), 0));
+  // foreign bills in the mix: money close to their total clears them all, and the small rest is an exchange gain / loss
+  const nearAll = multi.some(d => isForeignDoc(d, data.currency)) && amt >= multiDue * 0.95;
+  const multiAlloc = (() => {
+    if (nearAll) return multi.map(d => ({ doc: d, due: balanceDue(d), part: balanceDue(d) }));
+    const a = allocatePayment(amt, multi.map(baseDue));
+    return multi.map((d, i) => {
+      const f = isForeignDoc(d, data.currency);
+      const full = a.parts[i].part >= a.parts[i].due - 0.004;
+      return { doc: d, due: balanceDue(d), part: full ? balanceDue(d) : f ? Math.min(balanceDue(d), r2(a.parts[i].part / docRate(d))) : a.parts[i].part };
+    });
+  })();
   const multiMixed = new Set(multi.map(d => d.contact_id)).size > 1;     // several people's bills: the payment belongs to none of them
-  const multiLeft = r2(amt - multiDue);                                // > 0: more money than bills
+  const multiLeft = nearAll ? 0 : r2(amt - multiDue);                                // > 0: more money than bills
   const multiBooked = !inbound && multiLeft > 0.004 && diffAccount !== 'keep';
   const payMulti = () => run(async () => {
     const first = multi[0];
@@ -743,10 +755,10 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                 <Table rowKey="id" size="small" pagination={{ pageSize: 8, hideOnSinglePage: true }} dataSource={openDocs}
                   rowSelection={{ type: 'checkbox', selectedRowKeys: docIds, onChange: k => setDocIds(k.map(Number)),
                     // several at once, whoever they belong to (one person paid for others, or collected for them);
-                    // a foreign-currency one is cleared on its own, because of its exchange rate
+                    // in a foreign-currency bank account, a foreign-currency bill is cleared on its own
                     getCheckboxProps: (d: FinDocument) => {
                       const first = data.docs.find(x => x.id === docIds[0]);
-                      return { disabled: !!first && d.id !== first.id && (isForeignDoc(first, data.currency) || isForeignDoc(d, data.currency)) };
+                      return { disabled: foreign && !!first && d.id !== first.id && (isForeignDoc(first, data.currency) || isForeignDoc(d, data.currency)) };
                     } }}
                   columns={[
                     { title: inbound ? 'Number' : 'Invoice no.', key: 'no', render: (_, d) => <span style={{ fontWeight: named(d) ? 700 : 400 }}>{docNo(d)}</span> },
@@ -766,6 +778,7 @@ function MatchModal({ data, txn, accCur, dues, payments, usedPayments, recorded,
                     ]} />
                   <div style={{ marginTop: 6 }}>
                     <Text type="secondary">{multi.length} documents, {money(multiDue, data.currency)} owed · this payment {money(amt, data.currency)}</Text>
+                    {nearAll && Math.abs(r2(amt - multiDue)) > 0.004 && <Text type="secondary"> · the {money(Math.abs(r2(amt - multiDue)), data.currency)} difference is booked as an exchange {(amt > multiDue) === inbound ? 'gain' : 'loss'}</Text>}
                     {inbound && multiMixed && multiLeft > 0.004 && <div style={{ marginTop: 6 }}><Text type="warning">The money is {money(multiLeft, data.currency)} more than these invoices, which belong to different customers. Untick one, or match the rest another way.</Text></div>}
                   {multiLeft < -0.004 && <Text type="warning"> · {money(-multiLeft, data.currency)} stays owed on the last one(s)</Text>}
                   </div>
