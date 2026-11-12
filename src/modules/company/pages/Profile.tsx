@@ -7,7 +7,7 @@ import { brandingService, DEFAULT_TEMPLATES, type Branding } from '../../../serv
 import { DocumentShell } from '../../../components/DocumentShell';
 import { GridTemplateEditor } from '../../../components/GridTemplateEditor';
 import { LetterEditor } from '../../../components/LetterEditor';
-import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, paymentAccounts, DEFAULT_PAYMENT_LABELS, type DocKind, type PaymentAccount, type PaymentLine } from '../../../data/documentLayouts';
+import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, paymentAccounts, type DocKind, type PaymentAccount, type PaymentLine } from '../../../data/documentLayouts';
 import { CellValue } from '../../../components/GridDocument';
 import type { GridTemplate } from '../../../utils/gridTemplate';
 import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME, formatDocFileName, DOC_FILE_NAME_TOKENS, DEFAULT_DOC_FILE_NAME } from '../../../utils/payslipFiles';
@@ -231,7 +231,7 @@ export function CompanyProfilePage() {
   // Bank accounts shown as payment details; older single list becomes the first account.
   const banks: PaymentAccount[] = paymentAccounts(tpl.invoice).length
     ? paymentAccounts(tpl.invoice)
-    : [{ title: '', lines: DEFAULT_PAYMENT_LABELS.map(label => ({ label, value: '' })), isDefault: true }];
+    : [{ title: '', lines: [{ label: '', value: '' }], isDefault: true }];
   const setBanks = (next: PaymentAccount[]) => setTpl(p => ({ ...p, invoice: { ...p.invoice, paymentAccounts: next, paymentDetails: undefined } }));
   const setBank = (bi: number, patch: Partial<PaymentAccount>) => setBanks(banks.map((b, j) => (j === bi ? { ...b, ...patch } : b)));
   const setBankLine = (bi: number, li: number, patch: Partial<PaymentLine>) =>
@@ -254,7 +254,7 @@ export function CompanyProfilePage() {
         {banks.map((b, bi) => (
           <div key={bi} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: 10, marginBottom: 10 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
-              <Input style={{ width: 240 }} value={b.title} placeholder="Bank account name, e.g. DBS (SGD)" onChange={e => setBank(bi, { title: e.target.value })} />
+              <Input style={{ width: 240 }} value={b.title} placeholder="Payment name" onChange={e => setBank(bi, { title: e.target.value })} />
               <Switch size="small" checked={!!b.isDefault || banks.length === 1}
                 onChange={on => setBanks(banks.map((x, j) => ({ ...x, isDefault: on ? j === bi : (j === 0 && bi !== 0) })))} />
               <Text style={{ color: 'rgba(240,237,230,0.7)', fontSize: 12 }}>Default</Text>
@@ -270,15 +270,15 @@ export function CompanyProfilePage() {
             </div>
             {b.lines.map((r, li) => (
               <div key={li} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                <Input style={{ width: 170 }} value={r.label} onChange={e => setBankLine(bi, li, { label: e.target.value })} />
-                <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} style={{ flex: 1 }} value={r.value} onChange={e => setBankLine(bi, li, { value: e.target.value })} />
+                <Input style={{ width: 170 }} value={r.label} placeholder={li === 0 ? 'Payment Label' : undefined} onChange={e => setBankLine(bi, li, { label: e.target.value })} />
+                <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} style={{ flex: 1 }} value={r.value} placeholder={li === 0 ? 'Payment Value' : undefined} onChange={e => setBankLine(bi, li, { value: e.target.value })} />
                 <Button icon={<DeleteOutlined />} onClick={() => setBank(bi, { lines: b.lines.filter((_, j) => j !== li) })} />
               </div>
             ))}
             <Button size="small" icon={<PlusOutlined />} onClick={() => setBank(bi, { lines: [...b.lines, { label: '', value: '' }] })}>Add a line</Button>
           </div>
         ))}
-        <Button icon={<PlusOutlined />} onClick={() => setBanks([...banks, { title: '', lines: DEFAULT_PAYMENT_LABELS.map(label => ({ label, value: '' })) }])}>Add another bank</Button>
+        <Button icon={<PlusOutlined />} onClick={() => setBanks([...banks, { title: '', lines: [{ label: '', value: '' }] }])}>Add another bank</Button>
       </Form.Item>
       {(tpl.invoice.bankDetails || '').trim() && (
         <Form.Item label="Older payment details (free text)">

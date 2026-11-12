@@ -3,7 +3,7 @@ import { Drawer, Form, Select, DatePicker, Input, InputNumber, Button, Space, Ta
 import { useCompanyAccess } from '../../../../contexts/CompanyAccess';
 import { PlusOutlined, DeleteOutlined, HolderOutlined, PaperClipOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { docService, paymentService, catalogService, priceListService, supplierBills, contactService as contactsApi, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
+import { docService, paymentService, catalogService, priceListService, supplierBills, loadLedgerInput, contactService as contactsApi, attachmentService, contactService, latestRate, ATTACH_TYPES, type Attachment } from '../../../../services/finance';
 import { ContactDrawer } from './ContactsManager';
 import { ItemDrawer } from '../Catalog';
 import { companyFileService } from '../../../../services/finance';
@@ -14,7 +14,7 @@ import {
 } from '../../../../data/finance';
 import { money, paymentAccounts } from '../../../../data/documentLayouts';
 import type { Branding } from '../../../../services/branding';
-import { basisOf, costChanges, supplierPrices, classOf, classLabel, piecePrice, listPrice, kgText, type CatalogItem, type WeightClass, type Piece, type PriceListRow } from '../../../../data/catalog';
+import { basisOf, costChanges, supplierPrices, classOf, classLabel, piecePrice, listPrice, kgText, onHand, stockMoves, piecesInStock, type CatalogItem, type WeightClass, type Piece, type PriceListRow } from '../../../../data/catalog';
 import { AmountInput } from '../../../../components/AmountInput';
 
 const { Text } = Typography;
@@ -200,8 +200,19 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   };
 
   // sales documents offer what we sell, purchases what we buy (plus anything already on the lines)
+  // an invoice does not offer products we track with nothing left in stock
+  const [onHandNow, setOnHandNow] = useState<Map<number, number> | null>(null);
+  const tracksStock = sales && docType === 'invoice' && items.some(i => i.kind === 'product' && i.track_stock);
+  useEffect(() => {
+    if (!tracksStock) { setOnHandNow(null); return; }
+    Promise.all([loadLedgerInput(companyId), catalogService.adjustments(companyId), catalogService.pieces(companyId)]).then(([input, adj, ps]) => {
+      setOnHandNow(new Map(items.filter(i => i.kind === 'product' && i.track_stock).map(i => [i.id, i.stock_mode === 'pieces'
+        ? piecesInStock(i.id, ps, input.docs as any).length : onHand(stockMoves(i, input.docs, adj, ps))])));
+    }).catch(() => setOnHandNow(null));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, tracksStock, items]);
   const catalog = items.filter(it => lines.some(l => l.item_id === it.id)
-    || (!it.archived && (it.used_for || 'both') !== (sales ? 'purchases' : 'sales')));
+    || (!it.archived && (it.used_for || 'both') !== (sales ? 'purchases' : 'sales') && !(onHandNow && it.track_stock && it.kind === 'product' && (onHandNow.get(it.id) ?? 1) <= 0)));
   const pickItem = (i: number, id: number | null, from: CatalogItem[] = items) => {
     const it = from.find(x => x.id === id);
     if (!it) { setLine(i, { item_id: null }); return; }
@@ -234,12 +245,11 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       else if (!cls) p.unit_price = Number(sales ? it.sale_price : it.purchase_price) || 0;
     }
     // the weight class is not written into the Description (something typed there stays)
-    const wd = it.weight_decimals ?? 3;
-    const mine = own.map(c => classLabel(c, wd));
+    const mine = own.map(c => classLabel(c));
     const desc = (lines[i]?.description || '').trim();
     const autoDesc = !desc || mine.includes(desc) ? '' : desc;
     setLine(i, { piece_id: pieceId, weight, quantity: p.quantity, unit_price: inDocCurrency(p.unit_price, itemCur), description: autoDesc });
-    if (weight > 0 && !cls && own.length) message.warning(`No weight class for ${kgText(weight, wd)} kg — add one in the catalog, or type the price`);
+    if (weight > 0 && !cls && own.length) message.warning(`No weight class for ${kgText(weight)} kg — add one in the catalog, or type the price`);
   };
   const payFrom = accounts.filter(a => !a.archived && (a.subtype === 'bank' || a.subtype === 'cash'));
   const banks = paymentAccounts(branding?.templates.invoice);
@@ -322,13 +332,53 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
         }
       }
     }
+    // an invoice at a different price from the customer's price list: ask whether the list changes too
+    let listUpdate: { listId: number; prices: { item_id: number; class_id: number | null; price: number }[] } | null = null;
+    if (sales && (docType === 'invoice' || docType === 'quote') && doc.contact_id) {
+      const listId = contacts.find(c => c.id === doc.contact_id)?.price_list_id ?? stdId;
+      const diffs = new Map<string, { item_id: number; class_id: number | null; name: string; old: number | undefined; price: number; lines: number[] }>();
+      if (listId) toSave.forEach((l, ix) => {
+        const it = l.item_id ? items.find(x => x.id === l.item_id) : undefined;
+        if (!it || l.price_one_off || !(Number(l.unit_price) > 0) || (it.currency || currency) !== docCur) return;
+        if (l.id && loadedPrices.current.get(l.id) === Number(l.unit_price)) return;
+        const cls = it.stock_mode === 'pieces' ? classOf(classes.filter(c => c.item_id === it.id), weightOf(l)) : null;
+        const old = listPrice(plRows, listId, it.id, cls?.id ?? null);
+        const expected = old ?? sellPrice(it, doc.contact_id, cls?.id ?? null) ?? (Number(it.sale_price) || 0);
+        if (Math.abs(Number(l.unit_price) - expected) <= 0.005) return;
+        const k = `${it.id}:${cls?.id ?? 0}`;
+        const d = diffs.get(k);
+        diffs.set(k, { item_id: it.id, class_id: cls?.id ?? null, name: cls ? `${it.name} (${classLabel(cls)})` : it.name, old: old ?? expected, price: Number(l.unit_price), lines: [...(d?.lines || []), ix] });
+      });
+      if (diffs.size) {
+        const listName = (await priceListService.lists(companyId).catch(() => []) as any[]).find(x => x.id === listId)?.name || 'price list';
+        const all = [...diffs.values()];
+        const update = await new Promise<boolean>(resolve => { Modal.confirm({
+          title: `Prices changed from the ${listName} price list`, okText: 'Yes, update the price list', cancelText: 'No, this invoice only', width: 580,
+          content: (
+            <div>
+              {all.map((c, i) => (
+                <div key={i} style={{ fontSize: 13 }}>
+                  <b>{c.name}</b>: {docCur} {Number(c.old).toLocaleString(undefined, { maximumFractionDigits: 4 })} → <b>{c.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}</b>
+                </div>
+              ))}
+              <div style={{ marginTop: 8 }}>Update the {listName} price list for next time?</div>
+              <div style={{ color: '#999', fontSize: 12 }}>No: this invoice keeps its price, but the price list stays as it was.</div>
+            </div>
+          ),
+          onOk: () => resolve(true), onCancel: () => resolve(false),
+        }); });
+        if (update) listUpdate = { listId: listId!, prices: all.map(c => ({ item_id: c.item_id, class_id: c.class_id, price: c.price })) };
+        else { const oneOff = new Set(all.flatMap(c => c.lines)); toSave = toSave.map((l, ix) => (oneOff.has(ix) ? { ...l, price_one_off: true } : l)); }
+      }
+    }
     setSaving(true);
     try {
       const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}),
         // the delivery address goes with a document that has products (migration 053)
-        // left blank, they follow the customer's own name and address
-        ...(wantsAddress ? (() => { const c = contacts.find(x => x.id === doc.contact_id); return { delivery_name: (doc.delivery_name || '').trim() || c?.name || null, delivery_address: (doc.delivery_address || '').trim() || c?.address || null }; })()
+        // left blank stays blank (the printed invoice then shows the customer's name and address)
+        ...(wantsAddress ? { delivery_name: (doc.delivery_name || '').trim() || null, delivery_address: (doc.delivery_address || '').trim() || null }
           : doc.delivery_address || doc.delivery_name || 'delivery_address' in doc ? { delivery_address: null, delivery_name: null } : {}) } as any, toSave, { keepNumber: typedNumber });
+      if (listUpdate) { await priceListService.setPrices(companyId, listUpdate.listId, listUpdate.prices); priceListService.rows(companyId).then(setPlRows).catch(() => null); }
       // pieces bought: one piece per line, with its weight
       if (!sales && lines.some(isPieces)) await catalogService.syncBillPieces(companyId, id, doc.issue_date!, lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes);
       // An expense paid on the spot (from a bank / cash account) is recorded as paid straight away.
@@ -564,13 +614,13 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
               const list = pieces.filter(p => p.item_id === it.id && (p.id === l.piece_id || (!pieceSold(p.id) && !taken.has(p.id))))
                 .sort((a, b) => a.weight - b.weight);
               return <Select style={{ width: '100%' }} showSearch optionFilterProp="label" placeholder="Choose a piece" value={l.piece_id ?? undefined}
-                optionLabelProp="short" options={list.map(p => { const c = classes.find(x => x.id === p.class_id); return { value: p.id, short: `${kgText(p.weight, it.weight_decimals ?? 3)} kg`, label: `${kgText(p.weight, it.weight_decimals ?? 3)} kg${c ? ` · ${classLabel(c, it.weight_decimals ?? 3)}` : ''}` }; })}
+                optionLabelProp="short" options={list.map(p => ({ value: p.id, short: `${kgText(p.weight)} kg`, label: `${kgText(p.weight)} kg` }))}
                 notFoundContent="No pieces in stock"
                 onChange={v => { const p = pieces.find(x => x.id === v); if (p) priceByWeight(i, it, p.weight, p.id); }} />;
             }
             if (it && !sales) {
               return <Space.Compact style={{ width: '100%' }}>
-                <InputNumber style={{ width: '100%' }} min={0} precision={it.weight_decimals ?? 3} placeholder="Weight" value={weightOf(l) || undefined} disabled={pieceSold(l.piece_id)}
+                <InputNumber style={{ width: '100%' }} min={0} placeholder="Weight" value={weightOf(l) || undefined} disabled={pieceSold(l.piece_id)}
                   onChange={v => priceByWeight(i, it, Number(v) || 0, l.piece_id ?? null)} />
                 <Space.Addon>kg</Space.Addon>
               </Space.Compact>;
@@ -589,7 +639,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
           { title: 'Unit price', width: 120, render: (_, l, i) => {
             const it = l.item_id ? items.find(x => x.id === l.item_id) : null;
             const per = it && (it.stock_mode === 'loose' || (it.stock_mode === 'pieces' && basisOf(it, sales) !== 'per_piece')) ? `/ ${it.stock_mode === 'pieces' ? 'kg' : it.unit || ''}` : undefined;
-            return <AmountInput style={{ width: '100%' }} precision={it?.price_decimals ?? 2} suffix={per} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} />;
+            return <AmountInput style={{ width: '100%' }} suffix={per} value={l.unit_price} onChange={v => setLine(i, { unit_price: Number(v) || 0 })} />;
           } },
           { title: 'Disc %', width: 80, render: (_, l, i) => <InputNumber style={{ width: '100%' }} min={0} max={100} value={l.discount_pct} onChange={v => setLine(i, { discount_pct: Number(v) || 0 })} /> },
           ...(taxOn ? [{ title: `${taxName} %`, width: 90, render: (_: any, l: DocLine, i: number) => (

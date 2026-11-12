@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Table, Button, Space, Modal, Select, DatePicker, Segmented, Tag, Empty, Typography, message, Input } from 'antd';
 import { PrinterOutlined, DownloadOutlined, FileTextOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
-import { paymentService, docService } from '../../../../services/finance';
+import { paymentService, docService, companyFileService, documentFolderService } from '../../../../services/finance';
 import { today, type Contact, type ContactPerson, type FinanceSettings } from '../../../../data/finance';
 import { companyFields, money as fmtMoney, pickPaymentAccount } from '../../../../data/documentLayouts';
 import { buildStatement, statementCurrencies, customersOwing, type Soa, type SoaPayment, type SoaAllocation } from '../../../../data/soa';
@@ -20,6 +20,8 @@ const { Text } = Typography;
 export const DEFAULT_STATEMENT_FILE_NAME = 'Statement of account - {customer} - {date}';
 const KIND_LABEL = { invoice: 'Invoice', credit_note: 'Credit note', payment: 'Payment' } as const;
 
+const termsText = (days: number) => (days === 0 ? 'Due on receipt' : `${days} days`);
+
 /** Fields and lists for the statement template, from a real statement. */
 export function statementData(s: Soa, contact: Contact | null, person: ContactPerson | null, company: any, branding: Branding | null, settings: FinanceSettings, number = '') {
   const tpl = branding?.templates.soa;
@@ -32,6 +34,7 @@ export function statementData(s: Soa, contact: Contact | null, person: ContactPe
     ...companyFields(company, branding, tpl?.footerNote),
     currency: s.currency,
     document_title: 'STATEMENT OF ACCOUNT', statement_no: number, company_gst_no: settings.gstRegistered ? (settings.gstNumber || '') : '',
+    payment_terms: termsText(contact?.payment_terms_days ?? inv?.paymentTermsDays ?? 30),
     statement_date: fmtDate(s.to), period_from: fmtDate(s.from), period_to: fmtDate(s.to),
     period: s.from ? `${longDate(s.from)} to ${longDate(s.to)}` : `All items up to ${longDate(s.to)}`,
     customer_name: contact?.name || '', customer_address: contact?.address || '',
@@ -158,6 +161,23 @@ function StatementModal({ data, contactId, currency, payments, allocations, onCl
     } catch (e: any) { message.error(e.message); return ''; }
   };
 
+  // printing or downloading also keeps a PDF copy in Documents → Other files → SOA (once per statement; the folder can be renamed there)
+  const savedFor = useRef('');
+  useEffect(() => { savedFor.current = ''; }, [cur, from, to, contactId]);
+  const keepCopy = async (n: string, blob?: Blob) => {
+    if (!n || savedFor.current === n) return;
+    try {
+      const el = document.getElementById('fin-soa-print');
+      const pdf = blob || (el ? await elementsToPdf([el]) : null);
+      if (!pdf) return;
+      await companyFileService.add(data.companyId, new File([pdf], `${nameFor(n)}.pdf`, { type: 'application/pdf' }), { folder: 'other', subfolder: 'SOA' });
+      const folders = await documentFolderService.list(data.companyId).catch(() => [] as string[]);
+      if (!folders.includes('SOA')) await documentFolderService.save(data.companyId, [...folders, 'SOA']).catch(() => null);
+      savedFor.current = n;
+      message.success('A copy is saved in Documents → Other files → SOA');
+    } catch (e: any) { message.error(`Couldn't save a copy in Documents: ${e.message}`); }
+  };
+
   const print = async () => {
     const n = await ensureNumber();
     const el = document.getElementById('fin-soa-print');
@@ -166,13 +186,14 @@ function StatementModal({ data, contactId, currency, payments, allocations, onCl
     if (!w) { message.error('Allow pop-ups to print'); return; }
     w.document.write(`<html><head><title>${nameFor(n)}</title><style>${PRINT_CSS}</style></head><body>${el.innerHTML}</body></html>`);
     w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
+    void keepCopy(n);
   };
   const download = async () => {
     setBusy(true);
     try {
       const n = await ensureNumber();
       const el = document.getElementById('fin-soa-print');
-      if (el) downloadBlob(await elementsToPdf([el]), `${nameFor(n)}.pdf`);
+      if (el) { const blob = await elementsToPdf([el]); downloadBlob(blob, `${nameFor(n)}.pdf`); await keepCopy(n, blob); }
     } catch (e: any) { message.error(e.message); }
     setBusy(false);
   };

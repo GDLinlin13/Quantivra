@@ -109,6 +109,9 @@ export function ownLayout(kind: 'payslip' | 'invoice' | 'soa' | 'letterhead', sa
 
 function withDefaults(row: any, companyId: number, country?: string | null): Branding {
   const t = row?.templates || {};
+  // one Amount Format for the whole company (Company Settings); whichever template has it first speaks for the rest
+  const af = t.invoice?.amountFormat || t.payslip?.amountFormat || t.soa?.amountFormat || t.letterhead?.amountFormat;
+  const own = af ? { amountFormat: af } : {};
   return {
     company_id: companyId,
     logo_data_uri: row?.logo_data_uri ?? null,
@@ -121,9 +124,9 @@ function withDefaults(row: any, companyId: number, country?: string | null): Bra
     accent_color: row?.accent_color ?? '#1677ff',
     footer_note: row?.footer_note ?? null,
     templates: {
-      payslip: { ...DEFAULT_TEMPLATES.payslip, ...(t.payslip || {}), layout: ownLayout('payslip', t.payslip?.layout, country) },
-      invoice: { ...DEFAULT_TEMPLATES.invoice, ...(t.invoice || {}), layout: ownLayout('invoice', t.invoice?.layout, country) },
-      soa: { ...DEFAULT_TEMPLATES.soa, ...(t.soa || {}), layout: ownLayout('soa', t.soa?.layout, country) },
+      payslip: { ...DEFAULT_TEMPLATES.payslip, ...(t.payslip || {}), ...own, layout: ownLayout('payslip', t.payslip?.layout, country) },
+      invoice: { ...DEFAULT_TEMPLATES.invoice, ...(t.invoice || {}), ...own, layout: ownLayout('invoice', t.invoice?.layout, country) },
+      soa: { ...DEFAULT_TEMPLATES.soa, ...(t.soa || {}), ...own, layout: ownLayout('soa', t.soa?.layout, country) },
       letterhead: { ...DEFAULT_TEMPLATES.letterhead, ...(t.letterhead || {}), layout: ownLayout('letterhead', t.letterhead?.layout, country) },
       document: { ...DEFAULT_TEMPLATES.document, ...(t.document || {}) },
     },

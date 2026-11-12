@@ -177,7 +177,6 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, onCl
   const mode: StockMode = Form.useWatch('stock_mode', form) ?? item.stock_mode ?? 'normal';
   const basis = Form.useWatch('price_basis', form) ?? item.price_basis ?? 'per_kg';
   const saleBasis = Form.useWatch('sale_basis', form) ?? item.sale_basis ?? basis;
-  const wd: number = Form.useWatch('weight_decimals', form) ?? item.weight_decimals ?? 3;
   const [classes, setClasses] = useState<WeightClass[]>([]);
   useEffect(() => {
     if (item.id) catalogService.classes(companyId).then(cs => setClasses(cs.filter(c => c.item_id === item.id))).catch(() => null);
@@ -208,7 +207,7 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, onCl
       const { purchase_currency: _pc, ...rest } = { ...item, ...v } as any;
       // normal: any amount of the unit can be bought or sold (100 kg in, 1 kg or 0.1 kg out); stock by weight needs database update 046, so plain items never send it
       if ((rest.stock_mode ?? 'normal') !== 'pieces') { rest.stock_mode = 'normal'; rest.loose_unit = null; rest.loose_factor = null; }
-      if (rest.stock_mode === 'normal' && !('stock_mode' in item)) { delete rest.stock_mode; delete rest.price_basis; delete rest.sale_basis; delete rest.loose_unit; delete rest.loose_factor; delete rest.weight_decimals; delete rest.price_decimals; }
+      if (rest.stock_mode === 'normal' && !('stock_mode' in item)) { delete rest.stock_mode; delete rest.price_basis; delete rest.sale_basis; delete rest.loose_unit; delete rest.loose_factor; }
       if (rest.stock_mode === 'pieces') {
         if (classes.some(c => c.min_kg == null || (c.max_kg != null && Number(c.max_kg) < Number(c.min_kg)))) throw new Error('Check the weight classes: “to” must not be below “from”');
       }
@@ -296,21 +295,13 @@ export function ItemDrawer({ companyId, item, accounts, settings, currency, onCl
                       <Segmented options={[{ value: 'per_kg', label: 'Per KG' }, { value: 'per_piece', label: 'Per piece' }]} />
                     </Form.Item>
                   </Space>
-                  <Space size={24} wrap align="start">
-                    <Form.Item name="weight_decimals" label="Weight decimals" initialValue={3}>
-                      <Select style={{ width: 130 }} options={[0, 1, 2, 3].map(n => ({ value: n, label: String(n) }))} />
-                    </Form.Item>
-                    <Form.Item name="price_decimals" label="Price decimals" initialValue={2}>
-                      <Select style={{ width: 130 }} options={[2, 3, 4].map(n => ({ value: n, label: String(n) }))} />
-                    </Form.Item>
-                  </Space>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 4 }}>
                     <Text type="secondary">From (kg)</Text><Text type="secondary">To (kg)</Text><span />
                   </div>
                   {classes.map((c, i) => (
                     <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 6 }}>
-                      <InputNumber min={0} precision={wd} style={{ width: '100%' }} value={c.min_kg} onChange={v => setClass(i, { min_kg: Number(v) || 0 })} />
-                      <InputNumber min={0} precision={wd} style={{ width: '100%' }} placeholder="no limit" value={c.max_kg ?? undefined} onChange={v => setClass(i, { max_kg: v == null ? null : Number(v) })} />
+                      <InputNumber min={0} style={{ width: '100%' }} value={c.min_kg} onChange={v => setClass(i, { min_kg: Number(v) || 0 })} />
+                      <InputNumber min={0} style={{ width: '100%' }} placeholder="no limit" value={c.max_kg ?? undefined} onChange={v => setClass(i, { max_kg: v == null ? null : Number(v) })} />
                       <Button icon={<DeleteOutlined />} onClick={() => setClasses(cs => cs.filter((_, j) => j !== i))} />
                     </div>
                   ))}
@@ -369,7 +360,7 @@ function StockTab({ companyId, items, stock, docs, adjustments, pieces, classes,
           { title: 'Code', dataIndex: 'code', render: (v: string | null) => v || '—' },
           { title: 'Product', key: 'n', render: (_, i) => <a onClick={() => setHistory(i)}>{i.name}</a> },
           { title: 'In stock', key: 'q', align: 'right' as const, render: (_, i) => {
-            if (i.stock_mode === 'pieces') { const ps = inStock(i); return <b>{ps.length} pcs · {kgText(ps.reduce((s, p) => s + p.weight, 0), i.weight_decimals ?? 3)} kg</b>; }
+            if (i.stock_mode === 'pieces') { const ps = inStock(i); return <b>{ps.length} pcs · {kgText(ps.reduce((s, p) => s + p.weight, 0))} kg</b>; }
             const q = stock.get(i.id) ?? 0;
             return <b style={{ color: q < 0 ? '#ff7875' : undefined }}>{q}{i.unit ? ` ${i.unit}` : ''}{i.stock_mode === 'loose' && i.loose_unit && i.loose_factor ? ` (${Math.round(q * Number(i.loose_factor) * 100) / 100} ${i.loose_unit})` : ''}</b>;
           } },

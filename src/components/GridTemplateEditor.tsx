@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode, type KeyboardEvent as RKeyboardEvent } from 'react';
-import { Button, Tooltip, Select, InputNumber, ColorPicker, Dropdown, Segmented, Space, Input, Divider, Typography, Popconfirm, Collapse } from 'antd';
+import { Button, Tooltip, Select, InputNumber, ColorPicker, Dropdown, Segmented, Space, Input, Divider, Typography, Popconfirm, Collapse, Modal } from 'antd';
 import {
   BoldOutlined, ItalicOutlined, UnderlineOutlined, AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined,
   VerticalAlignTopOutlined, VerticalAlignMiddleOutlined, VerticalAlignBottomOutlined, BorderOutlined,
@@ -51,106 +51,50 @@ function FieldGuide({ kind, country, onInsert, rowRepeat, sample }: {
   const hk = (country || '').toUpperCase() === 'HK';
   const cellStyleTd: React.CSSProperties = { padding: '3px 8px', borderBottom: '1px solid rgba(255,255,255,0.06)', verticalAlign: 'top' };
   const code: React.CSSProperties = { fontFamily: 'monospace', fontSize: 12, color: '#91caff', cursor: 'pointer', whiteSpace: 'nowrap' };
+  const [example, setExample] = useState(false);
+  // fields and the lines of the lists, together; shown in two halves
+  const all = [...docFields(kind, country), ...lists.flatMap(l => l.fields.map(f => ({ ...f, label: `${l.label}: ${f.label}` })))];
+  const half = Math.ceil(all.length / 2);
+  const first = lists[0];
+  const shownCols = first ? first.fields.slice(0, 3) : [];
+  const printed = first ? (sample.lists[first.name] || []).slice(0, 3) : [];
+  const th: React.CSSProperties = { border: '1px solid #ccc', padding: '3px 8px', textAlign: 'left', fontWeight: 500 };
+  const C = ({ n }: { n: string }) => <code style={code} onClick={() => onInsert(n)} title="Click to put it in the selected cell">{`{{${n}}}`}</code>;
   return (
     <div style={{ color: 'rgba(240,237,230,0.8)', fontSize: 13, lineHeight: 1.55, maxHeight: 420, overflowY: 'auto' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 16 }}>
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Fields — one value per {kind}</div>
-          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+      <div style={{ marginBottom: 6 }}>
+        {kind === 'letterhead'
+          ? <>Put <C n="document_title" />, <C n="document_date" /> and <C n="document_body" /> in it.</>
+          : lists.length > 0 && <Button size="small" onClick={() => setExample(true)}>View example</Button>}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: '0 16px' }}>
+        {[all.slice(0, half), all.slice(half)].map((col, ci) => (
+          <table key={ci} style={{ borderCollapse: 'collapse', width: '100%', alignSelf: 'start' }}>
             <tbody>
-              {docFields(kind, country).map(f => (
+              {col.map(f => (
                 <tr key={f.name}>
                   <td style={cellStyleTd}><span style={code} onClick={() => onInsert(f.name)} title="Click to put it in the selected cell">{`{{${f.name}}}`}</span></td>
-                  <td style={cellStyleTd}>{f.label}<div style={{ color: 'rgba(240,237,230,0.45)', fontSize: 12 }}>{f.name === 'logo' ? 'your uploaded logo' : (sample.fields[f.name] ? `e.g. ${plainAmount(sample.fields[f.name])}` : '')}</div></td>
+                  <td style={cellStyleTd}>{f.label}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Lists — several lines per {kind}</div>
-          {kind === 'payslip' ? (
-            <>
-              <p style={{ margin: '0 0 8px' }}>
-                Some things have a different number of lines for each person — one employee has only Basic Salary, another also has Overtime and a
-                Bonus. You can't know in advance how many rows to leave, so you design <b>one</b> row with a list's fields in it, e.g.
-                 <code style={code} onClick={() => onInsert('earnings.name')} title="Click to put it in the selected cell">{'{{earnings.name}}'}</code> and <code style={code} onClick={() => onInsert('earnings.amount')} title="Click to put it in the selected cell">{'{{earnings.amount}}'}</code>. That row turns yellow ↻ and, when
-                printed, is copied once per item.
-              </p>
-              {hk && <p style={{ margin: '0 0 8px' }}>
-                <b>MPF section:</b> put <code style={code} onClick={() => onInsert('mpf_employer')} title="Click to put it in the selected cell">{'{{mpf_employer}}'}</code>, <code style={code} onClick={() => onInsert('mpf_employee')} title="Click to put it in the selected cell">{'{{mpf_employee}}'}</code> and <code style={code} onClick={() => onInsert('mpf_total')} title="Click to put it in the selected cell">{'{{mpf_total}}'}</code> in
-                ordinary (non-repeating) rows.
-              </p>}
-              <p style={{ margin: '0 0 8px' }}>
-                <b>Side by side:</b> one repeating row can hold two lists — earnings on the left, deductions on the right. It is printed as many times as
-                the longer list needs; where one list has run out, its cells are left blank.
-              </p>
-              {sg && <p style={{ margin: '0 0 8px' }}>
-                <b>Only want certain items?</b> Don't use a list — use a single field instead. For example, for a CPF section put
-                 <code style={code} onClick={() => onInsert('cpf_employer')} title="Click to put it in the selected cell">{'{{cpf_employer}}'}</code>, <code style={code} onClick={() => onInsert('cpf_employee')} title="Click to put it in the selected cell">{'{{cpf_employee}}'}</code> and <code style={code} onClick={() => onInsert('cpf_total')} title="Click to put it in the selected cell">{'{{cpf_total}}'}</code> in
-                ordinary (non-repeating) rows. SDL is a levy the company pays, not CPF; it has its own <code style={code} onClick={() => onInsert('sdl')} title="Click to put it in the selected cell">{'{{sdl}}'}</code> field.
-              </p>}
-            </>
-          ) : kind === 'letterhead' ? (
-            <p style={{ margin: '0 0 8px' }}>
-              This is the top (and bottom) of every document you create with <b>Create document</b>. Put your logo in a cell on its own
-              (<code style={code} onClick={() => onInsert('logo')} title="Click to put it in the selected cell">{'{{logo}}'}</code>), your company details, and
-              <code style={code} onClick={() => onInsert('document_title')} title="Click to put it in the selected cell">{'{{document_title}}'}</code> and
-              <code style={code} onClick={() => onInsert('document_date')} title="Click to put it in the selected cell">{'{{document_date}}'}</code>, which are filled in for each document. What you type goes below it.
-            </p>
-          ) : kind === 'soa' ? (
-            <>
-            <p style={{ margin: '0 0 8px' }}>
-              Each statement has a different number of lines. You design <b>one</b> row with the statement-line fields in it, e.g.
-               <code style={code} onClick={() => onInsert('rows.date')} title="Click to put it in the selected cell">{'{{rows.date}}'}</code>, <code style={code} onClick={() => onInsert('rows.number')} title="Click to put it in the selected cell">{'{{rows.number}}'}</code> and <code style={code} onClick={() => onInsert('rows.balance')} title="Click to put it in the selected cell">{'{{rows.balance}}'}</code>. That row turns
-              yellow ↻ and, when printed, is copied once per invoice, credit note and payment.
-            </p>
-            <p style={{ margin: '0 0 8px' }}>
-              <b>Payment details:</b> put <code style={code} onClick={() => onInsert('payment.label')} title="Click to put it in the selected cell">{'{{payment.label}}'}</code> in the left cell and
-               <code style={code} onClick={() => onInsert('payment.value')} title="Click to put it in the selected cell">{'{{payment.value}}'}</code> in the right cell of one row. They come from the Invoice Template.
-            </p>
-            </>
-          ) : (
-            <>
-            <p style={{ margin: '0 0 8px' }}>
-              Each invoice has a different number of lines. You can't know in advance how many rows to leave, so you design <b>one</b> row with the
-              line fields in it, e.g. <code style={code} onClick={() => onInsert('lines.description')} title="Click to put it in the selected cell">{'{{lines.description}}'}</code> and <code style={code} onClick={() => onInsert('lines.amount')} title="Click to put it in the selected cell">{'{{lines.amount}}'}</code>. That row turns
-              yellow ↻ and, when printed, is copied once per invoice line.
-            </p>
-            <p style={{ margin: '0 0 8px' }}>
-              <b>Payment details, left and right:</b> in one row, put <code style={code} onClick={() => onInsert('payment.label')} title="Click to put it in the selected cell">{'{{payment.label}}'}</code> in
-              the left cell and <code style={code} onClick={() => onInsert('payment.value')} title="Click to put it in the selected cell">{'{{payment.value}}'}</code> in the right cell. The row is
-              printed once per line you fill in under Invoice settings (Account Name, Bank, Account No…).
-            </p>
-            <p style={{ margin: '0 0 8px' }}>
-              <b>Discounts:</b> put <code style={code} onClick={() => onInsert('discounts.name')} title="Click to put it in the selected cell">{'{{discounts.name}}'}</code> and <code style={code} onClick={() => onInsert('discounts.amount')} title="Click to put it in the selected cell">{'{{discounts.amount}}'}</code> in a row below
-              the subtotal — it is printed once per discount, and disappears when there is none. Or show one figure with
-               <code style={code} onClick={() => onInsert('total_discount')} title="Click to put it in the selected cell">{'{{total_discount}}'}</code>; a discount on a single line is <code style={code} onClick={() => onInsert('lines.discount')} title="Click to put it in the selected cell">{'{{lines.discount}}'}</code>.
-            </p>
-            </>
-          )}
-          {lists.map(l => (
-            <div key={l.name} style={{ marginBottom: 8 }}>
-              <b>{l.label}</b> <span style={{ color: 'rgba(240,237,230,0.5)' }}>— items look like: {listExample(l.name, country)}</span>
-              <div>
-                {l.fields.map(f => (
-                  <span key={f.name} style={{ marginRight: 12 }}>
-                    <span style={code} onClick={() => onInsert(f.name)} title="Click to put it in the selected cell">{`{{${f.name}}}`}</span>
-                    <span style={{ color: 'rgba(240,237,230,0.6)' }}> {f.label.toLowerCase()}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-          <p style={{ margin: '8px 0 0', color: 'rgba(240,237,230,0.55)' }}>
-            {kind === 'payslip'
-              ? `The item names come from payroll: Basic Salary from the employee record, the statutory ones${sg ? ' (CPF, SDL, CDAC…)' : ''} are worked out automatically, and the rest are whatever you add under Payroll → Pay items. You never type item codes — the payslip shows the names.`
-              : kind === 'letterhead' ? 'The document name and date are filled in each time you create a document.'
-              : kind === 'soa' ? 'The lines are the customer’s invoices, credit notes and payments, with the running balance.'
-              : 'The item names are whatever is typed on each invoice line.'}
-          </p>
-        </div>
+        ))}
       </div>
+      <Modal open={example} onCancel={() => setExample(false)} footer={null} title="Example" width={560}>
+        {first && (
+          <div style={{ fontSize: 13 }}>
+            <div style={{ marginBottom: 6 }}>You design <b>one</b> row with the fields of a list ({first.label}). It turns yellow ↻ and is repeated for each item.</div>
+            <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: 12 }}><tbody>
+              <tr style={{ background: '#fffbeb' }}>{shownCols.map(f => <td key={f.name} style={{ ...th, fontFamily: 'monospace', color: '#0b57d0' }}>{`{{${f.name}}}`}{f === shownCols[0] ? ' ↻' : ''}</td>)}</tr>
+            </tbody></table>
+            <div style={{ marginBottom: 6 }}>When printed:</div>
+            <table style={{ borderCollapse: 'collapse', width: '100%' }}><tbody>
+              {printed.map((r, i) => <tr key={i}>{shownCols.map(f => <td key={f.name} style={th}>{plainAmount(r[f.name.split('.').pop()!] || '')}</td>)}</tr>)}
+            </tbody></table>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
