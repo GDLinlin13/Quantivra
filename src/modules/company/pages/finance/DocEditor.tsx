@@ -100,6 +100,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
   const contactPeople = people.filter(p => p.contact_id === doc.contact_id);
   // delivery address: for sales documents that have products; the customer can keep several (CRM), one is the default
   const [addresses, setAddresses] = useState<ContactAddress[]>([]);
+  const [typing, setTyping] = useState<false | 'new' | 'manual'>(false);   // an address is being typed: for this invoice only, or to add to the customer
   useEffect(() => { if (sales) contactsApi.addressesOf(companyId).then(setAddresses).catch(() => setAddresses([])); }, [companyId, sales]);
   const hasProducts = lines.some(l => l.item_id && items.find(x => x.id === l.item_id)?.kind === 'product');
   const wantsAddress = sales && docType !== 'credit_note' && !!doc.contact_id && hasProducts;
@@ -108,7 +109,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
     // a new document takes the customer's default address as soon as it has a product
     if (!wantsAddress || docId || doc.delivery_address) return;
     const d = myAddresses.find(a => a.is_default);
-    if (d) set({ delivery_address: d.address });
+    if (d) set({ delivery_address: d.address, delivery_name: d.label || '' });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wantsAddress, doc.contact_id, addresses]);
   // What a line can be booked to: income for sales; for purchases, expenses plus the few asset accounts you can
@@ -438,33 +439,48 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
             </Form.Item>
           )}
         </div>
-        {wantsAddress && (
-          <div style={{ marginBottom: 12 }}>
-            <Space wrap align="center" style={{ marginBottom: 6 }}>
-              <Text>Deliver to</Text>
-              {myAddresses.length > 0 && (
-                <Select allowClear style={{ width: 280 }} placeholder="Choose a saved address"
-                  value={myAddresses.find(a => a.address.trim() === (doc.delivery_address || '').trim())?.id}
-                  onChange={v => { const a = myAddresses.find(x => x.id === v); set({ delivery_address: a?.address || '' }); }}
-                  options={myAddresses.map(a => ({ value: a.id, label: a.label || a.address.split('\n')[0] }))} />
+        {wantsAddress && (() => {
+          const cust = contacts.find(x => x.id === doc.contact_id);
+          const addrText = (doc.delivery_address || '').trim();
+          const saved = myAddresses.find(a => a.address.trim() === addrText && (a.label || '').trim() === (doc.delivery_name || '').trim()) || myAddresses.find(a => a.address.trim() === addrText);
+          const manual = !saved && (typing || !!addrText || !!(doc.delivery_name || '').trim());
+          return (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ marginBottom: 6 }}><Text>Deliver to</Text></div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12, alignItems: 'start' }}>
+                <Select allowClear style={{ width: '100%' }} placeholder={cust?.name || 'Choose'} value={saved ? saved.id : manual ? (typing || 'manual') : undefined}
+                  onChange={v => {
+                    if (v === undefined || v === null) { setTyping(false); set({ delivery_name: '', delivery_address: '' }); }
+                    else if (v === 'manual' || v === 'new') { setTyping(v); set({ delivery_name: '', delivery_address: '' }); }
+                    else { const a = myAddresses.find(x => x.id === v); setTyping(false); set({ delivery_name: a?.label || '', delivery_address: a?.address || '' }); }
+                  }}
+                  options={[...myAddresses.map(a => ({ value: a.id as any, label: a.label || a.address.split('\n')[0] })),
+                    ...(access.canWrite('crm') ? [{ value: 'new', label: 'Add a new address to this customer' }] : []), { value: 'manual', label: 'Type an address for this invoice only' }]} />
+                {manual ? (
+                  <Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} placeholder={cust?.address || ''} value={doc.delivery_address || ''} onChange={e => set({ delivery_address: e.target.value })} />
+                ) : (
+                  <div style={{ whiteSpace: 'pre-line', minHeight: 32, padding: '4px 0', opacity: saved ? 1 : 0.55 }}>{saved ? saved.address : cust?.address || ''}</div>
+                )}
+              </div>
+              {manual && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12, marginTop: 8, alignItems: 'center' }}>
+                  <Input placeholder="Name" value={doc.delivery_name || ''} onChange={e => set({ delivery_name: e.target.value })} />
+                  {typing === 'new' && access.canWrite('crm') && (
+                    <div><Button size="small" type="primary" disabled={!addrText} onClick={async () => {
+                      try {
+                        const name = (doc.delivery_name || '').trim() || addrText.split('\n')[0].slice(0, 40);
+                        await contactsApi.saveAddresses(companyId, doc.contact_id!, [...myAddresses, { label: name, address: addrText, is_default: !myAddresses.length }]);
+                        setAddresses(await contactsApi.addressesOf(companyId));
+                        set({ delivery_name: name }); setTyping(false);
+                        message.success('Address added to the customer');
+                      } catch (e: any) { message.error(e.message); }
+                    }}>Save address</Button></div>
+                  )}
+                </div>
               )}
-              {(doc.delivery_address || '').trim() && !myAddresses.some(a => a.address.trim() === (doc.delivery_address || '').trim()) && access.canWrite('crm') && (
-                <Button size="small" onClick={async () => {
-                  try {
-                    const text = (doc.delivery_address || '').trim();
-                    await contactsApi.saveAddresses(companyId, doc.contact_id!, [...myAddresses, { label: text.split('\n')[0].slice(0, 40), address: text, is_default: !myAddresses.length }]);
-                    setAddresses(await contactsApi.addressesOf(companyId));
-                    message.success('Address saved to the customer');
-                  } catch (e: any) { message.error(e.message); }
-                }}>Save this address to the customer</Button>
-              )}
-            </Space>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12, alignItems: 'start' }}>
-              <Input placeholder={contacts.find(x => x.id === doc.contact_id)?.name || ''} value={doc.delivery_name || ''} onChange={e => set({ delivery_name: e.target.value })} />
-              <Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} placeholder={contacts.find(x => x.id === doc.contact_id)?.address || ''} value={doc.delivery_address || ''} onChange={e => set({ delivery_address: e.target.value })} />
             </div>
-          </div>
-        )}
+          );
+        })()}
         {currencies.length > 1 && (
           <Space wrap align="center" style={{ marginBottom: 12 }}>
             <Text>Currency</Text>
