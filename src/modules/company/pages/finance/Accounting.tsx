@@ -274,7 +274,8 @@ function ChartOfAccounts({ data, accounts, entries, reload }: { data: FinanceDat
           { title: 'Code', dataIndex: 'code', width: 80 },
           { title: 'Name', key: 'n', render: (_, a) => <a onClick={() => setHistory(a)}>{a.name}</a> },
           { title: 'Type', dataIndex: 'type', render: (t: AccountType) => <Tag>{ACCOUNT_TYPE_LABEL[t]}</Tag>, filters: Object.entries(ACCOUNT_TYPE_LABEL).map(([value, text]) => ({ value, text })), onFilter: (v, a) => a.type === v },
-          { title: '', key: 's', render: (_, a) => <Space size={4}>{a.subtype === 'bank' && <Tag color="blue">bank</Tag>}{a.subtype === 'cash' && <Tag color="blue">cash</Tag>}{a.is_system && <Tag>used automatically</Tag>}{a.archived && <Tag>archived</Tag>}</Space> },
+          { title: '', key: 'k', width: 80, render: (_, a) => (a.subtype === 'bank' || a.subtype === 'cash') ? <Tag color="blue" style={{ marginInlineEnd: 0 }}>{a.subtype}</Tag> : null },
+          { title: '', key: 's', width: 190, render: (_, a) => <Space size={4}>{a.is_system && <Tag style={{ marginInlineEnd: 0 }}>used automatically</Tag>}{a.archived && <Tag style={{ marginInlineEnd: 0 }}>archived</Tag>}</Space> },
           { title: 'Balance today', key: 'b', align: 'right' as const, render: (_, a) => money(bal.get(a.id) || 0, data.currency) },
           {
             title: '', key: 'a', width: 90, render: (_, a) => canWrite && (
