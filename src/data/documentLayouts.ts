@@ -12,14 +12,15 @@ const isHK = (country?: string | null) => (country || '').toUpperCase() === 'HK'
 
 export type DocKind = 'payslip' | 'invoice' | 'soa' | 'letterhead';
 
-export interface FieldDef { name: string; label: string }
+/** `hidden`: still works in a template, but is left out of the Code Guide (a duplicate of another field) */
+export interface FieldDef { name: string; label: string; hidden?: boolean }
 export interface ListDef { name: string; label: string; fields: FieldDef[] }
 
 const COMPANY_FIELDS: FieldDef[] = [
-  { name: 'logo', label: 'Company logo (put alone in a cell)' },
+  { name: 'logo', label: 'Logo' },
   { name: 'company_name', label: 'Company name' },
   { name: 'company_legal_name', label: 'Legal name' },
-  { name: 'company_reg_no', label: 'Company registration no.' },
+  { name: 'company_reg_no', label: 'Registration no.' },
   { name: 'company_address', label: 'Company address' },
   { name: 'company_phone', label: 'Company phone' },
   { name: 'company_email', label: 'Company email' },
@@ -31,102 +32,102 @@ const COMPANY_FIELDS: FieldDef[] = [
 export const DOC_FIELDS: Record<DocKind, FieldDef[]> = {
   letterhead: [
     ...COMPANY_FIELDS,
-    { name: 'document_title', label: 'Document name (what you call the document when you create it)' },
+    { name: 'document_title', label: 'Document name' },
     { name: 'document_date', label: 'Date' },
-    { name: 'document_body', label: 'Where the text you type goes (put it alone in a row; the rows below it become the bottom of the page)' },
+    { name: 'document_body', label: 'Typed text (alone in a row)' },
   ],
   payslip: [
     ...COMPANY_FIELDS,
     { name: 'employee_name', label: 'Employee name' },
     { name: 'employee_code', label: 'Employee ID' },
-    { name: 'employee_designation', label: 'Designation (job title)' },
+    { name: 'employee_designation', label: 'Job title' },
     { name: 'employee_department', label: 'Department' },
-    { name: 'employee_id_no', label: 'National ID number (full)' },
-    { name: 'employee_id_no_masked', label: 'National ID number (masked, e.g. •••••567A)' },
+    { name: 'employee_id_no', label: 'ID number' },
+    { name: 'employee_id_no_masked', label: 'ID number (masked)' },
     { name: 'bank_name', label: 'Bank name' },
-    { name: 'bank_account', label: 'Bank account number (full)' },
-    { name: 'bank_account_masked', label: 'Bank account number (masked, e.g. ••••6789)' },
-    { name: 'period', label: 'Pay period (e.g. August 2026)' },
+    { name: 'bank_account', label: 'Bank account no.' },
+    { name: 'bank_account_masked', label: 'Bank account no. (masked)' },
+    { name: 'period', label: 'Pay period' },
     { name: 'pay_date', label: 'Pay date' },
     { name: 'gross_pay', label: 'Gross pay' },
     { name: 'total_deductions', label: 'Total deductions' },
     { name: 'net_pay', label: 'Net pay' },
-    { name: 'total_employer', label: 'Total employer contributions' },
-    { name: 'paid_on_behalf', label: 'Paid by the company on the employee’s behalf' },
+    { name: 'total_employer', label: 'Employer contributions' },
+    { name: 'paid_on_behalf', label: 'Paid on behalf' },
     { name: 'cpf_employee', label: 'Employee CPF' },
     { name: 'cpf_employer', label: 'Employer CPF' },
-    { name: 'cpf_total', label: 'Total CPF contribution (employee + employer)' },
+    { name: 'cpf_total', label: 'CPF total' },
     { name: 'mpf_employer', label: 'Employer MPF' },
     { name: 'mpf_employee', label: 'Employee MPF' },
-    { name: 'mpf_total', label: 'Total MPF contribution (employee + employer)' },
-    { name: 'sdl', label: 'SDL (Skills Development Levy, paid by the company)' },
-    { name: 'shg_name', label: 'Self-help group name (CDAC / SINDA / MBMF / ECF)' },
-    { name: 'shg_amount', label: 'Self-help group amount' },
+    { name: 'mpf_total', label: 'MPF total' },
+    { name: 'sdl', label: 'SDL' },
+    { name: 'shg_name', label: 'Self-help group' },
+    { name: 'shg_amount', label: 'Self-help amount' },
   ],
   invoice: [
     ...COMPANY_FIELDS,
-    { name: 'document_title', label: 'Document title (INVOICE / QUOTATION / CREDIT NOTE)' },
+    { name: 'document_title', label: 'Document title', hidden: true },
     { name: 'invoice_no', label: 'Invoice number' },
-    { name: 'reference', label: 'Reference / PO number' },
-    { name: 'company_gst_no', label: 'Our tax registration no. (GST / VAT)' },
+    { name: 'reference', label: 'Reference / PO no.' },
+    { name: 'company_gst_no', label: 'Our tax no.' },
     { name: 'invoice_date', label: 'Invoice date' },
     { name: 'due_date', label: 'Due date' },
     { name: 'payment_terms', label: 'Payment terms' },
     { name: 'customer_name', label: 'Customer name' },
     { name: 'customer_address', label: 'Customer address' },
-    { name: 'delivery_name', label: 'Delivery name (who it is delivered to)' },
-    { name: 'delivery_address', label: 'Delivery address (invoices with products)' },
-    { name: 'deliver_to', label: 'Delivery address with a “Deliver to” heading (empty when there is none)' },
-    { name: 'customer_contact', label: 'Customer person in charge' },
+    { name: 'delivery_name', label: 'Delivery name' },
+    { name: 'delivery_address', label: 'Delivery address' },
+    { name: 'deliver_to', label: 'Deliver to (heading, name and address)', hidden: true },
+    { name: 'customer_contact', label: 'Customer contact' },
     { name: 'customer_phone', label: 'Customer phone' },
     { name: 'customer_email', label: 'Customer email' },
-    { name: 'customer_website', label: 'Customer website' },
-    { name: 'subtotal', label: 'Subtotal (before discount)' },
+    { name: 'customer_website', label: 'Customer website', hidden: true },
+    { name: 'subtotal', label: 'Subtotal' },
     { name: 'total_discount', label: 'Total discount' },
     { name: 'subtotal_after_discount', label: 'Subtotal after discount' },
     { name: 'tax', label: 'Tax' },
     { name: 'total', label: 'Total' },
-    { name: 'amount_paid', label: 'Amount paid so far' },
+    { name: 'amount_paid', label: 'Amount paid' },
     { name: 'balance_due', label: 'Balance due' },
     { name: 'notes', label: 'Notes' },
-    { name: 'terms', label: 'Terms & conditions' },
-    { name: 'bank_details', label: 'Bank / payment details' },
-    { name: 'payment_account', label: 'Payment name (which payment details are shown)' },
+    { name: 'terms', label: 'Terms' },
+    { name: 'bank_details', label: 'Payment details (text)', hidden: true },
+    { name: 'payment_account', label: 'Payment name' },
   ],
   soa: [
     ...COMPANY_FIELDS,
-    { name: 'document_title', label: 'Document title (STATEMENT OF ACCOUNT)' },
-    { name: 'company_gst_no', label: 'Our tax registration no. (GST / VAT)' },
-    { name: 'statement_no', label: 'Statement number (given when printed or downloaded)' },
+    { name: 'document_title', label: 'Document title' },
+    { name: 'company_gst_no', label: 'Our tax no.' },
+    { name: 'statement_no', label: 'Statement no.' },
     { name: 'statement_date', label: 'Statement date' },
-    { name: 'period', label: 'Period covered (e.g. 1 Jan 2026 to 31 Mar 2026)' },
-    { name: 'payment_terms', label: 'Payment terms (the customer’s, e.g. 30 days)' },
-    { name: 'period_from', label: 'Period start date' },
-    { name: 'period_to', label: 'Period end date' },
+    { name: 'period', label: 'Period' },
+    { name: 'payment_terms', label: 'Payment terms' },
+    { name: 'period_from', label: 'Period start date', hidden: true },
+    { name: 'period_to', label: 'Period end date', hidden: true },
     { name: 'customer_name', label: 'Customer name' },
     { name: 'customer_address', label: 'Customer address' },
-    { name: 'customer_contact', label: 'Customer person in charge' },
+    { name: 'customer_contact', label: 'Customer contact' },
     { name: 'customer_phone', label: 'Customer phone' },
     { name: 'customer_email', label: 'Customer email' },
     { name: 'opening_balance', label: 'Balance brought forward' },
-    { name: 'total_charges', label: 'Total invoiced in the period' },
-    { name: 'total_credits', label: 'Total paid and credited in the period' },
-    { name: 'closing_balance', label: 'Amount due (closing balance)' },
+    { name: 'total_charges', label: 'Invoiced in period' },
+    { name: 'total_credits', label: 'Paid / credited in period' },
+    { name: 'closing_balance', label: 'Amount due' },
     { name: 'overdue_amount', label: 'Overdue amount' },
-    { name: 'age_current', label: 'Ageing: not yet due' },
-    { name: 'age_1_30', label: 'Ageing: 1–30 days overdue' },
-    { name: 'age_31_60', label: 'Ageing: 31–60 days overdue' },
-    { name: 'age_61_90', label: 'Ageing: 61–90 days overdue' },
-    { name: 'age_90_plus', label: 'Ageing: over 90 days overdue' },
+    { name: 'age_current', label: 'Ageing: current' },
+    { name: 'age_1_30', label: 'Ageing: 1–30 days' },
+    { name: 'age_31_60', label: 'Ageing: 31–60 days' },
+    { name: 'age_61_90', label: 'Ageing: 61–90 days' },
+    { name: 'age_90_plus', label: 'Ageing: 90+ days' },
     { name: 'notes', label: 'Notes' },
-    { name: 'bank_details', label: 'Bank / payment details' },
-    { name: 'payment_account', label: 'Payment name (which payment details are shown)' },
+    { name: 'bank_details', label: 'Payment details (text)', hidden: true },
+    { name: 'payment_account', label: 'Payment name' },
   ],
 };
 
 const nameAmount = (list: string, what: string): FieldDef[] => [
-  { name: `${list}.name`, label: `${what} name` },
-  { name: `${list}.amount`, label: `${what} amount` },
+  { name: `${list}.name`, label: 'Name' },
+  { name: `${list}.amount`, label: 'Amount' },
 ];
 
 export const DOC_LISTS: Record<DocKind, ListDef[]> = {
@@ -136,35 +137,35 @@ export const DOC_LISTS: Record<DocKind, ListDef[]> = {
     { name: 'deductions', label: 'Deductions', fields: nameAmount('deductions', 'Deduction') },
     { name: 'employer', label: 'Employer contributions', fields: nameAmount('employer', 'Employer contribution') },
     {
-      name: 'statutory', label: 'Statutory schemes (CPF, SDL, CDAC…)', fields: [
+      name: 'statutory', label: 'Statutory schemes', fields: [
         { name: 'statutory.name', label: 'Scheme name' },
-        { name: 'statutory.employee', label: 'Scheme – employee share' },
-        { name: 'statutory.employer', label: 'Scheme – employer share' },
-        { name: 'statutory.total', label: 'Scheme – total' },
+        { name: 'statutory.employee', label: 'Employee share' },
+        { name: 'statutory.employer', label: 'Employer share' },
+        { name: 'statutory.total', label: 'Total' },
       ],
     },
   ],
   invoice: [
     {
       name: 'lines', label: 'Invoice lines', fields: [
-        { name: 'lines.no', label: 'Line number' },
-        { name: 'lines.description', label: 'Line description' },
-        { name: 'lines.qty', label: 'Line quantity' },
-        { name: 'lines.unit_price', label: 'Line unit price' },
-        { name: 'lines.discount', label: 'Line discount' },
-        { name: 'lines.amount', label: 'Line amount' },
+        { name: 'lines.no', label: 'No.' },
+        { name: 'lines.description', label: 'Description' },
+        { name: 'lines.qty', label: 'Quantity' },
+        { name: 'lines.unit_price', label: 'Unit price' },
+        { name: 'lines.discount', label: 'Discount' },
+        { name: 'lines.amount', label: 'Amount' },
       ],
     },
     {
       name: 'payment', label: 'Payment details', fields: [
-        { name: 'payment.label', label: 'Payment detail label' },
-        { name: 'payment.value', label: 'Payment detail value' },
+        { name: 'payment.label', label: 'Label' },
+        { name: 'payment.value', label: 'Value' },
       ],
     },
     {
       name: 'discounts', label: 'Discounts', fields: [
-        { name: 'discounts.name', label: 'Discount name' },
-        { name: 'discounts.amount', label: 'Discount amount' },
+        { name: 'discounts.name', label: 'Name' },
+        { name: 'discounts.amount', label: 'Amount' },
       ],
     },
   ],
@@ -172,19 +173,19 @@ export const DOC_LISTS: Record<DocKind, ListDef[]> = {
     {
       name: 'rows', label: 'Statement lines', fields: [
         { name: 'rows.date', label: 'Date' },
-        { name: 'rows.type', label: 'Type (Invoice / Credit note / Payment)' },
+        { name: 'rows.type', label: 'Type' },
         { name: 'rows.number', label: 'Document number' },
         { name: 'rows.reference', label: 'Reference' },
         { name: 'rows.description', label: 'Description' },
-        { name: 'rows.debit', label: 'Charge (invoiced)' },
-        { name: 'rows.credit', label: 'Credit (paid or credited)' },
+        { name: 'rows.debit', label: 'Debit' },
+        { name: 'rows.credit', label: 'Credit' },
         { name: 'rows.balance', label: 'Running balance' },
       ],
     },
     {
       name: 'payment', label: 'Payment details', fields: [
-        { name: 'payment.label', label: 'Payment detail label' },
-        { name: 'payment.value', label: 'Payment detail value' },
+        { name: 'payment.label', label: 'Label' },
+        { name: 'payment.value', label: 'Value' },
       ],
     },
   ],
@@ -193,9 +194,9 @@ export const DOC_LISTS: Record<DocKind, ListDef[]> = {
 /** The fields offered for this company's country: CPF, SDL and self-help groups only in Singapore. */
 export function docFields(kind: DocKind, country?: string | null): FieldDef[] {
   return DOC_FIELDS[kind]
-    .filter(f => (isSG(country) || !SG_ONLY_FIELDS.has(f.name)) && (isHK(country) || !HK_ONLY_FIELDS.has(f.name)))
+    .filter(f => !f.hidden && (isSG(country) || !SG_ONLY_FIELDS.has(f.name)) && (isHK(country) || !HK_ONLY_FIELDS.has(f.name)))
     .map(f => f.name === 'company_reg_no' ? { ...f, label: companyRegLabel(country) }
-      : f.name === 'employee_id_no' ? { ...f, label: `${nationalIdLabel(country)} (full)` }
+      : f.name === 'employee_id_no' ? { ...f, label: `${nationalIdLabel(country)}` }
       : f.name === 'employee_id_no_masked' ? { ...f, label: `${nationalIdLabel(country)} (masked)` } : f);
 }
 
@@ -662,7 +663,7 @@ export function fieldShortName(kind: DocKind, name: string): string | null {
   if (f) return f.label.replace(/\s*\(.*\)\s*$/, '');
   for (const l of DOC_LISTS[kind]) {
     const lf = l.fields.find(x => x.name === n);
-    if (lf) return lf.label;
+    if (lf) return `${l.label}: ${lf.label}`;
   }
   // older layouts: {{line.name}} = "this row's item"
   if (n.startsWith('line.')) {
