@@ -20,6 +20,16 @@ describe('market rates', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.includes('frankfurter') ? { ok: false, json: async () => ({}) } : answer({ result: 'success', rates: { HKD: 2.12 } }))));
     expect(await marketRate('AED', 'HKD', '2025-08-22')).toBe(2.12);
   });
+  it('a Singapore-dollar company takes the MAS rate', async () => {
+    const f = vi.fn(async (url: string) => answer(url.includes('providers=MAS') ? { rates: { SGD: 0.32176 } } : { rates: { SGD: 0.5 } }));
+    vi.stubGlobal('fetch', f);
+    expect(await marketRate('MYR', 'SGD', '2026-04-15')).toBe(0.32176);
+    expect(String(f.mock.calls[0][0])).toContain('providers=MAS');
+  });
+  it('MAS has no answer: the usual services are used', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.includes('providers=MAS') ? { ok: false, json: async () => ({}) } : answer({ rates: { SGD: 0.3 } }))));
+    expect(await marketRate('MYR', 'SGD', '2026-04-15')).toBe(0.3);
+  });
   it('nothing when the services cannot be reached', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
     expect(await marketRate('USD', 'HKD', '2025-08-22')).toBeNull();
