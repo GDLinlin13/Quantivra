@@ -10,7 +10,7 @@ import type { Branding } from '../../../../services/branding';
 import { DocumentShell } from '../../../../components/DocumentShell';
 import { GridDocument, CellValue } from '../../../../components/GridDocument';
 import type { FieldValues, ListValues } from '../../../../utils/gridTemplate';
-import { A4_MODAL } from '../../../../utils/renderPdf';
+import { A4_MODAL, A4_FRAME, A4_PAGE } from '../../../../utils/renderPdf';
 import { elementsToPdf, downloadBlob, formatDocFileName } from '../../../../utils/payslipFiles';
 import { PRINT_CSS } from '../hr/PayslipView';
 import type { FinanceData } from './DocList';
@@ -65,7 +65,7 @@ export function StatementView({ soa, contact, person, company, branding, setting
 
   if (tpl?.layout?.enabled) {
     return (
-      <div id={domId} style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
+      <div id={domId} style={A4_PAGE}>
         <GridDocument template={tpl.layout} fields={fields} lists={lists} logo={branding?.logo_data_uri} />
       </div>
     );
@@ -79,7 +79,7 @@ export function StatementView({ soa, contact, person, company, branding, setting
   );
   const age = [['Not yet due', soa.ageing.current], ['1–30 days', soa.ageing.d1_30], ['31–60 days', soa.ageing.d31_60], ['61–90 days', soa.ageing.d61_90], ['Over 90 days', soa.ageing.d90plus]] as const;
   return (
-    <div id={domId} style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
+    <div id={domId} style={A4_PAGE}>
       <DocumentShell country={company?.country} branding={branding} companyName={company?.name || ''} forPrint title="STATEMENT OF ACCOUNT"
         meta={<>{number && <>{number}<br /></>}As at {fmtDate(soa.to)}<br />{fields.period}</>}
         showLogo={tpl?.showLogo ?? true} showCompanyBlock={tpl?.showCompanyBlock ?? true} footerNote={tpl?.footerNote}>
@@ -211,7 +211,7 @@ function StatementModal({ data, contactId, currency, payments, allocations, onCl
         <DatePicker value={to} allowClear={false} onChange={v => v && setTo(v)} placeholder="Statement date" />
         {from && <><Button size="small" onClick={() => month(0)}>This month</Button><Button size="small" onClick={() => month(1)}>Last month</Button></>}
       </Space>
-      <div style={{ width: 760, maxWidth: '100%' }}>
+      <div style={A4_FRAME}>
         <StatementView soa={soa} contact={contact} person={person} company={company} branding={branding} settings={settings} number={number} />
       </div>
     </Modal>

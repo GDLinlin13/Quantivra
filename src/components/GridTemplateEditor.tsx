@@ -8,7 +8,7 @@ import {
 } from '@ant-design/icons';
 import {
   key, colName, coveredSet, mergeAt, normRange, expandRange, mergeRange, unmergeRange, insertRow, deleteRow, insertCol, deleteCol,
-  blankTemplate, resetSizes, styleRange, outlineRange, isLogoCell, rowUsesList, AUTO_REPEAT, moveRange, copyBlock, pasteBlock, clearArea, type Block, type GridTemplate, type GridCell, type Range,
+  blankTemplate, resetSizes, toA4, styleRange, outlineRange, isLogoCell, rowUsesList, AUTO_REPEAT, moveRange, copyBlock, pasteBlock, clearArea, type Block, type GridTemplate, type GridCell, type Range,
 } from '../utils/gridTemplate';
 import { docFields, docLists, STARTER_LAYOUTS, sampleData, fieldShortName, listExample, plainAmount, type DocKind } from '../data/documentLayouts';
 import { GridDocument, cellStyle, LogoImg, spanHeight } from './GridDocument';
@@ -329,7 +329,7 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
             onConfirm={() => { commit({ ...blankTemplate(), enabled: t.enabled }); setAnchor({ r: 0, c: 0 }); setFocus({ r: 0, c: 0 }); }}>
             <Button size="small" icon={<ClearOutlined />} danger>Clear everything</Button>
           </Popconfirm>
-                <Popconfirm title="Replace this layout with the starter layout?" description="Your current layout will be lost (you can still Undo)." onConfirm={() => commit({ ...STARTER_LAYOUTS[kind](country, branding), enabled: t.enabled })}>
+                <Popconfirm title="Replace this layout with the starter layout?" description="Your current layout will be lost (you can still Undo)." onConfirm={() => commit({ ...toA4(STARTER_LAYOUTS[kind](country, branding)), enabled: t.enabled })}>
             <Button size="small" icon={<ReloadOutlined />}>Start again from the starter layout</Button>
           </Popconfirm>
         </Space>
@@ -568,7 +568,7 @@ export function GridTemplateEditor({ kind, value, onChange, company, branding }:
       )}
 
       {mode === 'preview' && (
-        <div style={{ background: '#fff', borderRadius: 8, padding: 32, maxWidth: 820 }}>
+        <div style={{ background: '#fff', borderRadius: 2, padding: 38, width: 794, maxWidth: '100%', minHeight: 1123, boxSizing: 'border-box', boxShadow: '0 2px 10px rgba(0,0,0,0.4)' }}>
           <GridDocument template={t} fields={sample.fields} lists={sample.lists} logo={branding?.logo_data_uri} />
         </div>
       )}

@@ -9,7 +9,7 @@ import { GridTemplateEditor } from '../../../components/GridTemplateEditor';
 import { LetterEditor } from '../../../components/LetterEditor';
 import { STARTER_LAYOUTS, money, AMOUNT_FORMATS, plainAmount, paymentRows, paymentAccounts, type DocKind, type PaymentAccount, type PaymentLine } from '../../../data/documentLayouts';
 import { CellValue } from '../../../components/GridDocument';
-import type { GridTemplate } from '../../../utils/gridTemplate';
+import { toA4, type GridTemplate } from '../../../utils/gridTemplate';
 import { formatFileName, FILE_NAME_TOKENS, DEFAULT_FILE_NAME, DEFAULT_COMBINED_FILE_NAME, formatDocFileName, DOC_FILE_NAME_TOKENS, DEFAULT_DOC_FILE_NAME } from '../../../utils/payslipFiles';
 import { DEFAULT_STATEMENT_FILE_NAME } from './finance/Statements';
 import { nationalIdLabel } from '../../../data/countries';
@@ -82,7 +82,7 @@ export function CompanyProfilePage() {
 
   /** Pre-built or custom, then the matching editor. */
   const templateTab = (kind: DocKind, what: string, prebuilt: ReactNode, note?: string, customExtra?: ReactNode, common?: ReactNode) => {
-    const layout: GridTemplate = tpl[kind].layout || STARTER_LAYOUTS[kind](company.country, previewBranding);
+    const layout: GridTemplate = tpl[kind].layout || toA4(STARTER_LAYOUTS[kind](company.country, previewBranding));
     const setLayout = (next: GridTemplate) => setTpl(p => ({ ...p, [kind]: { ...p[kind], layout: next } }));
     return (
       <div>

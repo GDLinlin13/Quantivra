@@ -1,3 +1,4 @@
+import { A4_PAGE } from '../../../../utils/renderPdf';
 import type { Branding } from '../../../../services/branding';
 import { DocumentShell } from '../../../../components/DocumentShell';
 import { GridDocument, CellValue } from '../../../../components/GridDocument';
@@ -64,7 +65,7 @@ export function DocumentView({ doc, lines, contact, person, company, branding, s
 
   if (inv?.layout?.enabled) {
     return (
-      <div id={domId} style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
+      <div id={domId} style={A4_PAGE}>
         <GridDocument template={inv.layout} fields={fields} lists={lists} logo={branding?.logo_data_uri} />
       </div>
     );
@@ -77,7 +78,7 @@ export function DocumentView({ doc, lines, contact, person, company, branding, s
       <td style={{ textAlign: 'right', padding: '3px 6px', fontWeight: bold ? 700 : 400, color }}><CellValue text={value} /></td></tr>
   );
   return (
-    <div id={domId} style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
+    <div id={domId} style={A4_PAGE}>
       <DocumentShell country={company?.country} branding={branding} companyName={company?.name || ''} forPrint title={fields.document_title}
         meta={<>{doc.number}<br />Date {fmtDate(doc.issue_date)}{doc.due_date ? <><br />{doc.doc_type === 'quote' ? 'Valid until' : 'Due'} {fmtDate(doc.due_date)}</> : null}{doc.reference ? <><br />Ref {doc.reference}</> : null}</>}
         showLogo={inv?.showLogo ?? true} showCompanyBlock={inv?.showCompanyBlock ?? true} footerNote={inv?.footerNote}>

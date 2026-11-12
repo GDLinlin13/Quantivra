@@ -147,7 +147,7 @@ describe('reset sizes / clear everything', () => {
   it('puts every column and row back to the standard size and keeps the text', () => {
     const t = { ...blank0(4, 4), cols: [10, 300, 55, 90], rows: [{ h: 50 }, { h: 12, repeat: 'lines' }, {}, { h: 99 }], cells: { '0:0': { v: 'Hello', b: true } } };
     const r = resetSizes(t);
-    expect(r.cols).toEqual([170, 170, 170, 170]);
+    expect(r.cols).toEqual([180, 180, 180, 180]);
     expect(r.rows).toEqual([{}, { repeat: 'lines' }, {}, {}]);
     expect(r.cells).toEqual({ '0:0': { v: 'Hello', b: true } });
   });

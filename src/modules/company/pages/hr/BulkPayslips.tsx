@@ -120,9 +120,9 @@ export function BulkPayslips({ open, onClose, run, slips, company, branding }: {
       {!ready && <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>Preparing payslips…</Text>}
 
       {/* The payslips are drawn off-screen at A4 width, then printed or turned into PDFs. */}
-      <div ref={area} aria-hidden style={{ position: 'fixed', left: -10000, top: 0, width: 760, pointerEvents: 'none' }}>
+      <div ref={area} aria-hidden style={{ position: 'fixed', left: -10000, top: 0, width: 718, pointerEvents: 'none' }}>
         {ready && chosen.map(s => (
-          <div key={s.id} data-slip={s.id} style={{ width: 760, background: '#fff' }}>
+          <div key={s.id} data-slip={s.id} style={{ width: 718, background: '#fff' }}>
             <PayslipView slip={s} company={company} branding={branding} period={run}
               employee={employees!.get(Number(s.employee_id)) ?? null} domId={`payslip-${s.id}`} />
           </div>

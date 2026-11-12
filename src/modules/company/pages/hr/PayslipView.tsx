@@ -1,3 +1,4 @@
+import { A4_PAGE } from '../../../../utils/renderPdf';
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import dayjs from 'dayjs';
@@ -116,14 +117,14 @@ export function PayslipView({ slip, company, branding, period, employee, domId =
       })),
     };
     return (
-      <div id={domId} style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
+      <div id={domId} style={A4_PAGE}>
         <GridDocument template={layout} fields={fields} lists={lists} logo={branding?.logo_data_uri} />
       </div>
     );
   }
 
   return (
-    <div id={domId} style={{ background: '#fff', borderRadius: 8, padding: 24 }}>
+    <div id={domId} style={A4_PAGE}>
       <DocumentShell
         branding={branding} companyName={company?.name || ''} forPrint
         title="PAYSLIP"

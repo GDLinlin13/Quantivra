@@ -132,7 +132,7 @@ export function LetterEditor({ companyId, company, branding, initial, onClose, o
         </div>
 
         <div style={{ maxHeight: '60vh', overflow: 'auto', background: '#3a3f45', padding: 16, borderRadius: 6 }}>
-          <div ref={page} style={{ background: '#fff', color: '#111', borderRadius: 2, padding: 28, width: 794, maxWidth: '100%', margin: '0 auto', minHeight: 600 }}>
+          <div ref={page} style={{ background: '#fff', color: '#111', borderRadius: 2, padding: 24, width: 718, maxWidth: '100%', margin: '0 auto', minHeight: 1047, boxSizing: 'border-box' }}>
             {custom ? (
               <>
                 <div ref={head}><GridDocument template={custom.header} fields={fields} lists={{}} logo={branding.logo_data_uri} /></div>

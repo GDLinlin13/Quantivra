@@ -42,8 +42,20 @@ export function colName(c: number): string {
   return s;
 }
 
+/** The width of an A4 page inside its 10 mm margins, in screen pixels (794 px page): templates are designed at this scale. */
+export const A4_CONTENT = 718;
+
+/** The same layout with its columns widened or narrowed together so the page is exactly A4 wide (the proportions stay). */
+export function toA4(t: GridTemplate): GridTemplate {
+  const sum = t.cols.reduce((a, b) => a + b, 0);
+  if (!sum || Math.abs(sum - A4_CONTENT) < 1) return t;
+  const cols = t.cols.map(w => Math.max(20, Math.round((w * A4_CONTENT) / sum)));
+  cols[cols.length - 1] += A4_CONTENT - cols.reduce((a, b) => a + b, 0);
+  return { ...t, cols };
+}
+
 export function blankTemplate(rows = 20, cols = 6): GridTemplate {
-  return { enabled: false, cols: Array(cols).fill(Math.round(680 / cols)), rows: Array.from({ length: rows }, () => ({})), cells: {} };
+  return { enabled: false, cols: Array(cols).fill(Math.round(A4_CONTENT / cols)), rows: Array.from({ length: rows }, () => ({})), cells: {} };
 }
 
 /** The row that holds {{document_body}} (where the text you type goes), or -1. */
@@ -68,7 +80,7 @@ export function splitAtBody(t: GridTemplate): { header: GridTemplate; footer: Gr
 }
 
 /** Every column the same width again and every row its standard height; the text and formatting stay. */
-export function resetSizes(t: GridTemplate, width = 680): GridTemplate {
+export function resetSizes(t: GridTemplate, width = A4_CONTENT): GridTemplate {
   return { ...t, cols: t.cols.map(() => Math.round(width / t.cols.length)), rows: t.rows.map(({ h: _h, ...rest }) => rest) };
 }
 
