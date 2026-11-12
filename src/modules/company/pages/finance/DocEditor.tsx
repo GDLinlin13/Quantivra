@@ -325,8 +325,8 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
       const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}),
         // the delivery address goes with a document that has products (migration 053)
         // left blank, they follow the customer's own name and address
-        ...(wantsAddress ? (() => { const c = contacts.find(x => x.id === doc.contact_id); return { delivery_name: (doc.delivery_name || '').trim() || c?.name || null, delivery_address: (doc.delivery_address || '').trim() || c?.address || null, delivery_contact: (doc.delivery_contact || '').trim() || null }; })()
-          : doc.delivery_address || doc.delivery_name || 'delivery_address' in doc ? { delivery_address: null, delivery_name: null, delivery_contact: null } : {}) } as any, toSave, { keepNumber: typedNumber });
+        ...(wantsAddress ? (() => { const c = contacts.find(x => x.id === doc.contact_id); return { delivery_name: (doc.delivery_name || '').trim() || c?.name || null, delivery_address: (doc.delivery_address || '').trim() || c?.address || null }; })()
+          : doc.delivery_address || doc.delivery_name || 'delivery_address' in doc ? { delivery_address: null, delivery_name: null } : {}) } as any, toSave, { keepNumber: typedNumber });
       // pieces bought: one piece per line, with its weight
       if (!sales && lines.some(isPieces)) await catalogService.syncBillPieces(companyId, id, doc.issue_date!, lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes);
       // An expense paid on the spot (from a bank / cash account) is recorded as paid straight away.
@@ -459,10 +459,9 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
                 }}>Save this address to the customer</Button>
               )}
             </Space>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12, alignItems: 'start' }}>
               <Input placeholder={contacts.find(x => x.id === doc.contact_id)?.name || ''} value={doc.delivery_name || ''} onChange={e => set({ delivery_name: e.target.value })} />
-              <Input placeholder="Contact person" value={doc.delivery_contact || ''} onChange={e => set({ delivery_contact: e.target.value })} />
-              <Input.TextArea style={{ gridColumn: '1 / span 2' }} autoSize={{ minRows: 2, maxRows: 5 }} placeholder={contacts.find(x => x.id === doc.contact_id)?.address || ''} value={doc.delivery_address || ''} onChange={e => set({ delivery_address: e.target.value })} />
+              <Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} placeholder={contacts.find(x => x.id === doc.contact_id)?.address || ''} value={doc.delivery_address || ''} onChange={e => set({ delivery_address: e.target.value })} />
             </div>
           </div>
         )}
