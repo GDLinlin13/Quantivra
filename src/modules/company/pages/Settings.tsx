@@ -10,6 +10,7 @@ import { currencyOptions } from '../../../utils/currencies';
 import { DocumentNumbersCard } from './settings/DocumentNumbersCard';
 import { DATE_FORMATS } from '../../../utils/dateFormat';
 import { useDateFormat } from '../../../contexts/DateFormat';
+import { CompanyDetailsCard } from './settings/CompanyDetailsCard';
 import { WorkWeekHolidaysCard } from './settings/WorkWeekHolidaysCard';
 import { ChangePasswordCard } from '../../../components/ChangePasswordCard';
 
@@ -108,6 +109,7 @@ export function CompanySettingsPage() {
         </Space>
       </Card>
 
+      {companyId && <CompanyDetailsCard companyId={companyId} company={company} />}
       {companyId && <WorkWeekHolidaysCard companyId={companyId} country={company.country || 'SG'} />}
       {companyId && <DocumentNumbersCard companyId={companyId} />}
       <div style={{ marginTop: 24 }}><ChangePasswordCard /></div>

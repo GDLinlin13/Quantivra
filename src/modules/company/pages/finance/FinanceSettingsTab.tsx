@@ -43,7 +43,7 @@ export function FinanceSettingsTab({ companyId, country, settings, onSaved }: { 
           <Input.TextArea autoSize={{ minRows: 3, maxRows: 8 }} value={s.invoiceTerms || ''} onChange={e => setS({ ...s, invoiceTerms: e.target.value })} />
         </Form.Item>
         <Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
-          Payment terms, bank details and the look of invoices are in Company Profile → Invoice Template. Invoice and quotation numbers follow Settings → Document numbers.
+          Payment terms, bank details and the look of invoices are in Document Templates → Invoice Template. Invoice and quotation numbers follow Settings → Document numbers.
         </Text>
         {access.canWrite('finance') && <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>Save</Button>}
       </Form>
