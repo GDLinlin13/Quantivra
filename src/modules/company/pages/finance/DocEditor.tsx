@@ -321,6 +321,45 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
         }
       }
     }
+    // an invoice at a different price from the customer's price list: ask whether the list changes too
+    let listUpdate: { listId: number; prices: { item_id: number; class_id: number | null; price: number }[] } | null = null;
+    if (sales && (docType === 'invoice' || docType === 'quote') && doc.contact_id) {
+      const listId = contacts.find(c => c.id === doc.contact_id)?.price_list_id ?? stdId;
+      const diffs = new Map<string, { item_id: number; class_id: number | null; name: string; old: number | undefined; price: number; lines: number[] }>();
+      if (listId) toSave.forEach((l, ix) => {
+        const it = l.item_id ? items.find(x => x.id === l.item_id) : undefined;
+        if (!it || l.price_one_off || !(Number(l.unit_price) > 0) || (it.currency || currency) !== docCur) return;
+        if (l.id && loadedPrices.current.get(l.id) === Number(l.unit_price)) return;
+        const cls = it.stock_mode === 'pieces' ? classOf(classes.filter(c => c.item_id === it.id), weightOf(l)) : null;
+        const old = listPrice(plRows, listId, it.id, cls?.id ?? null);
+        const expected = old ?? sellPrice(it, doc.contact_id, cls?.id ?? null) ?? (Number(it.sale_price) || 0);
+        if (Math.abs(Number(l.unit_price) - expected) <= 0.005) return;
+        const k = `${it.id}:${cls?.id ?? 0}`;
+        const d = diffs.get(k);
+        diffs.set(k, { item_id: it.id, class_id: cls?.id ?? null, name: cls ? `${it.name} (${classLabel(cls)})` : it.name, old: old ?? expected, price: Number(l.unit_price), lines: [...(d?.lines || []), ix] });
+      });
+      if (diffs.size) {
+        const listName = (await priceListService.lists(companyId).catch(() => []) as any[]).find(x => x.id === listId)?.name || 'price list';
+        const all = [...diffs.values()];
+        const update = await new Promise<boolean>(resolve => { Modal.confirm({
+          title: `Prices changed from the ${listName} price list`, okText: 'Yes, update the price list', cancelText: 'No, this invoice only', width: 580,
+          content: (
+            <div>
+              {all.map((c, i) => (
+                <div key={i} style={{ fontSize: 13 }}>
+                  <b>{c.name}</b>: {docCur} {Number(c.old).toLocaleString(undefined, { maximumFractionDigits: 4 })} → <b>{c.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}</b>
+                </div>
+              ))}
+              <div style={{ marginTop: 8 }}>Update the {listName} price list for next time?</div>
+              <div style={{ color: '#999', fontSize: 12 }}>No: this invoice keeps its price, but the price list stays as it was.</div>
+            </div>
+          ),
+          onOk: () => resolve(true), onCancel: () => resolve(false),
+        }); });
+        if (update) listUpdate = { listId: listId!, prices: all.map(c => ({ item_id: c.item_id, class_id: c.class_id, price: c.price })) };
+        else { const oneOff = new Set(all.flatMap(c => c.lines)); toSave = toSave.map((l, ix) => (oneOff.has(ix) ? { ...l, price_one_off: true } : l)); }
+      }
+    }
     setSaving(true);
     try {
       const id = await docService.save(companyId, { ...doc, ...(foreign ? { fx_rate: fx } : {}), ...(typedNumber ? { number: (doc.number || '').trim() } : {}), doc_type: docType, discounts, ...(status ? { status: status as any } : {}),
@@ -328,6 +367,7 @@ export function DocEditor({ companyId, docType: startType, docId, contacts: cont
         // left blank stays blank (the printed invoice then shows the customer's name and address)
         ...(wantsAddress ? { delivery_name: (doc.delivery_name || '').trim() || null, delivery_address: (doc.delivery_address || '').trim() || null }
           : doc.delivery_address || doc.delivery_name || 'delivery_address' in doc ? { delivery_address: null, delivery_name: null } : {}) } as any, toSave, { keepNumber: typedNumber });
+      if (listUpdate) { await priceListService.setPrices(companyId, listUpdate.listId, listUpdate.prices); priceListService.rows(companyId).then(setPlRows).catch(() => null); }
       // pieces bought: one piece per line, with its weight
       if (!sales && lines.some(isPieces)) await catalogService.syncBillPieces(companyId, id, doc.issue_date!, lines.map(l => (isPieces(l) ? { ...l, weight: weightOf(l) } : l)), items, classes);
       // An expense paid on the spot (from a bank / cash account) is recorded as paid straight away.
