@@ -270,8 +270,8 @@ export function CompanyProfilePage() {
             </div>
             {b.lines.map((r, li) => (
               <div key={li} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                <Input style={{ width: 170 }} value={r.label} placeholder="Payment Label" onChange={e => setBankLine(bi, li, { label: e.target.value })} />
-                <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} style={{ flex: 1 }} value={r.value} placeholder="Payment Value" onChange={e => setBankLine(bi, li, { value: e.target.value })} />
+                <Input style={{ width: 170 }} value={r.label} placeholder={li === 0 ? 'Payment Label' : undefined} onChange={e => setBankLine(bi, li, { label: e.target.value })} />
+                <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} style={{ flex: 1 }} value={r.value} placeholder={li === 0 ? 'Payment Value' : undefined} onChange={e => setBankLine(bi, li, { value: e.target.value })} />
                 <Button icon={<DeleteOutlined />} onClick={() => setBank(bi, { lines: b.lines.filter((_, j) => j !== li) })} />
               </div>
             ))}
