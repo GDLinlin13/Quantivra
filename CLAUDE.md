@@ -24,6 +24,10 @@ Staff claims: an approver approves, then Finance approves (Finance → Payables 
 the company's currency that Finance has not recorded is paid back in the next payroll run as a reimbursement (no CPF) and
 leaves Finance's list; one Finance recorded first never goes into payroll. The books show it under its category account.
 
+## Vercel previews
+Branch pushes are skipped on purpose (Vercel → Settings → Git → Ignored Build Step), so only merges into `master` deploy and
+pull requests have no Vercel check: run `npm test` and `npm run build`, merge, then confirm the production deployment.
+
 ## Commands
 - `npm test` — vitest (payroll engine + server function tests)
 - `npm run build` — `tsc && vite build`
