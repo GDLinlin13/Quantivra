@@ -315,15 +315,6 @@ export function CompanyProfilePage() {
   return (
     <div>
       <Title level={4} style={{ color: '#f0ede6', marginBottom: 16 }}>Document Templates</Title>
-      <Card size="small" style={{ ...panel, marginBottom: 16, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>For all templates</span>}>
-        <Form layout="vertical" size="small" component={false}>
-          <Form.Item label="Accent colour"><ColorPicker value={accent} onChange={c => setAccent(c.toHexString())} showText /></Form.Item>
-          <Form.Item label="Default document footer">
-            <Input.TextArea rows={2} value={vals.footer_note || ''} onChange={e => setVals(p => ({ ...p, footer_note: e.target.value }))} placeholder="e.g. This is a computer-generated document." />
-          </Form.Item>
-        </Form>
-        <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={saveLook}>Save</Button>
-      </Card>
       <Tabs
         items={[
           {
@@ -349,6 +340,28 @@ export function CompanyProfilePage() {
               <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 760 }} title={<span style={{ color: '#f0ede6' }}>Statement settings</span>}>
                 {soaSettings}
               </Card>),
+          },
+          {
+            key: 'letterhead', label: 'Letterhead', forceRender: true,
+            children: twoCol(
+              <Card size="small" style={panel} title={<span style={{ color: '#f0ede6' }}>Letterhead</span>}>
+                <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12, display: 'block', marginBottom: 12 }}>
+                  The top of every document: your logo and company details (Company Settings), the accent colour, and the footer used when a template has none of its own.
+                </Text>
+                <Form layout="vertical" size="small" component={false}>
+                  <Form.Item label="Accent colour"><ColorPicker value={accent} onChange={c => setAccent(c.toHexString())} showText /></Form.Item>
+                  <Form.Item label="Default document footer">
+                    <Input.TextArea rows={2} value={vals.footer_note || ''} onChange={e => setVals(p => ({ ...p, footer_note: e.target.value }))} placeholder="e.g. This is a computer-generated document." />
+                  </Form.Item>
+                </Form>
+                <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={saveLook}>Save</Button>
+              </Card>,
+              previewBox('Preview — how it looks at the top of your documents', (
+                <DocumentShell country={company?.country} branding={previewBranding} companyName={company.name} title="DOCUMENT" meta={<>Reference<br />Date</>} forPrint footerNote={vals.footer_note}>
+                  <div style={{ color: '#999', fontSize: 12, padding: '12px 0' }}>Document content goes here.</div>
+                </DocumentShell>
+              )),
+            ),
           },
         ]}
       />
