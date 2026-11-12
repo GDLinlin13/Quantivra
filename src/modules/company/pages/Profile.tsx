@@ -190,54 +190,6 @@ export function CompanyProfilePage() {
     )),
   );
 
-  const fileCtx = { name: 'Alice Tan', id: 'EMP-001', designation: 'Senior Designer', year: 2026, month: 5, company: v.legal_name || company.name };
-  const amountFormatCard = (kind: DocKind) => (
-    <Card size="small" style={{ ...panel, marginBottom: 12 }} title={<span style={{ color: '#f0ede6' }}>Amount format</span>}>
-      <Space wrap>
-        <div style={{ width: 520, maxWidth: '100%' }}>{amountSelect(kind)}</div>
-        <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
-          How amounts appear on {kind === 'payslip' ? 'payslips' : kind === 'soa' ? 'statements' : 'invoices'}, e.g. {plainAmount(money(1234.5, cur, tpl[kind].amountFormat))}
-        </Text>
-      </Space>
-    </Card>
-  );
-
-  const fileNamesCard = (
-    <Card size="small" style={{ ...panel, marginBottom: 12 }} title={<span style={{ color: '#f0ede6' }}>Download file names</span>}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
-        <div>
-          <Text style={{ color: 'rgba(240,237,230,0.8)' }}>Each payslip</Text>
-          <Input value={tpl.payslip.fileName ?? ''} placeholder={DEFAULT_FILE_NAME} style={{ marginTop: 4 }}
-            onChange={e => setTplField('payslip', 'fileName', e.target.value)} />
-          <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>e.g. {formatFileName(tpl.payslip.fileName, fileCtx)}</Text>
-        </div>
-        <div>
-          <Text style={{ color: 'rgba(240,237,230,0.8)' }}>All payslips in one file (or the .zip)</Text>
-          <Input value={tpl.payslip.combinedFileName ?? ''} placeholder={DEFAULT_COMBINED_FILE_NAME} style={{ marginTop: 4 }}
-            onChange={e => setTplField('payslip', 'combinedFileName', e.target.value)} />
-          <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>e.g. {formatFileName(tpl.payslip.combinedFileName, fileCtx, DEFAULT_COMBINED_FILE_NAME)}</Text>
-        </div>
-      </div>
-      <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(240,237,230,0.6)' }}>
-        Click to add:{' '}
-        {FILE_NAME_TOKENS.map(tk => (
-          <Tooltip key={tk.token} title={`Adds to “Each payslip”. ${tk.label}`}>
-            <Tag style={{ cursor: 'pointer', marginBottom: 4 }}
-              onClick={() => setTplField('payslip', 'fileName', `${(tpl.payslip.fileName ?? DEFAULT_FILE_NAME)}${tk.token}`)}>
-              {tk.token} <span style={{ opacity: 0.6 }}>{tk.label}</span>
-            </Tag>
-          </Tooltip>
-        ))}
-      </div>
-    </Card>
-  );
-
-  const amountSelect = (kind: DocKind) => (
-    <Select style={{ width: '100%', maxWidth: 520 }} popupMatchSelectWidth={false} value={tpl[kind].amountFormat || 'code'}
-      onChange={x => setTplField(kind, 'amountFormat', x)}
-      options={AMOUNT_FORMATS.map(f => ({ value: f.value, label: f.value.startsWith('accounting') ? f.label.replace('$', f.value === 'accounting_code' ? cur : money(0, cur, 'symbol').replace(/[0-9.,]/g, '')) : f.label.replace(/ — .*$/, '') + ' — ' + money(1234.5, cur, f.value) }))} />
-  );
-
   // Bank accounts shown as payment details; older single list becomes the first account.
   const banks: PaymentAccount[] = paymentAccounts(tpl.invoice).length
     ? paymentAccounts(tpl.invoice)
@@ -249,13 +201,6 @@ export function CompanyProfilePage() {
 
   const soaSettings = (
     <Form layout="vertical" component={false}>
-      <Form.Item label="Amount format" style={{ marginTop: 8 }}>{amountSelect('soa')}</Form.Item>
-      <Form.Item label="Download file name" style={{ marginBottom: 12 }}>
-        <Input value={tpl.soa.fileName ?? ''} placeholder={DEFAULT_STATEMENT_FILE_NAME} onChange={e => setTplField('soa', 'fileName', e.target.value)} />
-        <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
-          e.g. {formatDocFileName(tpl.soa.fileName || DEFAULT_STATEMENT_FILE_NAME, { type: 'Statement of account', number: '', customer: 'Sample Customer Limited', reference: '', date: '2026-08-31', company: v.legal_name || company.name })}
-        </Text>
-      </Form.Item>
       <Form.Item label="Footer note" style={{ marginBottom: 0 }}>
         <Input.TextArea rows={2} value={tpl.soa.footerNote} onChange={e => setTplField('soa', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Company Settings" />
       </Form.Item>
@@ -264,25 +209,8 @@ export function CompanyProfilePage() {
 
   const invoiceSettings = (
     <Form layout="vertical" component={false}>
-      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 16, marginTop: 8 }}>
-        <Form.Item label="Payment terms (days)">
-          <InputNumber min={0} style={{ width: '100%' }} value={tpl.invoice.paymentTermsDays} onChange={x => setTplField('invoice', 'paymentTermsDays', x ?? 30)} />
-        </Form.Item>
-        <Form.Item label="Amount format">{amountSelect('invoice')}</Form.Item>
-      </div>
-      <Form.Item label="Download file name" style={{ marginBottom: 12 }}>
-        <Input value={tpl.invoice.fileName ?? ''} placeholder={DEFAULT_DOC_FILE_NAME} onChange={e => setTplField('invoice', 'fileName', e.target.value)} />
-        <Text style={{ color: 'rgba(240,237,230,0.5)', fontSize: 12 }}>
-          e.g. {formatDocFileName(tpl.invoice.fileName, { type: 'Invoice', number: 'INV-0001', customer: 'Sample Customer Limited', reference: 'PO-123', date: '2026-06-01', company: v.legal_name || company.name })}
-        </Text>
-        <div style={{ marginTop: 6 }}>
-          {DOC_FILE_NAME_TOKENS.map(tk => (
-            <Tag key={tk.token} style={{ cursor: 'pointer', marginBottom: 4 }}
-              onClick={() => setTplField('invoice', 'fileName', `${(tpl.invoice.fileName ?? DEFAULT_DOC_FILE_NAME)}${tk.token}`)}>
-              {tk.token} <span style={{ opacity: 0.6 }}>{tk.label}</span>
-            </Tag>
-          ))}
-        </div>
+      <Form.Item label="Payment terms (days)" style={{ marginTop: 8, maxWidth: 200 }}>
+        <InputNumber min={0} style={{ width: '100%' }} value={tpl.invoice.paymentTermsDays} onChange={x => setTplField('invoice', 'paymentTermsDays', x ?? 30)} />
       </Form.Item>
       <Form.Item label="Payment details">
         {banks.map((b, bi) => (
@@ -404,7 +332,7 @@ export function CompanyProfilePage() {
               <Card size="small" style={{ ...panel, marginBottom: 12, maxWidth: 640 }} title={<span style={{ color: '#f0ede6' }}>Payslip footer (the {'{{footer_note}}'} field)</span>}>
                 <Input.TextArea rows={2} value={tpl.payslip.footerNote} onChange={e => setTplField('payslip', 'footerNote', e.target.value)} placeholder="Leave empty to use the default footer from Company Settings" />
               </Card>,
-              <>{amountFormatCard('payslip')}{fileNamesCard}</>),
+              undefined),
           },
           {
             key: 'invoice-template', label: 'Invoice Template',

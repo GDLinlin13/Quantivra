@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Card, Form, Input, Select, Button, Typography, message, Divider, Space, Tag } from 'antd';
+import { Card, Form, Input, Select, Button, Typography, message, Space, Tag, Upload } from 'antd';
+import { UploadOutlined, DeleteOutlined } from '@ant-design/icons';
 import { supabase } from '../../../utils/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { MODULES } from '../../../types';
@@ -10,7 +11,9 @@ import { currencyOptions } from '../../../utils/currencies';
 import { DocumentNumbersCard } from './settings/DocumentNumbersCard';
 import { DATE_FORMATS } from '../../../utils/dateFormat';
 import { useDateFormat } from '../../../contexts/DateFormat';
-import { CompanyDetailsCard } from './settings/CompanyDetailsCard';
+import { brandingService, fileToLogoDataUri, type Templates } from '../../../services/branding';
+import { AMOUNT_FORMATS, money, type AmountFormat } from '../../../data/documentLayouts';
+import { companyRegLabel } from '../../../data/countries';
 import { WorkWeekHolidaysCard } from './settings/WorkWeekHolidaysCard';
 
 const { Title, Text } = Typography;
@@ -21,6 +24,8 @@ export function CompanySettingsPage() {
   const [form] = Form.useForm();
   const access = useCompanyAccess();
   const dateFmt = useDateFormat();
+  const [logo, setLogo] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!companyId) return;
@@ -33,11 +38,42 @@ export function CompanySettingsPage() {
         });
       }
     });
+    // the logo and the details printed on documents, and the one amount format all documents use
+    brandingService.get(companyId).then(b => {
+      setLogo(b.logo_data_uri);
+      form.setFieldsValue({
+        legal_name: b.legal_name, registration_no: b.registration_no, address: b.address, phone: b.phone, email: b.email, website: b.website,
+        amount_format: b.templates.invoice.amountFormat || b.templates.payslip.amountFormat || b.templates.soa.amountFormat || 'code',
+      });
+    }).catch(() => null);
   }, [companyId]);
 
+  const onLogo = async (file: File) => {
+    try {
+      if (file.size > 4_000_000) throw new Error('Image too large (max 4 MB)');
+      setLogo(await fileToLogoDataUri(file));
+      message.success('Logo ready — click Save to keep it');
+    } catch (e: any) { message.error(e.message); }
+    return false;
+  };
+
   const handleSave = async (values: any) => {
-    await supabase.from('companies').update(values).eq('id', companyId);
-    message.success('Settings saved');
+    const { legal_name, registration_no, address, phone, email, website, amount_format, ...companyValues } = values;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('companies').update(companyValues).eq('id', companyId);
+      if (error) throw new Error(error.message);
+      // one amount format for payslips, invoices and statements; the latest templates are read first so nothing else in them is overwritten
+      const fresh: Templates = (await brandingService.get(companyId!)).templates;
+      const af = (amount_format || 'code') as AmountFormat;
+      await brandingService.save(companyId!, {
+        legal_name: legal_name ?? null, registration_no: registration_no ?? null, address: address ?? null,
+        phone: phone ?? null, email: email ?? null, website: website ?? null, logo_data_uri: logo,
+        templates: { ...fresh, payslip: { ...fresh.payslip, amountFormat: af }, invoice: { ...fresh.invoice, amountFormat: af }, soa: { ...fresh.soa, amountFormat: af } },
+      });
+      message.success('Settings saved');
+    } catch (e: any) { message.error(e.message); }
+    setSaving(false);
   };
 
   const toggleModule = async (mod: string) => {
@@ -56,11 +92,30 @@ export function CompanySettingsPage() {
   return (
     <div>
       <Title level={4} style={{ color: '#f0ede6', marginBottom: 24 }}>Company Settings</Title>
-      <Card style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, maxWidth: 600, marginBottom: 24 }}>
-        <Form form={form} layout="vertical" onFinish={handleSave}>
+      <Card style={{ background: '#151a1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, maxWidth: 640, marginBottom: 24 }}>
+        <Form form={form} layout="vertical" onFinish={handleSave} disabled={!access.canWrite('settings')}>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ width: 120, height: 60, border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: '#fff' }}>
+              {logo ? <img src={logo} alt="logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <Text style={{ color: '#999', fontSize: 12 }}>No logo</Text>}
+            </div>
+            {access.canWrite('settings') && (
+              <Space orientation="vertical">
+                <Upload beforeUpload={onLogo} showUploadList={false} accept="image/*"><Button size="small" icon={<UploadOutlined />}>Upload logo</Button></Upload>
+                {logo && <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setLogo(null)}>Remove</Button>}
+              </Space>
+            )}
+          </div>
           <Form.Item name="name" label={<Text style={{ color: '#f0ede6' }}>Company Name</Text>}>
             <Input />
           </Form.Item>
+          <Form.Item name="legal_name" label={<Text style={{ color: '#f0ede6' }}>Legal name (on documents)</Text>}><Input /></Form.Item>
+          <Form.Item name="registration_no" label={<Text style={{ color: '#f0ede6' }}>{companyRegLabel(company.country)}</Text>}><Input /></Form.Item>
+          <Form.Item name="address" label={<Text style={{ color: '#f0ede6' }}>Address</Text>}><Input.TextArea rows={2} /></Form.Item>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Form.Item name="phone" label={<Text style={{ color: '#f0ede6' }}>Phone</Text>}><Input /></Form.Item>
+            <Form.Item name="email" label={<Text style={{ color: '#f0ede6' }}>Email</Text>}><Input /></Form.Item>
+          </div>
+          <Form.Item name="website" label={<Text style={{ color: '#f0ede6' }}>Website</Text>}><Input /></Form.Item>
           <Form.Item name="currency" label={<Text style={{ color: '#f0ede6' }}>Currency</Text>}>
             <Select showSearch optionFilterProp="label" options={currencyOptions()} />
           </Form.Item>
@@ -74,7 +129,11 @@ export function CompanySettingsPage() {
             <Select value={dateFmt.format} options={DATE_FORMATS}
               onChange={async v => { try { await dateFmt.save(v); message.success('Date format saved'); } catch (e: any) { message.error(e.message); } }} />
           </Form.Item>
-          <Button type="primary" htmlType="submit" style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
+          <Form.Item name="amount_format" label={<Text style={{ color: '#f0ede6' }}>Amount Format</Text>}>
+            <Select popupMatchSelectWidth={false}
+              options={AMOUNT_FORMATS.map(f => ({ value: f.value, label: f.value.startsWith('accounting') ? f.label.replace('$', f.value === 'accounting_code' ? (company.currency || 'SGD') : money(0, company.currency || 'SGD', 'symbol').replace(/[0-9.,]/g, '')) : f.label.replace(/ — .*$/, '') + ' — ' + money(1234.5, company.currency || 'SGD', f.value) }))} />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" loading={saving} style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
             Save
           </Button>
         </Form>
@@ -108,9 +167,8 @@ export function CompanySettingsPage() {
         </Space>
       </Card>
 
-      {companyId && <CompanyDetailsCard companyId={companyId} company={company} />}
       {companyId && <WorkWeekHolidaysCard companyId={companyId} country={company.country || 'SG'} />}
-      {companyId && <DocumentNumbersCard companyId={companyId} />}
+      {companyId && <DocumentNumbersCard companyId={companyId} companyName={company.name} />}
     </div>
   );
 }
