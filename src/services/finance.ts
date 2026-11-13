@@ -612,6 +612,26 @@ export interface JournalRow {
   lines: { id?: number; account_id: number; debit: number; credit: number; description?: string | null }[];
 }
 
+/** The fixed assets register (migration 061). */
+export const assetService = {
+  async save(companyId: number, a: Partial<import('../data/assets').FixedAsset>): Promise<number> {
+    const row = {
+      company_id: companyId, code: (a.code || '').trim() || null, name: (a.name || '').trim(), category: a.category || null,
+      purchase_date: a.purchase_date, cost: Number(a.cost) || 0, residual_value: Number(a.residual_value) || 0, life_months: Math.max(1, Math.round(Number(a.life_months) || 1)),
+      start_month: a.start_month, asset_account_id: a.asset_account_id || null, expense_account_id: a.expense_account_id || null, accumulated_account_id: a.accumulated_account_id || null,
+      status: a.status || 'active', disposed_date: a.disposed_date || null, disposal_account_id: a.disposal_account_id || null, notes: a.notes || null,
+      book_purchase: !!a.book_purchase, deposit_account_id: a.deposit_account_id || null,
+      loan_amount: Number(a.loan_amount) || 0, loan_term_months: a.loan_term_months || null, monthly_repayment: a.monthly_repayment ?? null,
+      loan_start_month: a.loan_start_month || null, loan_account_id: a.loan_account_id || null, interest_account_id: a.interest_account_id || null,
+    };
+    if (!row.name) throw new Error('Name the asset');
+    const wrap = (e: any) => { if (e) throw new Error(/fixed_assets/i.test(e.message) ? 'Fixed assets need database update 061 — ask your administrator to run it in Supabase.' : e.message); };
+    if (a.id) { const r = await supabase.from('fixed_assets').update(row).eq('id', a.id); wrap(r.error); return a.id; }
+    const r = await supabase.from('fixed_assets').insert(row).select('id').single(); wrap(r.error); return r.data!.id;
+  },
+  async remove(id: number) { const r = await supabase.from('fixed_assets').delete().eq('id', id); if (r.error) throw new Error(r.error.message); },
+};
+
 export const journalService = {
   async list(companyId: number): Promise<JournalRow[]> {
     const js = must(await supabase.from('fin_journals').select('*').eq('company_id', companyId).order('journal_date', { ascending: false })) || [];
@@ -692,6 +712,9 @@ export async function loadLedgerInput(companyId: number) {
     accounts,
     docs: (docs || []).map((d: any) => ({ ...d, lines: byDoc.get(d.id) || [] })),
     payments: payments || [], allocations: allocations || [], journals, payroll: payroll as any[],
+    // the fixed assets register (database update 061)
+    assets: await supabase.from('fixed_assets').select('*').eq('company_id', companyId).order('purchase_date')
+      .then(r => (r.error ? [] : (r.data || []).map((a: any) => ({ ...a, cost: Number(a.cost), residual_value: Number(a.residual_value), loan_amount: Number(a.loan_amount || 0), monthly_repayment: a.monthly_repayment == null ? null : Number(a.monthly_repayment) })))) as import('../data/assets').FixedAsset[],
   };
 }
 

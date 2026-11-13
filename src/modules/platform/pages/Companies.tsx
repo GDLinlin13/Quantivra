@@ -10,7 +10,7 @@ import { currencyOptions } from '../../../utils/currencies';
 import { packFor2026 } from '../../../data/country-law-2026';
 import type { Company } from '../../../types';
 import { MODULES } from '../../../types';
-import { SWITCHABLE_MODULES } from '../../../data/permissionGuide';
+import { ALL_FEATURES_MODULES, moduleLabel, BUSINESS_PACK_PRESETS } from '../../../data/businessPacks';
 import { provisionCompany, getProvisionSteps, type ProvisionInput, type ProvisionResult, type ProvisionStep } from '../../../services/provisioning';
 
 const { Title, Text } = Typography;
@@ -42,19 +42,6 @@ const DEFAULT_COUNTRIES = [
   { code: 'PH', name: '\uD83C\uDDF5\uD83C\uDDED Philippines', currency: 'PHP', phone_code: '+63' },
   { code: 'VN', name: '\uD83C\uDDFB\uD83C\uDDF3 Vietnam', currency: 'VND', phone_code: '+84' },
 ];
-
-// The sections a company can have (the Dashboard is always there). Accounting, assets, sales, purchasing and reports are all part of Finance.
-const ALL_FEATURES_MODULES = SWITCHABLE_MODULES;
-const moduleLabel = (key: string) => (MODULES as Record<string, { label: string }>)[key]?.label || key;
-
-
-const BUSINESS_PACK_PRESETS: Record<string, { label: string; desc: string; modules: string[] }> = {
-  starter: { label: 'Starter', desc: 'Core HR essentials', modules: ['employees', 'leave', 'claims'] },
-  hr_payroll: { label: 'HR & Payroll', desc: 'Full HR with payroll', modules: ['employees', 'payroll', 'leave', 'attendance', 'claims'] },
-  finance: { label: 'Finance', desc: 'Accounting & finance', modules: ['finance'] },
-  trading: { label: 'Trading', desc: 'Finance + catalog + CRM', modules: ['finance', 'inventory', 'crm'] },
-  enterprise: { label: 'Enterprise', desc: 'All modules', modules: ALL_FEATURES_MODULES },
-};
 
 export function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -148,9 +135,8 @@ export function CompaniesPage() {
   const handleBusinessPackChange = (packKey: string) => {
     const pack = BUSINESS_PACK_PRESETS[packKey];
     if (!pack) return;
-    const current = form.getFieldValue('modules') as string[] || [];
-    const merged = [...new Set([...current, ...pack.modules])];
-    form.setFieldValue('modules', merged);
+    // the Modules step still lists every section, with only this pack's ticked (they can be changed there)
+    form.setFieldValue('modules', [...pack.modules]);
   };
 
   const handleCreateCompany = async () => {
@@ -229,10 +215,10 @@ export function CompaniesPage() {
   };
 
   const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name', render: (n: string) => <span style={{ color: '#f0ede6' }}>{n}</span> },
-    { title: 'Code', dataIndex: 'company_code', key: 'code' },
-    { title: 'Country', dataIndex: 'country', key: 'country' },
-    { title: 'Currency', dataIndex: 'currency', key: 'currency' },
+    { title: 'Name', dataIndex: 'name', key: 'name', sorter: (a: Company, b: Company) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base', numeric: true }), sortDirections: ['ascend', 'descend'] as ('ascend' | 'descend')[], render: (n: string) => <span style={{ color: '#f0ede6' }}>{n}</span> },
+    { title: 'Code', dataIndex: 'company_code', key: 'code', sorter: (a: Company, b: Company) => String(a.company_code || '').localeCompare(String(b.company_code || ''), undefined, { sensitivity: 'base', numeric: true }), sortDirections: ['ascend', 'descend'] as ('ascend' | 'descend')[] },
+    { title: 'Country', dataIndex: 'country', key: 'country', sorter: (a: Company, b: Company) => String(a.country || '').localeCompare(String(b.country || ''), undefined, { sensitivity: 'base', numeric: true }), sortDirections: ['ascend', 'descend'] as ('ascend' | 'descend')[] },
+    { title: 'Currency', dataIndex: 'currency', key: 'currency', sorter: (a: Company, b: Company) => String(a.currency || '').localeCompare(String(b.currency || ''), undefined, { sensitivity: 'base', numeric: true }), sortDirections: ['ascend', 'descend'] as ('ascend' | 'descend')[] },
     {
       title: 'Status', dataIndex: 'is_active', key: 'status',
       render: (v: boolean) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Inactive'}</Tag>,

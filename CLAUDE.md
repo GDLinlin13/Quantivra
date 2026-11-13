@@ -26,7 +26,7 @@ leaves Finance's list; one Finance recorded first never goes into payroll. The b
 
 ## Vercel previews
 Branch pushes are skipped on purpose (Vercel → Settings → Git → Ignored Build Step), so only merges into `master` deploy and
-pull requests have no Vercel check: run `npm test` and `npm run build`, merge, then confirm the production deployment.
+pull requests have no Vercel check: run `npm test` and `npm run build`, merge, then confirm the production deployment (Vercel → Deployments → Redeploy also works when git builds are refused).
 
 ## Commands
 - `npm test` — vitest (payroll engine + server function tests)

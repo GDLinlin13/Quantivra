@@ -1225,6 +1225,51 @@ BEGIN
 END $$;
 ROLLBACK;
 
+\echo '9w. fixed assets stay inside their company'
+BEGIN; :as_a
+DO $$
+BEGIN
+  INSERT INTO fixed_assets (company_id, name, purchase_date, cost, life_months, start_month) VALUES (1, 'Alpha van', '2026-01-01', 1000, 12, '2026-01-01');
+  BEGIN INSERT INTO fixed_assets (company_id, name, purchase_date, cost, life_months, start_month) VALUES (2, 'planted', '2026-01-01', 1, 12, '2026-01-01');
+    RAISE EXCEPTION 'FAIL: A added an asset to B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+COMMIT;
+BEGIN; :as_b
+DO $$
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM fixed_assets WHERE company_id = 1), 'FAIL: B sees A assets';
+END $$;
+ROLLBACK;
+BEGIN; :as_a
+DELETE FROM fixed_assets WHERE name = 'Alpha van';
+COMMIT;
+
+\echo '9x. purchase orders: inside the company, and approved only through po_decide'
+BEGIN; :as_a
+DO $$
+DECLARE v bigint;
+BEGIN
+  INSERT INTO purchase_orders (company_id, number, issue_date, total) VALUES (1, 'PO-T-1', '2026-01-01', 100) RETURNING id INTO v;
+  PERFORM set_config('qv.alpha_po', v::text, false);
+  BEGIN UPDATE purchase_orders SET status = 'approved' WHERE id = v; RAISE EXCEPTION 'FAIL: an order was approved without po_decide';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO purchase_orders (company_id, number, issue_date) VALUES (2, 'PO-X', '2026-01-01'); RAISE EXCEPTION 'FAIL: A added an order to B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+COMMIT;
+BEGIN; :as_b
+DO $$
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM purchase_orders WHERE company_id = 1), 'FAIL: B sees A purchase orders';
+  BEGIN PERFORM public.po_decide(current_setting('qv.alpha_po')::bigint, 'approved', NULL); RAISE EXCEPTION 'FAIL: B decided an A order';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+ROLLBACK;
+BEGIN; :as_a
+DELETE FROM purchase_orders WHERE number = 'PO-T-1';
+COMMIT;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;

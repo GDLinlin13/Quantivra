@@ -290,3 +290,27 @@ describe('one payment clearing the bills of two suppliers', () => {
     expect(pay.lines.filter(l => l.account_id === id('1010')).map(l => l.credit)).toEqual([160]);
   });
 });
+
+import { assetEntries } from '../ledger';
+describe('fixed assets in the books', () => {
+  const asset = {
+    id: 1, company_id: 1, code: 'VEH-1', name: 'Delivery van', category: 'Vehicles', purchase_date: '2026-01-15', cost: 60000, residual_value: 6000, life_months: 60,
+    start_month: '2026-02-01', asset_account_id: 1, expense_account_id: 2, accumulated_account_id: 3, status: 'active' as const, disposed_date: null, disposal_account_id: null, notes: null,
+    book_purchase: true, deposit_account_id: 4, loan_amount: 48000, loan_term_months: 60, monthly_repayment: 1000, loan_start_month: '2026-02-01', loan_account_id: 5, interest_account_id: 6,
+  };
+  it('books the purchase, depreciation and loan interest, each entry balanced', () => {
+    const es = assetEntries([asset], 4, '2026-04-30');
+    expect(es.map(e => e.ref).sort()).toEqual(['DEP-2026-02', 'DEP-2026-03', 'DEP-2026-04', 'LOAN-2026-02', 'LOAN-2026-03', 'LOAN-2026-04', 'VEH-1']);
+    for (const e of es) expect(Math.round(e.lines.reduce((t, l) => t + l.debit - l.credit, 0) * 100)).toBe(0);
+    const purchase = es.find(e => e.ref === 'VEH-1')!;
+    expect(purchase.lines.map(l => [l.account_id, l.debit, l.credit])).toEqual([[1, 60000, 0], [5, 0, 48000], [4, 0, 12000]]);
+    expect(es.find(e => e.ref === 'DEP-2026-02')!.lines.map(l => [l.account_id, l.debit, l.credit])).toEqual([[2, 900, 0], [3, 0, 900]]);
+  });
+  it('a disposal writes off what is left', () => {
+    const es = assetEntries([{ ...asset, book_purchase: false, loan_amount: 0, status: 'disposed' as const, disposed_date: '2026-04-10' }], 4, '2026-12-31');
+    const gone = es.find(e => e.memo.startsWith('Disposal'))!;
+    expect(Math.round(gone.lines.reduce((t, l) => t + l.debit - l.credit, 0) * 100)).toBe(0);
+    expect(gone.lines.find(l => l.account_id === 3)!.debit).toBe(1800);     // Feb and Mar
+    expect(gone.lines.find(l => l.account_id === 1)!.credit).toBe(60000);
+  });
+});

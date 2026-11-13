@@ -3,7 +3,7 @@ import { supabase } from '../utils/supabase';
 // Approval chains for leave and claims (migration 043).
 // A chain is a list of steps; each step's approver is the employee's line manager ('@manager') or a role name.
 
-export type FlowKind = 'leave' | 'claim';
+export type FlowKind = 'leave' | 'claim' | 'po';
 export const MANAGER = '@manager';
 export interface FlowStep { approver: string; min_value: number | null }
 export interface Flow { id?: number; kind: FlowKind; is_active: boolean; steps: FlowStep[] }
@@ -19,7 +19,7 @@ const must = (r: { data: any; error: any }): any => {
 
 export const workflowService = {
   async flows(companyId: number): Promise<Record<FlowKind, Flow>> {
-    const out: Record<FlowKind, Flow> = { leave: { kind: 'leave', is_active: false, steps: [] }, claim: { kind: 'claim', is_active: false, steps: [] } };
+    const out: Record<FlowKind, Flow> = { leave: { kind: 'leave', is_active: false, steps: [] }, claim: { kind: 'claim', is_active: false, steps: [] }, po: { kind: 'po', is_active: false, steps: [] } };
     const flows = must(await supabase.from('approval_flows').select('*').eq('company_id', companyId)) || [];
     const steps = flows.length ? must(await supabase.from('approval_flow_steps').select('*').in('flow_id', flows.map((f: any) => f.id)).order('position')) || [] : [];
     for (const f of flows) {

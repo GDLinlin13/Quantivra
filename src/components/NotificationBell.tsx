@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Dropdown, Typography } from 'antd';
-import { BellOutlined, DollarOutlined, CalendarOutlined } from '@ant-design/icons';
+import { BellOutlined, DollarOutlined, CalendarOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { workflowService, type FlowKind } from '../services/workflow';
 import { claimService } from '../services/claims';
 import { leaveService } from '../services/hr';
+import { poService } from '../services/purchaseOrders';
 
 const { Text } = Typography;
 
@@ -18,6 +19,7 @@ export function NotificationBell({ companyId }: { companyId: number }) {
   const [kinds, setKinds] = useState<FlowKind[]>([]);
   const [claims, setClaims] = useState(0);
   const [leave, setLeave] = useState(0);
+  const [orders, setOrders] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -37,6 +39,12 @@ export function NotificationBell({ companyId }: { companyId: number }) {
         const pending = await leaveService.requests(companyId, { status: 'pending' });
         setLeave(await waiting('leave', pending.map(r => Number(r.id))));
       } else setLeave(0);
+      // purchase orders waiting for their approval (database update 062)
+      try {
+        const pending = (await poService.list(companyId)).filter(o => o.status === 'pending');
+        const st = await poService.status(pending.map(o => o.id));
+        setOrders(pending.filter(o => st.get(o.id)?.can_act).length);
+      } catch { setOrders(0); }
     } catch { /* the bell stays as it was */ }
   }, [companyId]);
 
@@ -50,14 +58,16 @@ export function NotificationBell({ companyId }: { companyId: number }) {
     return () => { clearInterval(t); window.removeEventListener('focus', onFocus); window.removeEventListener('qv-approvals-changed', onFocus); };
   }, [load]);
 
-  if (!kinds.length) return null;
-  const total = claims + leave;
+  if (!kinds.length && !orders) return null;
+  const total = claims + leave + orders;
   const row = (icon: React.ReactNode, text: string, tab: string) => ({
     key: tab, icon, label: text, onClick: () => navigate(`/company/hr?tab=${tab}`),
   });
+  const goOrders = () => { try { localStorage.setItem('qv-finance-area', 'purchases'); localStorage.setItem('qv-finance-purchases', 'orders'); } catch { /* ignore */ } navigate('/company/finance'); };
   const items = [
     ...(claims > 0 ? [row(<DollarOutlined />, `${claims} claim${claims === 1 ? '' : 's'} waiting for your approval`, 'claims')] : []),
     ...(leave > 0 ? [row(<CalendarOutlined />, `${leave} leave request${leave === 1 ? '' : 's'} waiting for your approval`, 'approvals')] : []),
+    ...(orders > 0 ? [{ key: 'po', icon: <ShoppingCartOutlined />, label: `${orders} purchase order${orders === 1 ? '' : 's'} waiting for your approval`, onClick: goOrders }] : []),
     ...(total === 0 ? [{ key: 'none', disabled: true, label: <Text type="secondary">Nothing waiting for you</Text> }] : []),
   ];
   return (

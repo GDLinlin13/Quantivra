@@ -17,6 +17,8 @@ import { fmtDate } from '../../../../utils/dateFormat';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
+import { FixedAssets } from './FixedAssets';
+
 type Loaded = Awaited<ReturnType<typeof loadLedgerInput>>;
 
 /** Accounting: reports, chart of accounts and manual journals. */
@@ -33,6 +35,7 @@ export function Accounting({ data }: { data: FinanceData }) {
     <Tabs activeKey={tab} onChange={setTab} items={[
       { key: 'reports', label: 'Reports', children: <Reports data={data} input={input} entries={entries} reload={load} /> },
       { key: 'accounts', label: 'Chart of accounts', children: <ChartOfAccounts data={data} accounts={input.accounts} entries={entries} reload={load} /> },
+      { key: 'assets', label: 'Fixed assets', children: <FixedAssets data={data} accounts={input.accounts} assets={(input as any).assets || []} reload={load} /> },
       { key: 'journals', label: 'Journal entries', children: <Journals data={data} accounts={input.accounts} journals={input.journals} reload={load} /> },
     ]} />
   );
