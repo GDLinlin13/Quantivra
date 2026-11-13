@@ -306,6 +306,11 @@ describe('fixed assets in the books', () => {
     expect(purchase.lines.map(l => [l.account_id, l.debit, l.credit])).toEqual([[1, 60000, 0], [5, 0, 48000], [4, 0, 12000]]);
     expect(es.find(e => e.ref === 'DEP-2026-02')!.lines.map(l => [l.account_id, l.debit, l.credit])).toEqual([[2, 900, 0], [3, 0, 900]]);
   });
+  it('a deposit paid through a bank is left for the bank statement: only the loan part is booked here', () => {
+    const es = assetEntries([asset], 4, '2026-01-31', [{ id: 4, subtype: 'bank' }]);
+    const purchase = es.find(e => e.ref === 'VEH-1')!;
+    expect(purchase.lines.map(l => [l.account_id, l.debit, l.credit])).toEqual([[1, 48000, 0], [5, 0, 48000]]);
+  });
   it('a disposal writes off what is left', () => {
     const es = assetEntries([{ ...asset, book_purchase: false, loan_amount: 0, status: 'disposed' as const, disposed_date: '2026-04-10' }], 4, '2026-12-31');
     const gone = es.find(e => e.memo.startsWith('Disposal'))!;

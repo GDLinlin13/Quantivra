@@ -272,7 +272,7 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
   }
 
   // Fixed assets: the purchase (if booked here), monthly depreciation and loan interest, and a disposal write-off
-  entries.push(...assetEntries(input.assets || [], BANK));
+  entries.push(...assetEntries(input.assets || [], BANK, undefined, accounts));
 
   for (const j of input.journals) {
     entries.push({
@@ -285,7 +285,7 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
 }
 
 /** Entries from the fixed assets register. Depreciation and loan interest are posted at each month end, one entry a month. */
-export function assetEntries(assets: FixedAsset[], bank: number, today = new Date().toISOString().slice(0, 10)): LedgerEntry[] {
+export function assetEntries(assets: FixedAsset[], bank: number, today = new Date().toISOString().slice(0, 10), accounts: Pick<Account, 'id' | 'subtype'>[] = []): LedgerEntry[] {
   const out: LedgerEntry[] = [];
   const dep = new Map<string, Map<string, LedgerLine>>(), interest = new Map<string, Map<string, LedgerLine>>();
   const put = (m: Map<string, Map<string, LedgerLine>>, month: string, l: LedgerLine) => {
@@ -300,11 +300,18 @@ export function assetEntries(assets: FixedAsset[], bank: number, today = new Dat
     if (!a.asset_account_id || !(cost > 0)) continue;
     const loan = r2(Number(a.loan_amount) || 0);
     if (a.book_purchase) {
-      const lines: LedgerLine[] = [{ account_id: a.asset_account_id, debit: cost, credit: 0, description: a.name }];
-      if (loan > 0 && a.loan_account_id) lines.push({ account_id: a.loan_account_id, debit: 0, credit: loan, description: `Loan — ${a.name}` });
-      const rest = r2(cost - (loan > 0 && a.loan_account_id ? loan : 0));
-      if (rest > 0) lines.push({ account_id: a.deposit_account_id || bank, debit: 0, credit: rest, description: `Paid — ${a.name}` });
-      out.push({ date: a.purchase_date, source: 'asset', source_id: a.id, ref: a.code || `ASSET-${a.id}`, memo: `Purchase — ${a.name}`, lines });
+      // What is not on the loan was paid up front. Paid in cash it is booked here; paid through a bank it comes in with the bank
+      // statement (matched to the asset account), so only the loan part is booked here and the deposit is never counted twice.
+      const onLoan = loan > 0 && a.loan_account_id ? loan : 0;
+      const rest = r2(cost - onLoan);
+      const viaBank = !!a.deposit_account_id && accounts.find(x => x.id === a.deposit_account_id)?.subtype === 'bank';
+      const assetIn = viaBank ? onLoan : cost;
+      if (assetIn > 0) {
+        const lines: LedgerLine[] = [{ account_id: a.asset_account_id, debit: assetIn, credit: 0, description: a.name }];
+        if (onLoan > 0) lines.push({ account_id: a.loan_account_id!, debit: 0, credit: onLoan, description: `Loan — ${a.name}` });
+        if (!viaBank && rest > 0) lines.push({ account_id: a.deposit_account_id || bank, debit: 0, credit: rest, description: `Paid — ${a.name}` });
+        out.push({ date: a.purchase_date, source: 'asset', source_id: a.id, ref: a.code || `ASSET-${a.id}`, memo: `Purchase — ${a.name}`, lines });
+      }
     }
     const schedule = a.expense_account_id && a.accumulated_account_id ? depreciationSchedule(a, today) : [];
     for (const m of schedule) {
