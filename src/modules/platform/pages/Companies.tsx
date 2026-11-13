@@ -135,9 +135,8 @@ export function CompaniesPage() {
   const handleBusinessPackChange = (packKey: string) => {
     const pack = BUSINESS_PACK_PRESETS[packKey];
     if (!pack) return;
-    const current = form.getFieldValue('modules') as string[] || [];
-    const merged = [...new Set([...current, ...pack.modules])];
-    form.setFieldValue('modules', merged);
+    // the Modules step still lists every section, with only this pack's ticked (they can be changed there)
+    form.setFieldValue('modules', [...pack.modules]);
   };
 
   const handleCreateCompany = async () => {

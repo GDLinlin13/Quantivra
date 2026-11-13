@@ -1225,6 +1225,26 @@ BEGIN
 END $$;
 ROLLBACK;
 
+\echo '9w. fixed assets stay inside their company'
+BEGIN; :as_a
+DO $$
+BEGIN
+  INSERT INTO fixed_assets (company_id, name, purchase_date, cost, life_months, start_month) VALUES (1, 'Alpha van', '2026-01-01', 1000, 12, '2026-01-01');
+  BEGIN INSERT INTO fixed_assets (company_id, name, purchase_date, cost, life_months, start_month) VALUES (2, 'planted', '2026-01-01', 1, 12, '2026-01-01');
+    RAISE EXCEPTION 'FAIL: A added an asset to B';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+COMMIT;
+BEGIN; :as_b
+DO $$
+BEGIN
+  ASSERT NOT EXISTS (SELECT 1 FROM fixed_assets WHERE company_id = 1), 'FAIL: B sees A assets';
+END $$;
+ROLLBACK;
+BEGIN; :as_a
+DELETE FROM fixed_assets WHERE name = 'Alpha van';
+COMMIT;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;

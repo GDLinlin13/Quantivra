@@ -2,11 +2,12 @@
 // payments, finalised payroll, opening balances) plus manual journals. Nothing is posted twice:
 // change or void a document and the books follow.
 import { accountForCategory } from './claimAccounts';
+import { depreciationSchedule, loanSchedule, type FixedAsset } from './assets';
 import { docTotals, docRate, type Account, type FinDocument, type DocLine } from './finance';
 
 export interface LedgerLine { account_id: number; debit: number; credit: number; description?: string; contact_id?: number | null }
 export interface LedgerEntry {
-  date: string; source: 'invoice' | 'credit_note' | 'bill' | 'expense' | 'payment_in' | 'payment_out' | 'payroll' | 'journal' | 'opening';
+  date: string; source: 'invoice' | 'credit_note' | 'bill' | 'expense' | 'payment_in' | 'payment_out' | 'payroll' | 'journal' | 'opening' | 'asset';
   source_id: number | null; ref: string; memo: string; lines: LedgerLine[];
 }
 
@@ -121,6 +122,8 @@ export interface LedgerInput {
   payroll: { id: number; period_year: number; period_month: number; pay_date: string; status: string; total_gross: number; total_deductions: number; total_employer: number; total_net: number; split?: PayrollSplit;
     /** staff claims paid back in this run, by category: booked to their own expense accounts, not to salaries (migration 058) */
     reimbursements?: { category: string; amount: number; account_id?: number | null }[] }[];
+  /** the fixed assets register: depreciation, loan interest, purchase and disposal entries are worked out from it */
+  assets?: FixedAsset[];
   journals: { id: number; number: string | null; journal_date: string; memo: string | null; lines: { account_id: number; debit: number; credit: number; description?: string | null }[] }[];
 }
 
@@ -268,6 +271,9 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
     entries.push({ date: r.pay_date, source: 'payroll', source_id: r.id, ref: label, memo: label, lines });
   }
 
+  // Fixed assets: the purchase (if booked here), monthly depreciation and loan interest, and a disposal write-off
+  entries.push(...assetEntries(input.assets || [], BANK));
+
   for (const j of input.journals) {
     entries.push({
       date: j.journal_date, source: 'journal', source_id: j.id, ref: j.number || 'Journal', memo: j.memo || '',
@@ -277,6 +283,57 @@ export function buildLedger(input: LedgerInput): LedgerEntry[] {
 
   return entries.sort((a, b) => a.date.localeCompare(b.date));
 }
+
+/** Entries from the fixed assets register. Depreciation and loan interest are posted at each month end, one entry a month. */
+export function assetEntries(assets: FixedAsset[], bank: number, today = new Date().toISOString().slice(0, 10)): LedgerEntry[] {
+  const out: LedgerEntry[] = [];
+  const dep = new Map<string, Map<string, LedgerLine>>(), interest = new Map<string, Map<string, LedgerLine>>();
+  const put = (m: Map<string, Map<string, LedgerLine>>, month: string, l: LedgerLine) => {
+    const lines = m.get(month) || new Map<string, LedgerLine>();
+    const k = `${l.account_id}|${l.debit ? 'd' : 'c'}`;
+    const have = lines.get(k);
+    if (have) { have.debit = r2(have.debit + l.debit); have.credit = r2(have.credit + l.credit); } else lines.set(k, { ...l });
+    m.set(month, lines);
+  };
+  for (const a of assets) {
+    const cost = r2(Number(a.cost) || 0);
+    if (!a.asset_account_id || !(cost > 0)) continue;
+    const loan = r2(Number(a.loan_amount) || 0);
+    if (a.book_purchase) {
+      const lines: LedgerLine[] = [{ account_id: a.asset_account_id, debit: cost, credit: 0, description: a.name }];
+      if (loan > 0 && a.loan_account_id) lines.push({ account_id: a.loan_account_id, debit: 0, credit: loan, description: `Loan — ${a.name}` });
+      const rest = r2(cost - (loan > 0 && a.loan_account_id ? loan : 0));
+      if (rest > 0) lines.push({ account_id: a.deposit_account_id || bank, debit: 0, credit: rest, description: `Paid — ${a.name}` });
+      out.push({ date: a.purchase_date, source: 'asset', source_id: a.id, ref: a.code || `ASSET-${a.id}`, memo: `Purchase — ${a.name}`, lines });
+    }
+    const schedule = a.expense_account_id && a.accumulated_account_id ? depreciationSchedule(a, today) : [];
+    for (const m of schedule) {
+      put(dep, m.month, { account_id: a.expense_account_id!, debit: m.amount, credit: 0, description: 'Depreciation' });
+      put(dep, m.month, { account_id: a.accumulated_account_id!, debit: 0, credit: m.amount, description: 'Accumulated depreciation' });
+    }
+    if (loan > 0 && a.loan_account_id && a.interest_account_id && a.loan_term_months && a.monthly_repayment && a.loan_start_month) {
+      for (const r of loanSchedule(loan, a.loan_term_months, Number(a.monthly_repayment), a.loan_start_month).rows) {
+        if (r.date > today || !(r.interest > 0)) continue;
+        put(interest, r.month, { account_id: a.interest_account_id, debit: r.interest, credit: 0, description: 'Loan interest' });
+        put(interest, r.month, { account_id: a.loan_account_id, debit: 0, credit: r.interest, description: 'Loan interest added to the loan' });
+      }
+    }
+    if (a.status === 'disposed' && a.disposed_date && a.accumulated_account_id) {
+      const accumulated = r2(schedule.reduce((t, m) => t + m.amount, 0));
+      const nbv = r2(cost - accumulated);
+      const lines: LedgerLine[] = [
+        { account_id: a.accumulated_account_id, debit: accumulated, credit: 0, description: 'Accumulated depreciation' },
+        { account_id: a.disposal_account_id || a.expense_account_id || a.asset_account_id, debit: nbv, credit: 0, description: 'Written off' },
+        { account_id: a.asset_account_id, debit: 0, credit: cost, description: a.name },
+      ].filter(l => l.debit || l.credit);
+      out.push({ date: a.disposed_date, source: 'asset', source_id: a.id, ref: a.code || `ASSET-${a.id}`, memo: `Disposal — ${a.name}`, lines });
+    }
+  }
+  for (const [month, lines] of dep) out.push({ date: monthEndOf(month), source: 'asset', source_id: null, ref: `DEP-${month}`, memo: `Depreciation ${month}`, lines: [...lines.values()] });
+  for (const [month, lines] of interest) out.push({ date: monthEndOf(month), source: 'asset', source_id: null, ref: `LOAN-${month}`, memo: `Loan interest ${month}`, lines: [...lines.values()] });
+  return out;
+}
+const monthEndOf = (month: string) => { const [y, m] = month.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
 
 // ---- reports -----------------------------------------------------------------------------
 
