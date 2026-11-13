@@ -9,7 +9,7 @@ export const moduleLabel = (key: string) => (MODULES as Record<string, { label: 
 export const BUSINESS_PACK_PRESETS: Record<string, { label: string; desc: string; modules: string[] }> = {
   starter: { label: 'Starter', desc: 'Employees, leave and expense claims', modules: ['employees', 'leave', 'claims'] },
   hr_payroll: { label: 'HR & Payroll', desc: 'Everything in Starter, plus payroll and attendance', modules: ['employees', 'payroll', 'leave', 'attendance', 'claims'] },
-  finance: { label: 'Finance', desc: 'Invoices, bills, payments, banking, accounting, fixed assets and reports', modules: ['finance'] },
+  finance: { label: 'Finance', desc: 'Invoices, bills, purchase orders, payments, banking, accounting, fixed assets and reports', modules: ['finance'] },
   trading: { label: 'Trading', desc: 'Finance, plus the product and price catalog with stock, and customers (CRM)', modules: ['finance', 'inventory', 'crm'] },
   enterprise: { label: 'Enterprise', desc: 'Every section, including Projects and Workflow (approval chains)', modules: ALL_FEATURES_MODULES },
 };

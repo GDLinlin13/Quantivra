@@ -11,6 +11,7 @@ const { Title, Text } = Typography;
 const KINDS: { kind: FlowKind; title: string; what: string; unit: string; minLabel: string }[] = [
   { kind: 'leave', title: 'Leave', what: 'leave requests', unit: 'days', minLabel: 'Only for leave of at least' },
   { kind: 'claim', title: 'Claims', what: 'expense claims', unit: 'in the claim’s amount', minLabel: 'Only for claims of at least' },
+  { kind: 'po', title: 'Purchase orders', what: 'purchase orders', unit: 'in the order’s total', minLabel: 'Only for orders of at least' },
 ];
 
 function FlowCard({ meta, flow, roles, canEdit, onSave }: {
@@ -21,7 +22,7 @@ function FlowCard({ meta, flow, roles, canEdit, onSave }: {
   useEffect(() => setDraft(flow), [flow]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(flow);
   const options = [
-    { value: MANAGER, label: 'The person’s line manager' },
+    ...(meta.kind === 'po' ? [] : [{ value: MANAGER, label: 'The person’s line manager' }]),
     ...[...new Set([...roles, ...draft.steps.map(s => s.approver).filter(a => a !== MANAGER)])].map(r => ({ value: r, label: `Anyone with the ${r} role` })),
   ];
   const setStep = (i: number, patch: Partial<Flow['steps'][number]>) => setDraft(d => ({ ...d, steps: d.steps.map((s, j) => (j === i ? { ...s, ...patch } : s)) }));
@@ -69,7 +70,7 @@ function FlowCard({ meta, flow, roles, canEdit, onSave }: {
           ))}
           {canEdit && (
             <Button icon={<PlusOutlined />} style={{ marginTop: 4 }}
-              onClick={() => setDraft(d => ({ ...d, steps: [...d.steps, { approver: d.steps.length ? (roles[0] || MANAGER) : MANAGER, min_value: null }] }))}>Add a step</Button>
+              onClick={() => setDraft(d => ({ ...d, steps: [...d.steps, { approver: meta.kind === 'po' ? (roles[0] || '') : d.steps.length ? (roles[0] || MANAGER) : MANAGER, min_value: null }] }))}>Add a step</Button>
           )}
           {meta.kind === 'claim' && (
             <Text type="secondary" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>
@@ -110,7 +111,7 @@ export function CompanyWorkflowPage() {
     <div>
       <Title level={4} style={{ color: '#f0ede6', marginBottom: 8 }}>Workflow</Title>
       <Text type="secondary" style={{ display: 'block', marginBottom: 20 }}>
-        Who approves leave and claims, and in what order. For example: the person’s line manager first, then the Director for leave of 5 days or more.
+        Who approves leave, claims and purchase orders, and in what order. For example: the person’s line manager first, then the Director for leave of 5 days or more.
         A line manager is the person set as manager on the employee’s record.
       </Text>
       {error && <Alert type="warning" showIcon title={error} style={{ marginBottom: 16 }} />}

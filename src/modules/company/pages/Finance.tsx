@@ -13,6 +13,7 @@ import { Accounting } from './finance/Accounting';
 import { Bank } from './finance/Bank';
 import { PayrollPayables } from './finance/PayrollPayables';
 import { StaffClaims } from './finance/StaffClaims';
+import { PurchaseOrders } from './finance/PurchaseOrders';
 import { Statements } from './finance/Statements';
 import { useCompanyAccess } from '../../../contexts/CompanyAccess';
 
@@ -73,6 +74,7 @@ export function CompanyFinancePage() {
       )}
       {area === 'purchases' && (
         <Tabs activeKey={tab.purchases} onChange={k => change('purchases', k)} items={[
+          { key: 'orders', label: 'Purchase orders', children: <PurchaseOrders data={d} /> },
           { key: 'bills', label: 'Bills', children: <DocList data={d} docType="bill" /> },
           ...(access.isOn('payroll') ? [{ key: 'payroll', label: 'Payroll', children: <PayrollPayables data={d} /> }] : []),
           ...(access.isOn('claims') ? [{ key: 'claims', label: 'Staff claims', children: <StaffClaims data={d} /> }] : []),
