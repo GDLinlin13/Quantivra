@@ -10,7 +10,7 @@ import { currencyOptions } from '../../../utils/currencies';
 import { packFor2026 } from '../../../data/country-law-2026';
 import type { Company } from '../../../types';
 import { MODULES } from '../../../types';
-import { SWITCHABLE_MODULES } from '../../../data/permissionGuide';
+import { ALL_FEATURES_MODULES, moduleLabel, BUSINESS_PACK_PRESETS } from '../../../data/businessPacks';
 import { provisionCompany, getProvisionSteps, type ProvisionInput, type ProvisionResult, type ProvisionStep } from '../../../services/provisioning';
 
 const { Title, Text } = Typography;
@@ -42,19 +42,6 @@ const DEFAULT_COUNTRIES = [
   { code: 'PH', name: '\uD83C\uDDF5\uD83C\uDDED Philippines', currency: 'PHP', phone_code: '+63' },
   { code: 'VN', name: '\uD83C\uDDFB\uD83C\uDDF3 Vietnam', currency: 'VND', phone_code: '+84' },
 ];
-
-// The sections a company can have (the Dashboard is always there). Accounting, assets, sales, purchasing and reports are all part of Finance.
-const ALL_FEATURES_MODULES = SWITCHABLE_MODULES;
-const moduleLabel = (key: string) => (MODULES as Record<string, { label: string }>)[key]?.label || key;
-
-
-const BUSINESS_PACK_PRESETS: Record<string, { label: string; desc: string; modules: string[] }> = {
-  starter: { label: 'Starter', desc: 'Core HR essentials', modules: ['employees', 'leave', 'claims'] },
-  hr_payroll: { label: 'HR & Payroll', desc: 'Full HR with payroll', modules: ['employees', 'payroll', 'leave', 'attendance', 'claims'] },
-  finance: { label: 'Finance', desc: 'Accounting & finance', modules: ['finance'] },
-  trading: { label: 'Trading', desc: 'Finance + catalog + CRM', modules: ['finance', 'inventory', 'crm'] },
-  enterprise: { label: 'Enterprise', desc: 'All modules', modules: ALL_FEATURES_MODULES },
-};
 
 export function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
