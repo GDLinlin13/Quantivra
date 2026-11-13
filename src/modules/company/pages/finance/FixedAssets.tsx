@@ -76,7 +76,8 @@ function AssetDrawer({ companyId, currency, accounts, asset, onClose, onSaved }:
   const expenseAccs = opt(live.filter(a => a.type === 'expense'));
   const accumAccs = opt(live.filter(a => a.type === 'asset'));
   const liabilityAccs = opt(live.filter(a => a.type === 'liability'));
-  const bankAccs = opt(live.filter(a => a.type === 'asset' && (a.subtype === 'bank' || a.subtype === 'cash')));
+  // the deposit is booked in the company's currency, so only accounts in that currency are offered
+  const bankAccs = opt(live.filter(a => a.type === 'asset' && (a.subtype === 'bank' || a.subtype === 'cash') && (!a.currency || a.currency === currency)));
   const [loanOn, setLoanOn] = useState(Number(asset.loan_amount) > 0);
 
   const w = Form.useWatch([], form) || {};
