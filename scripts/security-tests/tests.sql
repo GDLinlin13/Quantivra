@@ -1270,6 +1270,37 @@ BEGIN; :as_a
 DELETE FROM purchase_orders WHERE number = 'PO-T-1';
 COMMIT;
 
+\echo '9y. audit trail: recorded, read and cleared only by platform administrators'
+BEGIN; :as_a
+DO $$
+BEGIN
+  UPDATE companies SET timezone = 'Asia/Tokyo' WHERE id = 1;
+  ASSERT NOT EXISTS (SELECT 1 FROM platform_audit_log), 'FAIL: a company user reads the audit trail';
+  BEGIN PERFORM public.platform_audit_clear(); RAISE EXCEPTION 'FAIL: a company user cleared the audit trail';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN INSERT INTO platform_audit_log (action, entity_type) VALUES ('x', 'y'); RAISE EXCEPTION 'FAIL: a company user wrote to the audit trail';
+  EXCEPTION WHEN insufficient_privilege OR check_violation THEN NULL; END;
+END $$;
+COMMIT;
+BEGIN; :as_admin
+DO $$
+DECLARE n bigint;
+BEGIN
+  ASSERT EXISTS (SELECT 1 FROM platform_audit_log WHERE action = 'company.edited' AND company_id = 1), 'FAIL: the company edit was not recorded';
+  BEGIN UPDATE platform_audit_log SET summary = 'tampered'; RAISE EXCEPTION 'FAIL: a record was edited';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  n := public.platform_audit_clear();
+  ASSERT n >= 1, 'FAIL: nothing was cleared';
+  ASSERT (SELECT count(*) FROM platform_audit_log) = 1 AND EXISTS (SELECT 1 FROM platform_audit_log WHERE action = 'audit.cleared'), 'FAIL: clearing should leave one record saying so';
+END $$;
+COMMIT;
+BEGIN; :as_a
+UPDATE companies SET timezone = 'Asia/Singapore' WHERE id = 1;
+COMMIT;
+BEGIN; :as_admin
+DELETE FROM platform_audit_log WHERE true;
+COMMIT;
+
 \echo '10. structure: no readable passwords, RLS on everywhere, no anon grants'
 DO $$
 DECLARE v text;
