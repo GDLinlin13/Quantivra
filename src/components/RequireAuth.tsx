@@ -17,7 +17,7 @@ export function RequireAuth({ type, children }: { type: 'platform' | 'company'; 
     return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#0b0f12' }}><Spin size="large" /></div>;
   }
   if (!auth.isAuthenticated) return <Navigate to="/login" replace />;
-  if (auth.type !== type) return <Navigate to={auth.type === 'platform' ? '/platform' : '/company'} replace />;
+  if (auth.type !== type) return <Navigate to={auth.type === 'platform' ? '/platform/dashboard' : '/company/dashboard'} replace />;
   if (auth.mustChangePassword) return <FirstPasswordScreen />;
   return <>{children}</>;
 }

@@ -21,10 +21,10 @@ export function LoginPage() {
       // AEGIS (or no company code) → platform administrator sign-in.
       if (isPlatformUsername(values.username) || !values.company_code?.trim()) {
         await login(values.username, values.password, 'platform', remember);
-        navigate('/platform');
+        navigate('/platform/dashboard');
       } else {
         await login(values.username, values.password, 'company', remember, values.company_code.trim().toLowerCase());
-        navigate('/company');
+        navigate('/company/dashboard');
       }
     } catch (err: any) {
       setError(err.message || 'Invalid credentials');

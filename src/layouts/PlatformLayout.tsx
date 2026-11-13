@@ -7,6 +7,7 @@ import {
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { UserMenu } from '../components/UserMenu';
+import { RainbowMenuStyle } from '../components/RainbowMenu';
 
 const { Sider, Content, Header } = Layout;
 const { Text } = Typography;
@@ -17,12 +18,12 @@ export function PlatformLayout() {
   const { logout } = useAuth();
 
   const menuItems = [
-    { key: '/platform', icon: <DashboardOutlined />, label: 'Dashboard' },
+    { key: '/platform/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
     { key: '/platform/companies', icon: <BuildOutlined />, label: 'Companies' },
     { key: '/platform/country-packs', icon: <GlobalOutlined />, label: 'Country Packs' },
     { key: '/platform/business-packs', icon: <AppstoreOutlined />, label: 'Business Packs' },
     { key: '/platform/users', icon: <UserOutlined />, label: 'Users' },
-    { key: '/platform/audit', icon: <AuditOutlined />, label: 'Audit Log' },
+    { key: '/platform/audit-log', icon: <AuditOutlined />, label: 'Audit Log' },
     { key: '/platform/settings', icon: <SettingOutlined />, label: 'Settings' },
   ];
 
@@ -64,7 +65,9 @@ export function PlatformLayout() {
             {'ATLAS CORE'.split('').map((ch, i) => <span key={i}>{ch === ' ' ? '\u00A0' : ch}</span>)}
           </div>
         </div>
+        <RainbowMenuStyle className="qv-rb-platform" />
         <Menu
+          className="qv-rb-platform"
           theme="dark"
           mode="inline"
           selectedKeys={[location.pathname]}

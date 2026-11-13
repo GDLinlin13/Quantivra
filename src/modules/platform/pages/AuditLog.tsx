@@ -71,7 +71,7 @@ export function PlatformAuditPage() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-        <Title level={4} style={{ color: '#f0ede6', margin: 0 }}>Platform Audit Log</Title>
+        <Title level={4} style={{ color: '#f0ede6', margin: 0 }}>Audit Log</Title>
         <Space wrap>
           <Select allowClear style={{ width: 200 }} placeholder="Action" value={action} onChange={setAction} options={actionOptions} />
           <Select allowClear showSearch optionFilterProp="label" style={{ width: 220 }} placeholder="Company" value={company} onChange={setCompany} options={companyOptions} />

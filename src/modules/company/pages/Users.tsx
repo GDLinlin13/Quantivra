@@ -134,7 +134,7 @@ export function CompanyUsersPage() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={4} style={{ color: '#f0ede6', margin: 0 }}>Company Users</Title>
+        <Title level={4} style={{ color: '#f0ede6', margin: 0 }}>Users</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}
           style={{ background: '#c7ceea', borderColor: '#c7ceea', color: '#111' }}>
           Add User

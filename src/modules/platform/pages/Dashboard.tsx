@@ -31,7 +31,7 @@ export function PlatformDashboard() {
 
   return (
     <div>
-      <Title level={4} style={{ color: '#f0ede6', marginBottom: 24 }}>Platform Overview</Title>
+      <Title level={4} style={{ color: '#f0ede6', marginBottom: 24 }}>Dashboard</Title>
       <Row gutter={[16, 16]}>
         {cards.map((card) => (
           <Col span={8} key={card.title}>
