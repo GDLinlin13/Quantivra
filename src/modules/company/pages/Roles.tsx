@@ -154,7 +154,7 @@ export function CompanyRolesPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <Space size={16}>
-          <Title level={4} style={{ color: '#f0ede6', margin: 0 }}>Roles & Permissions</Title>
+          <Title level={4} style={{ color: '#f0ede6', margin: 0 }}>Roles</Title>
           <Segmented value={view} onChange={v => setView(v as 'roles' | 'users')} options={[{ value: 'roles', label: 'By Roles' }, { value: 'users', label: 'By Users' }]} />
         </Space>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}

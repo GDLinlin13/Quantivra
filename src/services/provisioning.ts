@@ -504,7 +504,7 @@ async function provisionSteps(input: ProvisionInput, onProgress: ProgressCallbac
 
   // 22. Audit Log
   await run(22, async () => {
-    const { error } = await supabase.from('platform_audit_log').insert({
+    const base = {
       user_id: owner.id,
       action: 'company.provisioned',
       entity_type: 'company',
@@ -514,7 +514,12 @@ async function provisionSteps(input: ProvisionInput, onProgress: ProgressCallbac
         modules: input.modules, departments: departments.length, positions: positions.length,
         workflows: savedWorkflows.length, roles: roleNames.length,
       },
-    });
+    };
+    // who created it, and which company (database update 063); older databases keep the plain record
+    const me = (await supabase.auth.getUser()).data.user;
+    const who = me ? (await supabase.from('platform_users').select('full_name').eq('auth_user_id', me.id).maybeSingle()).data : null;
+    let { error } = await supabase.from('platform_audit_log').insert({ ...base, company_id: company.id, summary: String(company.name || ''), actor_name: who?.full_name || null, actor_auth_id: me?.id || null });
+    if (error && /company_id|actor_|summary/i.test(error.message)) ({ error } = await supabase.from('platform_audit_log').insert(base));
     if (error) throw error;
   });
 

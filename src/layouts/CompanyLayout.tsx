@@ -3,6 +3,7 @@ import { supabase } from '../utils/supabase';
 import { RainbowTitle } from '../components/RainbowTitle';
 import { Layout, Menu, Typography } from 'antd';
 import { UserMenu } from '../components/UserMenu';
+import { RainbowMenuStyle } from '../components/RainbowMenu';
 import { NotificationBell } from '../components/NotificationBell';
 import {
   DashboardOutlined, TeamOutlined, UserOutlined, SafetyOutlined,
@@ -44,7 +45,7 @@ function CompanyLayoutInner() {
     || access.can('employees') || access.can('employees', 'edit')
     || (access.canViewPay && access.isOn('payroll'));
   const mainMenu = [
-    { key: '/company', icon: <DashboardOutlined />, label: 'Dashboard' },
+    { key: '/company/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
     showHR && { key: '/company/hr', icon: <TeamOutlined />, label: 'HR' },
     access.can('finance') && { key: '/company/finance', icon: <DollarOutlined />, label: 'Finance' },
     access.can('inventory') && { key: '/company/catalog', icon: <ShopOutlined />, label: 'Catalog' },
@@ -54,11 +55,11 @@ function CompanyLayoutInner() {
   ].filter(Boolean) as { key: string; icon: React.ReactNode; label: string }[];
 
   const adminMenu = !access.canViewPay ? [] : [
-    { key: '/company/settings', icon: <SettingOutlined />, label: 'Company Settings' },
-    { key: '/company/profile', icon: <BankOutlined />, label: 'Document Templates' },
+    { key: '/company/company-settings', icon: <SettingOutlined />, label: 'Company Settings' },
+    { key: '/company/document-templates', icon: <BankOutlined />, label: 'Document Templates' },
     { key: '/company/users', icon: <UserOutlined />, label: 'Users' },
     { key: '/company/roles', icon: <SafetyOutlined />, label: 'Roles' },
-    { key: '/company/files', icon: <FileOutlined />, label: 'Documents' },
+    { key: '/company/documents', icon: <FileOutlined />, label: 'Documents' },
   ];
 
   return (
@@ -76,7 +77,10 @@ function CompanyLayoutInner() {
             ? <RainbowTitle text={(companyName || 'Q').charAt(0)} maxWidth={40} maxFontSize={20} />
             : <RainbowTitle text={companyName || ''} maxWidth={216} />}
         </div>
+        <RainbowMenuStyle className="qv-rb-main" />
+        <RainbowMenuStyle className="qv-rb-admin" offset={mainMenu.length} />
         <Menu
+          className="qv-rb-main"
           theme="dark"
           mode="inline"
           selectedKeys={[location.pathname]}
@@ -86,6 +90,7 @@ function CompanyLayoutInner() {
         />
         {!collapsed && adminMenu.length > 0 && <Text style={{ color: 'rgba(240,237,230,0.3)', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, padding: '8px 16px 4px', display: 'block' }}>Admin</Text>}
         <Menu
+          className="qv-rb-admin"
           theme="dark"
           mode="inline"
           selectedKeys={[location.pathname]}

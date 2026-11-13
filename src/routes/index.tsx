@@ -9,7 +9,6 @@ import { CountryPacksPage } from '../modules/platform/pages/CountryPacks';
 import { BusinessPacksPage } from '../modules/platform/pages/BusinessPacks';
 import { PlatformUsersPage } from '../modules/platform/pages/Users';
 import { PlatformAuditPage } from '../modules/platform/pages/AuditLog';
-import { PlatformSettingsPage } from '../modules/platform/pages/Settings';
 import { CompanyDashboard } from '../modules/company/pages/Dashboard';
 import { CompanyProfilePage } from '../modules/company/pages/Profile';
 import { CompanyUsersPage } from '../modules/company/pages/Users';
@@ -29,20 +28,23 @@ export const router = createBrowserRouter([
     path: '/platform',
     element: <RequireAuth type="platform"><PlatformLayout /></RequireAuth>,
     children: [
-      { index: true, element: <PlatformDashboard /> },
+      { index: true, element: <Navigate to="/platform/dashboard" replace /> },
+      { path: 'dashboard', element: <PlatformDashboard /> },
       { path: 'companies', element: <CompaniesPage /> },
       { path: 'country-packs', element: <CountryPacksPage /> },
       { path: 'business-packs', element: <BusinessPacksPage /> },
       { path: 'users', element: <PlatformUsersPage /> },
-      { path: 'audit', element: <PlatformAuditPage /> },
-      { path: 'settings', element: <PlatformSettingsPage /> },
+      { path: 'audit-log', element: <PlatformAuditPage /> },
+      { path: 'audit', element: <Navigate to="/platform/audit-log" replace /> },
+      { path: 'settings', element: <Navigate to="/platform/dashboard" replace /> },
     ],
   },
   {
     path: '/company',
     element: <RequireAuth type="company"><CompanyLayout /></RequireAuth>,
     children: [
-      { index: true, element: <CompanyDashboard /> },
+      { index: true, element: <Navigate to="/company/dashboard" replace /> },
+      { path: 'dashboard', element: <CompanyDashboard /> },
       { path: 'hr', element: <CompanyHRPage /> },
       { path: 'finance', element: <CompanyFinancePage /> },
       { path: 'catalog', element: <CompanyCatalogPage /> },
@@ -51,12 +53,15 @@ export const router = createBrowserRouter([
       { path: 'projects', element: <CompanyProjectsPage /> },
       { path: 'workflow', element: <CompanyWorkflowPage /> },
       { path: 'reports', element: <Navigate to="/company/finance" replace /> },
-      { path: 'profile', element: <CompanyProfilePage /> },
+      { path: 'document-templates', element: <CompanyProfilePage /> },
+      { path: 'profile', element: <Navigate to="/company/document-templates" replace /> },
       { path: 'users', element: <CompanyUsersPage /> },
       { path: 'roles', element: <CompanyRolesPage /> },
-      { path: 'settings', element: <CompanySettingsPage /> },
-      { path: 'audit', element: <Navigate to="/company" replace /> },
-      { path: 'files', element: <CompanyDocumentsPage /> },
+      { path: 'company-settings', element: <CompanySettingsPage /> },
+      { path: 'settings', element: <Navigate to="/company/company-settings" replace /> },
+      { path: 'audit', element: <Navigate to="/company/dashboard" replace /> },
+      { path: 'documents', element: <CompanyDocumentsPage /> },
+      { path: 'files', element: <Navigate to="/company/documents" replace /> },
     ],
   },
   { path: '*', element: <Navigate to="/login" replace /> },

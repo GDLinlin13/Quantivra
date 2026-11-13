@@ -1,29 +1,26 @@
-import { Layout, Menu, Typography } from 'antd';
+import { Layout, Menu } from 'antd';
 import {
   DashboardOutlined, BuildOutlined, GlobalOutlined,
-  AppstoreOutlined, AuditOutlined, SettingOutlined,
-  LogoutOutlined, UserOutlined,
+  AppstoreOutlined, AuditOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import { UserMenu } from '../components/UserMenu';
+import { RainbowMenuStyle } from '../components/RainbowMenu';
 
 const { Sider, Content, Header } = Layout;
-const { Text } = Typography;
 
 export function PlatformLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth();
 
   const menuItems = [
-    { key: '/platform', icon: <DashboardOutlined />, label: 'Dashboard' },
+    { key: '/platform/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
     { key: '/platform/companies', icon: <BuildOutlined />, label: 'Companies' },
     { key: '/platform/country-packs', icon: <GlobalOutlined />, label: 'Country Packs' },
     { key: '/platform/business-packs', icon: <AppstoreOutlined />, label: 'Business Packs' },
     { key: '/platform/users', icon: <UserOutlined />, label: 'Users' },
-    { key: '/platform/audit', icon: <AuditOutlined />, label: 'Audit Log' },
-    { key: '/platform/settings', icon: <SettingOutlined />, label: 'Settings' },
+    { key: '/platform/audit-log', icon: <AuditOutlined />, label: 'Audit Log' },
   ];
 
   return (
@@ -64,7 +61,9 @@ export function PlatformLayout() {
             {'ATLAS CORE'.split('').map((ch, i) => <span key={i}>{ch === ' ' ? '\u00A0' : ch}</span>)}
           </div>
         </div>
+        <RainbowMenuStyle className="qv-rb-platform" />
         <Menu
+          className="qv-rb-platform"
           theme="dark"
           mode="inline"
           selectedKeys={[location.pathname]}
@@ -72,11 +71,6 @@ export function PlatformLayout() {
           onClick={({ key }) => navigate(key)}
           style={{ background: 'transparent', borderRight: 'none', flex: 1 }}
         />
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '12px 16px', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
-          onClick={() => { logout(); navigate('/login'); }}>
-          <LogoutOutlined style={{ color: 'rgba(240,237,230,0.4)', fontSize: 14 }} />
-          <Text style={{ color: 'rgba(240,237,230,0.4)', fontSize: 13, marginLeft: 10 }}>LOGOUT</Text>
-        </div>
       </Sider>
       <Layout style={{ background: '#0b0f12' }}>
         <Header style={{ background: '#111518', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '0 24px', height: 64 }}>

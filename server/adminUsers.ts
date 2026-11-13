@@ -22,6 +22,20 @@ interface Caller {
 
 type Body = Record<string, unknown>;
 
+/** Write one record in the platform audit trail (a failure here never stops the action itself). */
+async function audit(admin: SupabaseClient, caller: Caller, action: string, entityType: string, entityId: string | number | null, companyId: number | null, summary: string, newValue?: unknown) {
+  try {
+    const [p, c] = await Promise.all([
+      admin.from('platform_users').select('full_name').eq('auth_user_id', caller.authUserId).maybeSingle(),
+      admin.from('company_users').select('full_name').eq('auth_user_id', caller.authUserId).limit(1).maybeSingle(),
+    ]);
+    await admin.from('platform_audit_log').insert({
+      action, entity_type: entityType, entity_id: entityId == null ? null : String(entityId), company_id: companyId, summary,
+      actor_name: p.data?.full_name || c.data?.full_name || null, actor_auth_id: caller.authUserId, new_value: newValue ?? null,
+    });
+  } catch { /* the trail is best effort here */ }
+}
+
 function str(body: Body, key: string, required = true): string {
   const v = body[key];
   if (typeof v === 'string' && v.trim() !== '') return v.trim();
@@ -167,6 +181,7 @@ async function createCompanyUser(admin: SupabaseClient, caller: Caller, body: Bo
       ? 'This username is already used in this company' : error.message);
   }
   if (roleId) await admin.from('company_user_roles').insert({ user_id: row.id, role_id: roleId });
+  await audit(admin, caller, 'user.created', 'user', row.id, companyId, `${row.full_name} (${row.username})`, { job_title: row.job_title });
 
   return { user: row, existing_login: !login.created };
 }
@@ -188,7 +203,7 @@ async function loginInUse(admin: SupabaseClient, authUserId: string): Promise<bo
 async function deleteCompany(admin: SupabaseClient, caller: Caller, body: Body) {
   requirePlatformAdmin(caller);
   const companyId = num(body, 'company_id')!;
-  const { data: company } = await admin.from('companies').select('id, is_active').eq('id', companyId).maybeSingle();
+  const { data: company } = await admin.from('companies').select('id, name, is_active').eq('id', companyId).maybeSingle();
   if (!company) throw new HttpError(404, 'Company not found');
   if (company.is_active) throw new HttpError(400, 'Deactivate the company before deleting it');
 
@@ -198,6 +213,7 @@ async function deleteCompany(admin: SupabaseClient, caller: Caller, body: Body) 
   const del = await admin.from('companies').delete().eq('id', companyId);
   if (del.error) throw new HttpError(400, del.error.message);
 
+  await audit(admin, caller, 'company.deleted', 'company', companyId, companyId, String(company.name || ''));
   let removedLogins = 0;
   for (const id of authIds) {
     if (await loginInUse(admin, id)) continue;   // still used by another company or as platform admin
@@ -214,7 +230,7 @@ async function deleteCompany(admin: SupabaseClient, caller: Caller, body: Body) 
  */
 async function deleteCompanyUser(admin: SupabaseClient, caller: Caller, body: Body) {
   const targetId = num(body, 'company_user_id')!;
-  const { data: target } = await admin.from('company_users').select('id, company_id, auth_user_id').eq('id', targetId).maybeSingle();
+  const { data: target } = await admin.from('company_users').select('id, company_id, auth_user_id, full_name, username').eq('id', targetId).maybeSingle();
   if (!target) throw new HttpError(404, 'User not found');
   const companyId = Number(target.company_id);
   await requireUserAdmin(admin, caller, companyId);
@@ -238,6 +254,7 @@ async function deleteCompanyUser(admin: SupabaseClient, caller: Caller, body: Bo
     const { error } = await admin.auth.admin.deleteUser(target.auth_user_id);
     loginRemoved = !error;
   }
+  await audit(admin, caller, 'user.deleted', 'user', targetId, companyId, `${target.full_name} (${target.username})`);
   return { ok: true, login_removed: loginRemoved };
 }
 
@@ -247,7 +264,7 @@ async function setPassword(admin: SupabaseClient, caller: Caller, body: Body) {
   checkPassword(password);
 
   const { data: target } = await admin.from('company_users')
-    .select('id, company_id, auth_user_id').eq('id', targetId).maybeSingle();
+    .select('id, company_id, auth_user_id, full_name, username').eq('id', targetId).maybeSingle();
   if (!target?.auth_user_id) throw new HttpError(404, 'User not found');
   requireCompany(caller, Number(target.company_id));
   if (target.auth_user_id !== caller.authUserId) await requireUserAdmin(admin, caller, Number(target.company_id));
@@ -268,6 +285,7 @@ async function setPassword(admin: SupabaseClient, caller: Caller, body: Body) {
     password, user_metadata: { must_change_password: target.auth_user_id !== caller.authUserId },
   });
   if (error) throw new HttpError(400, error.message);
+  if (target.auth_user_id !== caller.authUserId) await audit(admin, caller, 'user.password_reset', 'user', targetId, Number(target.company_id), `${target.full_name} (${target.username})`);
   return { ok: true };
 }
 
@@ -284,6 +302,7 @@ async function createPlatformAdmin(admin: SupabaseClient, caller: Caller, body: 
     if (login.created) await admin.auth.admin.deleteUser(login.id);
     throw new HttpError(400, error.message);
   }
+  await audit(admin, caller, 'platform_admin.created', 'platform_user', data.id, null, `${data.full_name} (${data.email})`);
   return { user: data, existing_login: !login.created };
 }
 

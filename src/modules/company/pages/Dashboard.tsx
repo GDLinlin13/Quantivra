@@ -65,7 +65,7 @@ export function CompanyDashboard() {
 
   return (
     <div>
-      <Title level={4} style={{ color: '#f0ede6', marginBottom: 24 }}>Company Overview</Title>
+      <Title level={4} style={{ color: '#f0ede6', marginBottom: 24 }}>Dashboard</Title>
       {/* every card the same width and height, as many per row as fit */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, alignItems: 'stretch' }}>
         {cards.map((card) => (
