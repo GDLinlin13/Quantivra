@@ -76,9 +76,8 @@ function AssetDrawer({ companyId, currency, accounts, asset, onClose, onSaved }:
   const expenseAccs = opt(live.filter(a => a.type === 'expense'));
   const accumAccs = opt(live.filter(a => a.type === 'asset'));
   const liabilityAccs = opt(live.filter(a => a.type === 'liability'));
-  // where the deposit was paid from: a cash account (booked here) or a bank account in any currency (matched from its statement)
-  const bankAccs = live.filter(a => a.type === 'asset' && (a.subtype === 'bank' || a.subtype === 'cash'))
-    .map(a => ({ value: a.id, label: `${a.code} ${a.name}${a.currency && a.currency !== currency ? ` (${a.currency})` : ''}`, bank: a.subtype === 'bank' }));
+  // a deposit paid in cash is booked here (choose the cash account); one paid through a bank comes in from the bank statement
+  const bankAccs = live.filter(a => a.type === 'asset' && a.subtype === 'cash').map(a => ({ value: a.id, label: `${a.code} ${a.name}` }));
   const [loanOn, setLoanOn] = useState(Number(asset.loan_amount) > 0);
 
   const w = Form.useWatch([], form) || {};
@@ -119,7 +118,7 @@ function AssetDrawer({ companyId, currency, accounts, asset, onClose, onSaved }:
         loan_amount: asset.loan_amount || undefined, loan_term_months: asset.loan_term_months || undefined, monthly_repayment: asset.monthly_repayment ?? undefined,
         loan_start: asset.loan_start_month ? dayjs(asset.loan_start_month) : dayjs().add(1, 'month'),
         loan_account_id: asset.loan_account_id ?? named(accounts, /loan|borrowing|hire purchase/i, 'liability'),
-        interest_account_id: asset.interest_account_id ?? named(accounts, /interest/i, 'expense'), book_purchase: !!asset.book_purchase, deposit_account_id: asset.deposit_account_id ?? bankAccs.find(b => !b.bank)?.value,
+        interest_account_id: asset.interest_account_id ?? named(accounts, /interest/i, 'expense'), book_purchase: !!asset.book_purchase, deposit_account_id: asset.deposit_account_id ?? undefined,
       }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 12 }}>
           <Form.Item name="name" label="Asset" rules={[{ required: true, message: 'Name the asset' }]}><Input /></Form.Item>
@@ -159,13 +158,15 @@ function AssetDrawer({ companyId, currency, accounts, asset, onClose, onSaved }:
               </Text>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <Form.Item name="book_purchase" valuePropName="checked" noStyle><Switch /></Form.Item><Text>Book the purchase here (the loan, and the deposit if paid in cash)</Text>
+              <Form.Item name="book_purchase" valuePropName="checked" noStyle><Switch /></Form.Item><Text>Book the purchase here (the loan, and a cash deposit)</Text>
             </div>
             {form.getFieldValue('book_purchase') && (
-              <Form.Item name="deposit_account_id" label="Deposit paid from"><Select showSearch optionFilterProp="label" options={bankAccs} /></Form.Item>
-            )}
-            {form.getFieldValue('book_purchase') && bankAccs.find(b => b.value === form.getFieldValue('deposit_account_id'))?.bank && (
-              <Text style={{ display: 'block', marginBottom: 12 }}>The deposit is not booked here. When it shows on that bank's statement, match it with Something else, and choose the asset account.</Text>
+              <>
+                <Form.Item name="deposit_account_id" label="Deposit paid in cash from"><Select allowClear showSearch optionFilterProp="label" placeholder="Paid through a bank" options={bankAccs} /></Form.Item>
+                {!form.getFieldValue('deposit_account_id') && (
+                  <Text style={{ display: 'block', marginBottom: 12 }}>The deposit is not booked here. When it shows on the bank statement, match it with Something else, and choose the asset account.</Text>
+                )}
+              </>
             )}
           </>
         )}

@@ -307,7 +307,7 @@ describe('fixed assets in the books', () => {
     expect(es.find(e => e.ref === 'DEP-2026-02')!.lines.map(l => [l.account_id, l.debit, l.credit])).toEqual([[2, 900, 0], [3, 0, 900]]);
   });
   it('a deposit paid through a bank is left for the bank statement: only the loan part is booked here', () => {
-    const es = assetEntries([asset], 4, '2026-01-31', [{ id: 4, subtype: 'bank' }]);
+    const es = assetEntries([{ ...asset, deposit_account_id: null }], 4, '2026-01-31');
     const purchase = es.find(e => e.ref === 'VEH-1')!;
     expect(purchase.lines.map(l => [l.account_id, l.debit, l.credit])).toEqual([[1, 48000, 0], [5, 0, 48000]]);
   });

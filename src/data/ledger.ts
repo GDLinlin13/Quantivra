@@ -304,7 +304,7 @@ export function assetEntries(assets: FixedAsset[], bank: number, today = new Dat
       // statement (matched to the asset account), so only the loan part is booked here and the deposit is never counted twice.
       const onLoan = loan > 0 && a.loan_account_id ? loan : 0;
       const rest = r2(cost - onLoan);
-      const viaBank = !!a.deposit_account_id && accounts.find(x => x.id === a.deposit_account_id)?.subtype === 'bank';
+      const viaBank = !a.deposit_account_id || accounts.find(x => x.id === a.deposit_account_id)?.subtype === 'bank';   // no cash account chosen: it went through the bank
       const assetIn = viaBank ? onLoan : cost;
       if (assetIn > 0) {
         const lines: LedgerLine[] = [{ account_id: a.asset_account_id, debit: assetIn, credit: 0, description: a.name }];
