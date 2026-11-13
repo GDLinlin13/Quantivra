@@ -9,7 +9,6 @@ import { CountryPacksPage } from '../modules/platform/pages/CountryPacks';
 import { BusinessPacksPage } from '../modules/platform/pages/BusinessPacks';
 import { PlatformUsersPage } from '../modules/platform/pages/Users';
 import { PlatformAuditPage } from '../modules/platform/pages/AuditLog';
-import { PlatformSettingsPage } from '../modules/platform/pages/Settings';
 import { CompanyDashboard } from '../modules/company/pages/Dashboard';
 import { CompanyProfilePage } from '../modules/company/pages/Profile';
 import { CompanyUsersPage } from '../modules/company/pages/Users';
@@ -37,7 +36,7 @@ export const router = createBrowserRouter([
       { path: 'users', element: <PlatformUsersPage /> },
       { path: 'audit-log', element: <PlatformAuditPage /> },
       { path: 'audit', element: <Navigate to="/platform/audit-log" replace /> },
-      { path: 'settings', element: <PlatformSettingsPage /> },
+      { path: 'settings', element: <Navigate to="/platform/dashboard" replace /> },
     ],
   },
   {
