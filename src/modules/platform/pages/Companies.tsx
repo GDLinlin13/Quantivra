@@ -215,10 +215,10 @@ export function CompaniesPage() {
   };
 
   const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name', render: (n: string) => <span style={{ color: '#f0ede6' }}>{n}</span> },
-    { title: 'Code', dataIndex: 'company_code', key: 'code' },
-    { title: 'Country', dataIndex: 'country', key: 'country' },
-    { title: 'Currency', dataIndex: 'currency', key: 'currency' },
+    { title: 'Name', dataIndex: 'name', key: 'name', sorter: (a: Company, b: Company) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base', numeric: true }), sortDirections: ['ascend', 'descend'] as ('ascend' | 'descend')[], render: (n: string) => <span style={{ color: '#f0ede6' }}>{n}</span> },
+    { title: 'Code', dataIndex: 'company_code', key: 'code', sorter: (a: Company, b: Company) => String(a.company_code || '').localeCompare(String(b.company_code || ''), undefined, { sensitivity: 'base', numeric: true }), sortDirections: ['ascend', 'descend'] as ('ascend' | 'descend')[] },
+    { title: 'Country', dataIndex: 'country', key: 'country', sorter: (a: Company, b: Company) => String(a.country || '').localeCompare(String(b.country || ''), undefined, { sensitivity: 'base', numeric: true }), sortDirections: ['ascend', 'descend'] as ('ascend' | 'descend')[] },
+    { title: 'Currency', dataIndex: 'currency', key: 'currency', sorter: (a: Company, b: Company) => String(a.currency || '').localeCompare(String(b.currency || ''), undefined, { sensitivity: 'base', numeric: true }), sortDirections: ['ascend', 'descend'] as ('ascend' | 'descend')[] },
     {
       title: 'Status', dataIndex: 'is_active', key: 'status',
       render: (v: boolean) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Inactive'}</Tag>,
