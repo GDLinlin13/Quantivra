@@ -107,7 +107,7 @@ function AssetDrawer({ companyId, currency, accounts, asset, onClose, onSaved }:
   };
 
   return (
-    <Drawer open onClose={onClose} size={620} title={asset.id ? asset.name : 'New fixed asset'} extra={<Button type="primary" loading={saving} onClick={submit}>Save</Button>}>
+    <Drawer open onClose={onClose} size={820} title={asset.id ? asset.name : 'New fixed asset'} extra={<Button type="primary" loading={saving} onClick={submit}>Save</Button>}>
       <Form form={form} layout="vertical" initialValues={{
         name: asset.name, code: asset.code, category: asset.category, cost: asset.cost, residual_value: asset.residual_value || 0,
         purchase_date: asset.purchase_date ? dayjs(asset.purchase_date) : dayjs(), years: asset.life_months ? Math.round((asset.life_months / 12) * 100) / 100 : 5,
@@ -119,11 +119,11 @@ function AssetDrawer({ companyId, currency, accounts, asset, onClose, onSaved }:
         loan_account_id: asset.loan_account_id ?? named(accounts, /loan|borrowing|hire purchase/i, 'liability'),
         interest_account_id: asset.interest_account_id ?? named(accounts, /interest/i, 'expense'), book_purchase: !!asset.book_purchase, deposit_account_id: asset.deposit_account_id ?? bankAccs[0]?.value,
       }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 12 }}>
           <Form.Item name="name" label="Asset" rules={[{ required: true, message: 'Name the asset' }]}><Input /></Form.Item>
           <Form.Item name="code" label="Code"><Input /></Form.Item>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
           <Form.Item name="category" label="Category"><Select allowClear options={CATEGORIES.map(c => ({ value: c, label: c }))} /></Form.Item>
           <Form.Item name="purchase_date" label="Purchase date" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="cost" label={`Purchase price (${currency})`} rules={[{ required: true, message: 'Enter the price' }]}><AmountInput min={0} precision={2} style={{ width: '100%' }} /></Form.Item>
@@ -132,7 +132,7 @@ function AssetDrawer({ companyId, currency, accounts, asset, onClose, onSaved }:
           <Form.Item name="start_month" label="Depreciation starts"><DatePicker picker="month" style={{ width: '100%' }} /></Form.Item>
         </div>
         <Text type="secondary">Depreciation: {money(monthly, currency)} a month, straight-line</Text>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginTop: 12 }}>
           <Form.Item name="asset_account_id" label="Asset account" rules={[{ required: true, message: 'Choose the account' }]}><Select showSearch optionFilterProp="label" options={assetAccs} /></Form.Item>
           <Form.Item name="expense_account_id" label="Depreciation expense" rules={[{ required: true, message: 'Choose the account' }]}><Select showSearch optionFilterProp="label" options={expenseAccs} /></Form.Item>
           <Form.Item name="accumulated_account_id" label="Accumulated depreciation" rules={[{ required: true, message: 'Choose the account' }]}><Select showSearch optionFilterProp="label" options={accumAccs} /></Form.Item>
@@ -143,7 +143,7 @@ function AssetDrawer({ companyId, currency, accounts, asset, onClose, onSaved }:
         </div>
         {loanOn && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
               <Form.Item name="loan_amount" label={`Loan amount (${currency})`} rules={[{ required: true, message: 'Enter the loan' }]}><AmountInput min={0} precision={2} style={{ width: '100%' }} /></Form.Item>
               <Form.Item name="loan_term_months" label="Loan term (months)" rules={[{ required: true, message: 'Enter the term' }]}><InputNumber min={1} precision={0} style={{ width: '100%' }} /></Form.Item>
               <Form.Item name="monthly_repayment" label={`Monthly repayment (${currency})`} rules={[{ required: true, message: 'Enter the repayment' }]}><AmountInput min={0} precision={2} style={{ width: '100%' }} /></Form.Item>
