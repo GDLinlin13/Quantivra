@@ -21,7 +21,7 @@ export default function App() {
           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         },
         components: {
-          Table: { headerBg: '#111518', rowHoverBg: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)' },
+          Table: { headerBg: '#111518', rowHoverBg: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.06)', bodySortBg: 'transparent', headerSortActiveBg: '#111518', headerSortHoverBg: '#111518' },
           Modal: { contentBg: '#151a1e', headerBg: '#151a1e' },
           Input: { colorBgContainer: '#0b0f12', colorBorder: 'rgba(255,255,255,0.1)', colorText: '#f0ede6' },
           Select: { colorBgContainer: '#0b0f12', colorBorder: 'rgba(255,255,255,0.1)', colorText: '#f0ede6', optionSelectedBg: 'rgba(199,206,234,0.15)' },
