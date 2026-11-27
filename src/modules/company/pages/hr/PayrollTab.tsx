@@ -84,6 +84,7 @@ export function PayrollTab({ companyId }: { companyId: number }) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    await payrollService.syncPayDates(companyId).catch(() => false); // pay dates follow the matched bank lines
     const [{ data: co }, r, a, b] = await Promise.all([
       supabase.from('companies').select('*').eq('id', companyId).maybeSingle(),
       payrollService.listRuns(companyId),

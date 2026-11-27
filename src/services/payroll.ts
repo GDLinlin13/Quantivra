@@ -128,6 +128,33 @@ export const payrollService = {
     return data || [];
   },
 
+  /**
+   * Pay date follows the bank: every run whose salaries are matched to a bank line takes that line's date.
+   * Catches runs matched before this existed, or matched some other way. Returns true if any date changed.
+   */
+  async syncPayDates(companyId: number): Promise<boolean> {
+    const [{ data: txns }, { data: runs }] = await Promise.all([
+      supabase.from('fin_bank_transactions').select('txn_date, journal_id').eq('company_id', companyId).not('journal_id', 'is', null),
+      supabase.from('payroll_runs').select('id, period_year, period_month, pay_date').eq('company_id', companyId),
+    ]);
+    const ids = [...new Set((txns || []).map((t: any) => t.journal_id))];
+    if (!ids.length || !runs?.length) return false;
+    const { data: journals } = await supabase.from('fin_journals').select('id, memo').in('id', ids).like('memo', 'Salaries — %');
+    const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    let changed = false;
+    for (const j of journals || []) {
+      const m = /^Salaries — (\w+) (\d{4})$/.exec(j.memo || '');
+      if (!m) continue;
+      const run = runs.find((r: any) => r.period_year === Number(m[2]) && r.period_month === names.indexOf(m[1]) + 1);
+      const txn = (txns || []).find((t: any) => t.journal_id === j.id);
+      if (run && txn && run.pay_date !== txn.txn_date) {
+        await this.setPayDate(run.id, txn.txn_date);
+        changed = true;
+      }
+    }
+    return changed;
+  },
+
   async getRun(runId: number): Promise<{ run: PayrollRunRow; payslips: PayslipRow[] } | null> {
     const { data: run } = await supabase.from('payroll_runs').select('*').eq('id', runId).maybeSingle();
     if (!run) return null;
